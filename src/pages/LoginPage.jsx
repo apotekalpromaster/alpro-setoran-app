@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import AutocompleteInput from '../components/AutocompleteInput';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -81,21 +82,17 @@ export default function LoginPage() {
                 <div className="border-t border-primary-500/30"></div>
 
                 <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span className="material-symbols-outlined text-gray-400">email</span>
-                        </div>
-                        <input
-                            id="email"
-                            name="email"
-                            type="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="block w-full rounded-lg border border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm pl-10 py-3 transition-all"
-                            placeholder="EMAIL ALPRO"
-                        />
-                    </div>
+                    <AutocompleteInput
+                        value={email}
+                        onChange={setEmail}
+                        onSelect={(item) => item && setEmail(item.email)}
+                        table="profiles"
+                        column="email"
+                        placeholder="EMAIL ALPRO"
+                        icon="email"
+                        minChars={2}
+                        className="w-full"
+                    />
 
                     <div className="relative fade-in">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
