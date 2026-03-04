@@ -266,7 +266,7 @@ function InputField({ label, value, onChange, placeholder, readOnly }) {
             <input
                 type="text"
                 value={value || ''}
-                onChange={(e) => !readOnly && onChange(e.target.value)}
+                onChange={(e) => !readOnly && onChange(e.target.value.toUpperCase())}
                 placeholder={placeholder}
                 readOnly={readOnly}
                 className={`form-input uppercase ${readOnly ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : ''}`}
@@ -304,7 +304,7 @@ function TextareaField({ label, value, onChange, placeholder }) {
             <textarea
                 rows={3}
                 value={value || ''}
-                onChange={(e) => onChange(e.target.value)}
+                onChange={(e) => onChange(e.target.value.toUpperCase())}
                 placeholder={placeholder}
                 className="form-input uppercase resize-none"
             />

@@ -52,11 +52,12 @@ export default function LoginPage() {
             setStatus({ message: 'Masukkan email terlebih dahulu.', type: 'error' });
             return;
         }
+        const upperEmail = email.toUpperCase();
 
-        if (!window.confirm(`Kirim instruksi reset password ke "${email}"?`)) return;
+        if (!window.confirm(`Kirim instruksi reset password ke "${upperEmail}"?`)) return;
 
         setStatus({ message: 'Memproses permintaan...', type: 'loading' });
-        const { error } = await supabase.auth.resetPasswordForEmail(email);
+        const { error } = await supabase.auth.resetPasswordForEmail(upperEmail);
 
         if (error) {
             setStatus({ message: 'Gagal: ' + error.message, type: 'error' });

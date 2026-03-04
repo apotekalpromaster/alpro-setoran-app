@@ -159,7 +159,7 @@ export default function ManajemenLaporanPage() {
                             {/* KCP filter */}
                             <div>
                                 <label className="block text-xs font-medium text-gray-500 mb-1">KCP</label>
-                                <input type="text" value={kcpFilter} onChange={(e) => setKcpFilter(e.target.value)} placeholder="Filter KCP..." className="form-input w-36" />
+                                <input type="text" value={kcpFilter} onChange={(e) => setKcpFilter(e.target.value.toUpperCase())} placeholder="Filter KCP..." className="form-input w-36 uppercase" />
                             </div>
 
                             <button onClick={fetchData} className="btn-primary h-10 px-5 text-sm flex-shrink-0">

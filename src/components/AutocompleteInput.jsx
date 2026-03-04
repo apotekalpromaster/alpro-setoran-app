@@ -104,7 +104,7 @@ export default function AutocompleteInput({
     }, [table, column, selectColumns, extraFilters, minChars, maxResults, queryFn]);
 
     const handleChange = (e) => {
-        const val = e.target.value;
+        const val = e.target.value.toUpperCase();
         onChange?.(val);
         setActiveIdx(-1);
 

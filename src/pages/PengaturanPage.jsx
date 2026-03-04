@@ -240,18 +240,18 @@ export default function PengaturanPage() {
                             <input
                                 type="text"
                                 value={profForm.kcp_terdekat}
-                                onChange={(e) => setProfForm(p => ({ ...p, kcp_terdekat: e.target.value }))}
+                                onChange={(e) => setProfForm(p => ({ ...p, kcp_terdekat: e.target.value.toUpperCase() }))}
                                 placeholder="cth: KCP Mangga Dua"
-                                className="form-input"
+                                className="form-input uppercase"
                             />
                         </Field>
                         <Field label="Nomor Deposit Card">
                             <input
                                 type="text"
                                 value={profForm.nomor_deposit_card}
-                                onChange={(e) => setProfForm(p => ({ ...p, nomor_deposit_card: e.target.value }))}
+                                onChange={(e) => setProfForm(p => ({ ...p, nomor_deposit_card: e.target.value.toUpperCase() }))}
                                 placeholder="cth: 4xxx-xxxx-xxxx-7890"
-                                className="form-input font-mono"
+                                className="form-input font-mono uppercase"
                             />
                         </Field>
                         <button
