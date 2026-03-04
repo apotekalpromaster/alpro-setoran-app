@@ -1,0 +1,18 @@
+{
+    "$schema": "https://raw.githubusercontent.com/supabase/cli/main/pkg/config/config.schema.json",
+    "project_id": "REPLACE_WITH_YOUR_SUPABASE_PROJECT_ID",
+    "functions": {
+        "upload-to-drive": {
+            "verify_jwt": true
+        },
+        "send-critical-alert": {
+            "verify_jwt": true
+        },
+        "send-reminder-emails": {
+            "verify_jwt": true
+        },
+        "groq-ai-service": {
+            "verify_jwt": true
+        }
+    }
+}
