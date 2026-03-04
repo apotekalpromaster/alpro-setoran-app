@@ -43,6 +43,8 @@ export default function AutocompleteInput({
     renderItem,
     className = '',
     disabled = false,
+    queryFn,          // Optional: async (term) => [{ [column]: value }, ...] — overrides default Supabase query
+    inputProps = {},  // Extra props forwarded to the <input> element (e.g. required, id, name)
 }) {
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -70,26 +72,36 @@ export default function AutocompleteInput({
 
         setIsLoading(true);
         try {
-            let query = supabase
-                .from(table)
-                .select(selectColumns || column)
-                .ilike(column, `%${term}%`)
-                .limit(maxResults);
+            let results;
 
-            if (typeof extraFilters === 'function') {
-                query = extraFilters(query);
+            if (typeof queryFn === 'function') {
+                // Use custom query function (e.g. supabase.rpc)
+                results = await queryFn(term);
+            } else {
+                // Default: direct Supabase table query
+                let query = supabase
+                    .from(table)
+                    .select(selectColumns || column)
+                    .ilike(column, `%${term}%`)
+                    .limit(maxResults);
+
+                if (typeof extraFilters === 'function') {
+                    query = extraFilters(query);
+                }
+
+                const { data, error } = await query;
+                if (error) throw error;
+                results = data || [];
             }
 
-            const { data, error } = await query;
-            if (error) throw error;
-            setSuggestions(data || []);
+            setSuggestions(results);
         } catch (err) {
             console.error('[AutocompleteInput] Search error:', err.message);
             setSuggestions([]);
         } finally {
             setIsLoading(false);
         }
-    }, [table, column, selectColumns, extraFilters, minChars, maxResults]);
+    }, [table, column, selectColumns, extraFilters, minChars, maxResults, queryFn]);
 
     const handleChange = (e) => {
         const val = e.target.value;
@@ -165,6 +177,7 @@ export default function AutocompleteInput({
                     disabled={disabled}
                     autoComplete="off"
                     className={`form-input pl-10 ${value ? 'pr-9' : ''} ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                    {...inputProps}
                 />
 
                 {/* Clear button */}
@@ -200,8 +213,8 @@ export default function AutocompleteInput({
                                     role="option"
                                     aria-selected={idx === activeIdx}
                                     className={`flex items-center gap-3 px-4 py-2.5 text-sm cursor-pointer transition-colors ${idx === activeIdx
-                                            ? 'bg-primary-50 text-primary-700 font-medium'
-                                            : 'text-gray-700 hover:bg-gray-50'
+                                        ? 'bg-primary-50 text-primary-700 font-medium'
+                                        : 'text-gray-700 hover:bg-gray-50'
                                         }`}
                                     onMouseDown={(e) => {
                                         e.preventDefault(); // prevent input blur before click fires

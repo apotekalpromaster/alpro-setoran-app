@@ -86,12 +86,18 @@ export default function LoginPage() {
                         value={email}
                         onChange={setEmail}
                         onSelect={(item) => item && setEmail(item.email)}
-                        table="profiles"
                         column="email"
+                        queryFn={async (term) => {
+                            const { data, error } = await supabase.rpc('search_emails', { search_term: term });
+                            if (error) throw error;
+                            // RPC returns [{email: '...'}], normalize for AutocompleteInput
+                            return (data || []).map((row) => ({ email: row.email }));
+                        }}
                         placeholder="EMAIL ALPRO"
                         icon="email"
                         minChars={2}
                         className="w-full"
+                        inputProps={{ id: 'email', name: 'email', required: true }}
                     />
 
                     <div className="relative fade-in">
