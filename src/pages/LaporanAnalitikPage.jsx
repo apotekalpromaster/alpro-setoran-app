@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement,
     LineElement, ArcElement, Title, Tooltip, Legend, Filler,
@@ -7,6 +7,7 @@ import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
+import AutocompleteInput from '../components/AutocompleteInput';
 
 ChartJS.register(
     CategoryScale, LinearScale, BarElement, PointElement,
@@ -47,8 +48,6 @@ export default function LaporanAnalitikPage() {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [pharmacyFilter, setPharmacyFilter] = useState('');
-    const [allNames, setAllNames] = useState([]);
-    const [suggestions, setSuggestions] = useState([]);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -58,9 +57,6 @@ export default function LaporanAnalitikPage() {
     const effectiveDates = period !== 'custom' ? getDateRange(period) : { start: startDate, end: endDate };
 
     useEffect(() => {
-        supabase.from('profiles').select('username').eq('role', 'User').then(({ data }) => {
-            if (data) setAllNames(data.map((p) => p.username));
-        });
         loadAnalytics();
     }, []);
 
@@ -193,27 +189,19 @@ export default function LaporanAnalitikPage() {
                     <div className="flex flex-col xl:flex-row items-end justify-between gap-4">
                         <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto items-end">
                             {/* Pharmacy search */}
-                            <div className="w-full md:w-56 relative">
-                                <label className="block text-xs font-medium text-gray-500 mb-1">Filter Apotek</label>
-                                <div className="relative">
-                                    <span className="absolute inset-y-0 left-2 flex items-center pointer-events-none">
-                                        <span className="material-symbols-outlined text-gray-400 text-lg">store</span>
-                                    </span>
-                                    <input
-                                        type="text" value={pharmacyFilter}
-                                        onChange={(e) => { setPharmacyFilter(e.target.value); setSuggestions(allNames.filter(n => n.toLowerCase().includes(e.target.value.toLowerCase())).slice(0, 6)); }}
-                                        placeholder="Semua Apotek"
-                                        className="form-input pl-9"
-                                        autoComplete="off"
-                                    />
-                                </div>
-                                {suggestions.length > 0 && (
-                                    <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg max-h-40 overflow-y-auto">
-                                        {suggestions.map((n) => (
-                                            <div key={n} onClick={() => { setPharmacyFilter(n); setSuggestions([]); }} className="px-4 py-2 text-sm hover:bg-gray-100 cursor-pointer">{n}</div>
-                                        ))}
-                                    </div>
-                                )}
+                            <div className="w-full md:w-56">
+                                <AutocompleteInput
+                                    label="Filter Apotek"
+                                    value={pharmacyFilter}
+                                    onChange={setPharmacyFilter}
+                                    onSelect={(item) => item && setPharmacyFilter(item.username)}
+                                    table="profiles"
+                                    column="username"
+                                    extraFilters={(q) => q.eq('role', 'User')}
+                                    placeholder="Semua Apotek"
+                                    icon="store"
+                                    minChars={2}
+                                />
                             </div>
                             {/* Period */}
                             <div className="w-full md:w-48">

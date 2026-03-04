@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
+import AutocompleteInput from '../components/AutocompleteInput';
 
 const DISCREPANCY_THRESHOLD = 50000;
 
@@ -22,22 +23,6 @@ export default function ManajemenLaporanPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [fetchTriggered, setFetchTriggered] = useState(false);
-
-    // Autocomplete
-    const [allNames, setAllNames] = useState([]);
-    const [suggestions, setSuggestions] = useState([]);
-    const searchRef = useRef(null);
-
-    // Fetch all usernames for autocomplete
-    useEffect(() => {
-        supabase
-            .from('profiles')
-            .select('username')
-            .eq('role', 'User')
-            .then(({ data }) => {
-                if (data) setAllNames(data.map((p) => p.username));
-            });
-    }, []);
 
     const fetchData = async () => {
         if (!startDate || !endDate) return;
@@ -128,8 +113,6 @@ export default function ManajemenLaporanPage() {
 
     const handleSearchInput = (val) => {
         setSearchTerm(val);
-        if (!val) { setSuggestions([]); return; }
-        setSuggestions(allNames.filter((n) => n.toLowerCase().includes(val.toLowerCase())).slice(0, 6));
     };
 
     const selisihChip = (selisih) => {
@@ -146,37 +129,19 @@ export default function ManajemenLaporanPage() {
                     <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
                         <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto items-end">
                             {/* Search + Autocomplete */}
-                            <div className="flex-grow md:w-72 relative" ref={searchRef}>
-                                <label className="block text-xs font-medium text-gray-500 mb-1">Pencarian Apotek</label>
-                                <div className="relative">
-                                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <span className="material-symbols-outlined text-gray-400 text-lg">search</span>
-                                    </span>
-                                    <input
-                                        type="text"
-                                        value={searchTerm}
-                                        onChange={(e) => handleSearchInput(e.target.value)}
-                                        placeholder="Ketik nama apotek..."
-                                        className="form-input pl-10"
-                                        autoComplete="off"
-                                    />
-                                    {searchTerm && (
-                                        <button onClick={() => { setSearchTerm(''); setSuggestions([]); }} className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600">
-                                            <span className="material-symbols-outlined text-lg">close</span>
-                                        </button>
-                                    )}
-                                </div>
-                                {suggestions.length > 0 && (
-                                    <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
-                                        {suggestions.map((name) => (
-                                            <div
-                                                key={name}
-                                                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
-                                                onClick={() => { setSearchTerm(name); setSuggestions([]); }}
-                                            >{name}</div>
-                                        ))}
-                                    </div>
-                                )}
+                            <div className="flex-grow md:w-72">
+                                <AutocompleteInput
+                                    label="Pencarian Apotek"
+                                    value={searchTerm}
+                                    onChange={handleSearchInput}
+                                    onSelect={(item) => item && setSearchTerm(item.username)}
+                                    table="profiles"
+                                    column="username"
+                                    extraFilters={(q) => q.eq('role', 'User')}
+                                    placeholder="Ketik nama apotek..."
+                                    icon="store"
+                                    minChars={2}
+                                />
                             </div>
 
                             {/* Date range */}
