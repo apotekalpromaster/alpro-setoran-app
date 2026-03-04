@@ -48,8 +48,20 @@ export function AuthProvider({ children }) {
         }
     };
 
-    const signIn = async (email, password) => {
-        return supabase.auth.signInWithPassword({ email, password });
+    const signIn = async (username, password) => {
+        // Cari email berdasarkan username di tabel profiles
+        const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('username', username)
+            .single();
+
+        if (error || !profile?.email) {
+            throw new Error('Username tidak ditemukan.');
+        }
+
+        // Gunakan email yang ditemukan beserta password untuk autentikasi Supabase
+        return supabase.auth.signInWithPassword({ email: profile.email, password });
     };
 
     const signOut = async () => {

@@ -4,7 +4,7 @@ import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
-    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [status, setStatus] = useState({ message: '', type: '' });
@@ -18,7 +18,7 @@ export default function LoginPage() {
         setStatus({ message: '', type: '' });
 
         try {
-            const { data, error } = await signIn(email, password);
+            const { data, error } = await signIn(username, password);
 
             if (error) {
                 throw error;
@@ -47,20 +47,39 @@ export default function LoginPage() {
 
     const handleForgotPassword = async (e) => {
         e.preventDefault();
-        if (!email) {
-            setStatus({ message: 'Masukkan email terlebih dahulu.', type: 'error' });
+        if (!username) {
+            setStatus({ message: 'Masukkan username terlebih dahulu.', type: 'error' });
             return;
         }
 
-        if (!window.confirm(`Kirim instruksi reset password ke "${email}"?`)) return;
-
         setStatus({ message: 'Memproses permintaan...', type: 'loading' });
-        const { error } = await supabase.auth.resetPasswordForEmail(email);
 
-        if (error) {
-            setStatus({ message: 'Gagal: ' + error.message, type: 'error' });
-        } else {
+        try {
+            // Fetch email by username
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('email')
+                .eq('username', username)
+                .single();
+
+            if (profileError || !profile?.email) {
+                throw new Error('Username tidak ditemukan.');
+            }
+
+            if (!window.confirm(`Kirim instruksi reset password ke email yang terdaftar untuk username "${username}"?`)) {
+                setStatus({ message: '', type: '' });
+                return;
+            }
+
+            const { error } = await supabase.auth.resetPasswordForEmail(profile.email);
+
+            if (error) {
+                throw error;
+            }
+
             setStatus({ message: 'Instruksi pemulihan telah dikirim ke email terdaftar.', type: 'success' });
+        } catch (err) {
+            setStatus({ message: 'Gagal: ' + err.message, type: 'error' });
         }
     };
 
@@ -83,17 +102,17 @@ export default function LoginPage() {
                 <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
                     <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span className="material-symbols-outlined text-gray-400">email</span>
+                            <span className="material-symbols-outlined text-gray-400">person</span>
                         </div>
                         <input
-                            id="email"
-                            name="email"
-                            type="email"
+                            id="username"
+                            name="username"
+                            type="text"
                             required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
                             className="block w-full rounded-lg border border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm pl-10 py-3 transition-all"
-                            placeholder="EMAIL ALPRO"
+                            placeholder="USERNAME ALPRO"
                         />
                     </div>
 
