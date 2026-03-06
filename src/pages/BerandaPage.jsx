@@ -32,64 +32,73 @@ export default function BerandaPage() {
                 setRecentReports(data || []);
 
                 // Calculate metrics
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const cutOffDate = new Date('2026-03-01T00:00:00');
+
+                let effectiveLastDate;
+
                 if (data && data.length > 0) {
                     const latest = data[0];
                     const lastDateStr = latest.tanggal_setor;
                     setLastReportDate(lastDateStr);
 
-                    // Calculate hari belum lapor
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-
                     const lastDate = new Date(lastDateStr);
                     lastDate.setHours(0, 0, 0, 0);
 
-                    // Calculate difference in days
-                    const diffTime = Math.abs(today - lastDate);
-                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-                    // Count Sundays between the two dates to exclude them from "hari kerja"
-                    let sundaysCount = 0;
-                    for (let i = 1; i <= diffDays; i++) {
-                        const checkDate = new Date(lastDate);
-                        checkDate.setDate(checkDate.getDate() + i);
-                        if (checkDate.getDay() === 0) {
-                            sundaysCount++;
-                        }
-                    }
-
-                    // Pure working days difference
-                    const workingDaysDiff = diffDays - sundaysCount;
-
-                    // Apply frequency tolerance
-                    let overdue = 0;
-                    const freq = profile.frekuensi_setoran?.toUpperCase() || '';
-
-                    if (freq.includes('SEHARI SEKALI') || freq.includes('SETIAP HARI')) {
-                        overdue = Math.max(0, workingDaysDiff - 1); // 1 = yesterday is OK
-                    } else if (freq.includes('3X SEMINGGU')) {
-                        overdue = Math.max(0, workingDaysDiff - 2); // Allow 2 days gap
-                    } else if (freq.includes('SEMINGGU SEKALI') || freq.includes('1X SEMINGGU')) {
-                        overdue = Math.max(0, workingDaysDiff - 6); // Allow ~6 days gap
-                    } else if (freq.includes('2X SEMINGGU')) {
-                        overdue = Math.max(0, workingDaysDiff - 3);
-                    } else {
-                        // Default fallback
-                        overdue = Math.max(0, workingDaysDiff - 1);
-                    }
-
-                    // Handle edge case where today is Sunday and last report was Saturday
-                    // If today is Sunday, we shouldn't necessarily penalize them today.
-                    // But if diffDays > 0, overdue logic mostly handles it above.
-                    if (today.getDay() === 0 && workingDaysDiff === 1) {
-                        overdue = 0; // Don't count Sunday itself as an overdue day if they reported yesterday
-                    }
-
-                    setHariBelumLapor(overdue);
+                    // Apply cutoff constraint
+                    effectiveLastDate = lastDate < cutOffDate ? cutOffDate : lastDate;
                 } else {
-                    // No reports yet
-                    setHariBelumLapor(0); // Optional: can be set to something else if they never reported
+                    // No reports yet, start calculating from cutoff date
+                    effectiveLastDate = cutOffDate;
                 }
+
+                // Calculate difference in days
+                const diffTime = today.getTime() - effectiveLastDate.getTime();
+                let diffDays = 0;
+
+                if (diffTime > 0) {
+                    diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                }
+
+                // Count Sundays between the dates to exclude them from "hari kerja"
+                let sundaysCount = 0;
+                for (let i = 1; i <= diffDays; i++) {
+                    const checkDate = new Date(effectiveLastDate);
+                    checkDate.setDate(checkDate.getDate() + i);
+                    if (checkDate.getDay() === 0) {
+                        sundaysCount++;
+                    }
+                }
+
+                // Pure working days difference
+                const workingDaysDiff = diffDays - sundaysCount;
+
+                // Apply frequency tolerance
+                let overdue = 0;
+                const freq = profile.frekuensi_setoran?.toUpperCase() || '';
+
+                if (freq.includes('SEHARI SEKALI') || freq.includes('SETIAP HARI')) {
+                    overdue = Math.max(0, workingDaysDiff - 1); // 1 = yesterday is OK
+                } else if (freq.includes('3X SEMINGGU')) {
+                    overdue = Math.max(0, workingDaysDiff - 2); // Allow 2 days gap
+                } else if (freq.includes('SEMINGGU SEKALI') || freq.includes('1X SEMINGGU')) {
+                    overdue = Math.max(0, workingDaysDiff - 6); // Allow ~6 days gap
+                } else if (freq.includes('2X SEMINGGU')) {
+                    overdue = Math.max(0, workingDaysDiff - 3);
+                } else {
+                    // Default fallback
+                    overdue = Math.max(0, workingDaysDiff - 1);
+                }
+
+                // Handle edge case where today is Sunday and last report was Saturday
+                // If today is Sunday, we shouldn't necessarily penalize them today.
+                if (today.getDay() === 0 && workingDaysDiff === 1) {
+                    overdue = 0; // Don't count Sunday itself as an overdue day if they reported yesterday
+                }
+
+                setHariBelumLapor(Math.max(0, overdue));
+
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
             } finally {
