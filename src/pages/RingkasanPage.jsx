@@ -19,6 +19,7 @@ export default function RingkasanPage() {
     const navigate = useNavigate();
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [uploadStatus, setUploadStatus] = useState('');
     const [error, setError] = useState('');
     const [driveWarning, setDriveWarning] = useState('');
 
@@ -43,25 +44,22 @@ export default function RingkasanPage() {
 
         try {
             // 1. Upload staged files to Google Drive (via Edge Function)
-            //    Graceful degradation: if Drive 403/error occurs, warn the user
-            //    but DO NOT block the rest of the submission.
+            //    Strict requirement: If Drive upload fails, fail the entire submission.
             let buktiUrls = [...(formData.buktiUrls || [])];
             if (formData.buktiFiles?.length > 0) {
-                for (const { file } of formData.buktiFiles) {
+                for (let i = 0; i < formData.buktiFiles.length; i++) {
+                    const { file } = formData.buktiFiles[i];
                     try {
+                        setUploadStatus(`Mengunggah lampiran (${i + 1}/${formData.buktiFiles.length})...`);
                         const url = await uploadToDrive(file);
+                        if (!url) throw new Error("Gagal mendapatkan URL Google Drive.");
                         buktiUrls.push(url);
                     } catch (driveErr) {
-                        const msg = driveErr?.message || '';
-                        const is403 = msg.includes('403') || msg.includes('quota') || msg.includes('delegation');
-                        setDriveWarning(
-                            is403
-                                ? 'Sistem penyimpanan sedang disesuaikan. Laporan teks Anda tetap tersimpan, namun mohon simpan struk fisik Anda.'
-                                : `Unggahan bukti gagal (${msg}). Laporan teks tetap tersimpan — simpan struk fisik Anda.`
-                        );
-                        // Continue without the failed file URL
+                        // Throw to outer catch block to stop submission and display error
+                        throw new Error(`Gagal saat mengunggah "${file.name}": ${driveErr.message}. Silahkan coba beberapa saat lagi.`);
                     }
                 }
+                setUploadStatus('Menyimpan data laporan...');
             }
 
             // 2. Insert each date row into Supabase `laporan`
@@ -109,6 +107,7 @@ export default function RingkasanPage() {
             setError(err.message || 'Terjadi kesalahan saat mengirim laporan.');
         } finally {
             setIsSubmitting(false);
+            setUploadStatus('');
         }
     };
 
@@ -282,7 +281,7 @@ export default function RingkasanPage() {
                         className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 rounded-lg text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 transition-all transform hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-primary-500/30"
                     >
                         {isSubmitting ? (
-                            <><span className="material-symbols-outlined animate-spin text-lg">sync</span> Mengirim...</>
+                            <><span className="material-symbols-outlined animate-spin text-lg">sync</span> {uploadStatus || 'Mengirim...'}</>
                         ) : (
                             <><span className="material-symbols-outlined text-lg">send</span> Kirim Laporan</>
                         )}

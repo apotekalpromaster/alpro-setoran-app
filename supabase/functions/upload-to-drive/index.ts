@@ -12,7 +12,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const TIMEOUT_MS = 25_000; // 25 s — stay inside Supabase Edge 50s limit
+const TIMEOUT_MS = 40_000; // 40 s — Allows larger files before Supabase 50s limit hits
 
 // ─── CORS headers ────────────────────────────────────────────────────────────
 const CORS = {
@@ -102,12 +102,7 @@ serve(async (req: Request) => {
             });
         }
 
-        // Validate size (max 10 MB)
-        if (file.size > 10 * 1024 * 1024) {
-            return new Response(JSON.stringify({ error: 'File terlalu besar. Maksimal 10 MB.' }), {
-                status: 413, headers: { ...CORS, 'Content-Type': 'application/json' },
-            });
-        }
+        // Removed size validations as per user request to allow flexibility
 
         // 2) Load service account from Supabase secret
         const saRaw = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON');

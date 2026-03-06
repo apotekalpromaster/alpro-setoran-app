@@ -67,17 +67,15 @@ export default function DetailSetoranPage() {
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        if (!file.type.startsWith('image/')) {
-            setGlobalError('Hanya file gambar yang diperbolehkan.');
-            return;
-        }
+
         if (stagedFiles.length >= 3) {
-            setGlobalError('Maksimal 3 bukti foto.');
+            setGlobalError('Maksimal 3 bukti lampiran.');
             return;
         }
         setGlobalError('');
-        const preview = URL.createObjectURL(file);
-        const newFiles = [...stagedFiles, { file, name: file.name, preview }];
+        const isImage = file.type.startsWith('image/');
+        const preview = isImage ? URL.createObjectURL(file) : null;
+        const newFiles = [...stagedFiles, { file, name: file.name, preview, isImage }];
         setStagedFiles(newFiles);
         updateField({ buktiFiles: newFiles });
         e.target.value = '';
@@ -320,8 +318,14 @@ function UploadSection({ label, stagedFiles, onAdd, onRemove }) {
             {stagedFiles.length > 0 && (
                 <div className="space-y-2 mb-3">
                     {stagedFiles.map((f, idx) => (
-                        <div key={idx} className="flex items-center gap-3 bg-green-50 border border-green-100 p-3 rounded-lg">
-                            <img src={f.preview} alt="preview" className="h-12 w-12 object-cover rounded border border-gray-200 flex-shrink-0" />
+                        <div key={idx} className="flex items-center gap-3 bg-green-50 border border-green-100 p-3 rounded-lg overflow-hidden">
+                            {f.isImage && f.preview ? (
+                                <img src={f.preview} alt="preview" className="h-12 w-12 object-cover rounded border border-gray-200 flex-shrink-0" />
+                            ) : (
+                                <div className="h-12 w-12 flex items-center justify-center bg-white text-gray-500 rounded border border-gray-200 flex-shrink-0 drop-shadow-sm">
+                                    <span className="material-symbols-outlined text-2xl">description</span>
+                                </div>
+                            )}
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-gray-800 truncate">{f.name}</p>
                                 <p className="text-xs text-green-600 font-medium flex items-center gap-1">
@@ -345,9 +349,9 @@ function UploadSection({ label, stagedFiles, onAdd, onRemove }) {
                         <p className="text-sm font-medium text-gray-600 group-hover:text-primary-600">
                             <span className="text-primary-500">Pilih File</span> atau ambil foto
                         </p>
-                        <p className="text-xs text-gray-400 mt-1">JPG, PNG — maks. 3 foto</p>
+                        <p className="text-xs text-gray-400 mt-1">Format apa saja — maks. 3 file</p>
                     </div>
-                    <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={onAdd} />
+                    <input type="file" capture="environment" className="sr-only" onChange={onAdd} />
                 </label>
             )}
         </div>
