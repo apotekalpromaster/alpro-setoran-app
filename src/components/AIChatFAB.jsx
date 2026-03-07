@@ -37,14 +37,9 @@ export default function AIChatFAB({ role = 'user' }) {
         setLoading(true);
 
         try {
-            // Append system prompt dynamically under the hood before sending
-            const systemPrompt = {
-                role: 'system',
-                content: 'Kamu adalah Asisten AI Apotek Alpro. Jawab dengan singkat, ramah, dan profesional dalam bahasa Indonesia'
-            };
-
-            // Only send the last 10 messages to save context limits, plus system prompt
-            const contextToSend = [systemPrompt, ...newMessages.slice(-10)];
+            // Only send the last 10 messages to save context limits
+            // System prompt is rigidly handled in the backend edge function
+            const contextToSend = [...newMessages.slice(-10)];
             const reply = await sendChatMessages(contextToSend);
 
             setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);

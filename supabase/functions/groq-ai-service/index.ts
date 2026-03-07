@@ -35,15 +35,18 @@ Panduan respons:
 - Sertakan 1–2 rekomendasi concrete berdasarkan data.
 - Maksimal 350 kata. Tidak perlu salam pembuka atau penutup.`;
 
-const USER_ASSISTANT_SYSTEM = `Anda adalah Asisten Pintar sistem Apotek Alpro — membantu staf apotek memahami prosedur pelaporan setoran.
-Nama Anda: "Alpro Assistant".
+const SOP_CONTEXT = `
+PANDUAN APLIKASI PELAPORAN SETORAN HARIAN APOTEK ALPRO:
+1. Cara Login: Gunakan username (bukan email). Kata sandi default diberikan oleh Admin.
+2. Cara Lapor Setoran: Buka menu "Lapor Setoran". Isi nominal setoran, pilih metode, tambahkan potongan (jika ada), lalu lapor. WAJIB melampirkan foto struk EDC/transfer/resi bukti setor bank yang valid.
+3. Metode Setoran: Bisa melalui Transfer Bank, Setor Tunai via Teller, atau Mesin CDM. Jika menggunakan Deposit Card dan mesin bermasalah/kartu tertelan, laporkan masalah segera ke tim Finance dan lampirkan bukti foto kendalanya.
+4. Logika "Hari Belum Lapor" (Tunggakan/Pending): Sistem memantau selisih hari kalender batas setoran. Hari Minggu DIKECUALIKAN dari kewajiban hitungan "Hari Kerja" pelaporan. Apabila terlambat, sistem Admin akan mendeteksinya.
+5. Admin/Finance (Monitoring & Analitik): Admin bisa melihat grafik performa cabang, memonitor cabang yang lambat setor via "Laporan Pending", mengirim Email Reminder masal untuk tagihan tunggakan, dan memfilter riwayat menggunakan "Tanggal Sales" atau nama KCP (Apotek) spesifik untuk pencocokan.
+`;
 
-Panduan:
-- Gunakan Bahasa Indonesia yang ramah, santai namun profesional.
-- Jawab pertanyaan seputar: cara mengisi laporan setoran, jenis laporan, prosedur deposit card bermasalah, metode setoran, dan alur kerja.
-- Jika pertanyaan di luar topik sistem pelaporan Apotek Alpro, tolak dengan sopan.
-- Maksimal 200 kata per jawaban. Format boleh menggunakan poin-poin singkat.
-- Jangan pernah menyebutkan detail teknis seperti API keys, nama database, atau detail infrastruktur.`;
+const STRICT_SYSTEM_PROMPT = `Kamu adalah Asisten AI internal Apotek Alpro. Tugas utamamu HANYA menjawab pertanyaan seputar penggunaan aplikasi Pelaporan Setoran Harian berdasarkan panduan berikut: 
+${SOP_CONTEXT}
+Aturan mutlak: DILARANG menebak-nebak atau memberikan informasi di luar panduan. Jika user bertanya hal di luar sistem ini, tolak dengan sopan dan arahkan kembali ke topik aplikasi. Jawab senatural mungkin, tidak kaku, bahasa Indonesia ramah.`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface RequestBody {
@@ -118,7 +121,7 @@ async function handleChat(userMessage: string, username?: string): Promise<strin
     const greeting = username ? `Pengguna bernama ${username} bertanya: ` : '';
 
     const messages: GroqMessage[] = [
-        { role: 'system', content: USER_ASSISTANT_SYSTEM },
+        { role: 'system', content: STRICT_SYSTEM_PROMPT as string },
         { role: 'user', content: `${greeting}${userMessage}` },
     ];
 
@@ -152,7 +155,17 @@ serve(async (req: Request) => {
                 if (!body.messages || !Array.isArray(body.messages)) {
                     throw new Error("Parameter messages (array) diperlukan untuk aksi chat_history.");
                 }
-                reply = await callGroq(body.messages, MODEL_CHAT, 600);
+
+                // SECURITY: Remove any user-injected system prompts to prevent overrides
+                const safeHistory = body.messages.filter(msg => msg.role !== 'system');
+
+                // Enforce our strict system prompt at index 0
+                const lockedMessages: GroqMessage[] = [
+                    { role: 'system', content: STRICT_SYSTEM_PROMPT },
+                    ...safeHistory
+                ];
+
+                reply = await callGroq(lockedMessages, MODEL_CHAT, 600);
                 break;
             default:
                 return new Response(JSON.stringify({ error: `Action '${body.action}' tidak dikenali.` }), {
