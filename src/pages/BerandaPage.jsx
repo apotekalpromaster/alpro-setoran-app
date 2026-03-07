@@ -19,84 +19,70 @@ export default function BerandaPage() {
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Fetch 10 most recent reports for this user
+                // Fetch ALL reports for this user to calculate total missed working dates accurately
                 const { data, error } = await supabase
                     .from('laporan')
                     .select('*')
                     .eq('user_id', profile.id)
-                    .order('tanggal_setor', { ascending: false })
-                    .limit(10);
+                    .order('tanggal_setor', { ascending: false });
 
                 if (error) throw error;
 
-                setRecentReports(data || []);
+                const allReports = data || [];
 
-                // Calculate metrics
+                // Show only the 10 most recent in 'Aktivitas Terkini'
+                setRecentReports(allReports.slice(0, 10));
+
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 const cutOffDate = new Date('2026-03-01T00:00:00');
 
-                let effectiveLastDate;
-
-                if (data && data.length > 0) {
-                    const latest = data[0];
-                    const lastDateStr = latest.tanggal_setor;
-                    setLastReportDate(lastDateStr);
-
-                    const lastDate = new Date(lastDateStr);
-                    lastDate.setHours(0, 0, 0, 0);
-
-                    // Apply cutoff constraint
-                    effectiveLastDate = lastDate < cutOffDate ? cutOffDate : lastDate;
+                // Last Report Date
+                if (allReports.length > 0) {
+                    setLastReportDate(allReports[0].tanggal_jual || allReports[0].tanggal_setor);
                 } else {
-                    // No reports yet, start calculating from cutoff date
-                    effectiveLastDate = cutOffDate;
+                    setLastReportDate(null);
                 }
 
-                // Calculate difference in days
-                const diffTime = today.getTime() - effectiveLastDate.getTime();
-                let diffDays = 0;
-
-                if (diffTime > 0) {
-                    diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                }
-
-                // Count Sundays between the dates to exclude them from "hari kerja"
-                let sundaysCount = 0;
-                for (let i = 1; i <= diffDays; i++) {
-                    const checkDate = new Date(effectiveLastDate);
-                    checkDate.setDate(checkDate.getDate() + i);
-                    if (checkDate.getDay() === 0) {
-                        sundaysCount++;
+                // Collect unique sales dates (tanggal_jual)
+                const validReportedDates = new Set();
+                allReports.forEach(item => {
+                    if (item.tanggal_jual) {
+                        const d = new Date(item.tanggal_jual);
+                        d.setHours(0, 0, 0, 0);
+                        if (d >= cutOffDate && d <= today) {
+                            validReportedDates.add(d.getTime());
+                        }
                     }
+                });
+
+                // Loop from Cut-off date to Yesterday (since today's sales aren't mandatory to be reported today)
+                const endLoopDate = new Date(today);
+                endLoopDate.setDate(endLoopDate.getDate() - 1);
+
+                let workingDaysTotal = 0;
+                let loopDate = new Date(cutOffDate);
+
+                while (loopDate <= endLoopDate) {
+                    if (loopDate.getDay() !== 0) { // Exclude Sundays from mandatory quota
+                        workingDaysTotal++;
+                    }
+                    loopDate.setDate(loopDate.getDate() + 1);
                 }
 
-                // Pure working days difference
-                const workingDaysDiff = diffDays - sundaysCount;
-
-                // Apply frequency tolerance
-                let overdue = 0;
+                const reportedCount = validReportedDates.size;
+                let expectedCount = workingDaysTotal;
                 const freq = profile.frekuensi_setoran?.toUpperCase() || '';
 
-                if (freq.includes('SEHARI SEKALI') || freq.includes('SETIAP HARI')) {
-                    overdue = Math.max(0, workingDaysDiff - 1); // 1 = yesterday is OK
-                } else if (freq.includes('3X SEMINGGU')) {
-                    overdue = Math.max(0, workingDaysDiff - 2); // Allow 2 days gap
-                } else if (freq.includes('SEMINGGU SEKALI') || freq.includes('1X SEMINGGU')) {
-                    overdue = Math.max(0, workingDaysDiff - 6); // Allow ~6 days gap
+                if (freq.includes('3X SEMINGGU')) {
+                    expectedCount = Math.floor(workingDaysTotal / 2);
                 } else if (freq.includes('2X SEMINGGU')) {
-                    overdue = Math.max(0, workingDaysDiff - 3);
-                } else {
-                    // Default fallback
-                    overdue = Math.max(0, workingDaysDiff - 1);
+                    expectedCount = Math.floor(workingDaysTotal / 3);
+                } else if (freq.includes('SEMINGGU SEKALI') || freq.includes('1X SEMINGGU')) {
+                    expectedCount = Math.floor(workingDaysTotal / 6);
                 }
 
-                // Handle edge case where today is Sunday and last report was Saturday
-                // If today is Sunday, we shouldn't necessarily penalize them today.
-                if (today.getDay() === 0 && workingDaysDiff === 1) {
-                    overdue = 0; // Don't count Sunday itself as an overdue day if they reported yesterday
-                }
-
+                const overdue = expectedCount - reportedCount;
                 setHariBelumLapor(Math.max(0, overdue));
 
             } catch (error) {
@@ -262,7 +248,7 @@ export default function BerandaPage() {
                                             <div className="min-w-0">
                                                 <p className="font-bold text-sm text-gray-800 truncate">{laporan.jenis_pelaporan}</p>
                                                 <div className="flex items-center text-xs text-gray-500 mt-0.5 gap-2">
-                                                    <span className="flex items-center gap-1"><span className="material-symbols-outlined scale-[0.7] -mx-1">calendar_today</span> {formatDate(laporan.tanggal_setor)}</span>
+                                                    <span className="flex items-center gap-1"><span className="material-symbols-outlined scale-[0.7] -mx-1">calendar_today</span> {formatDate(laporan.tanggal_jual || laporan.tanggal_setor)}</span>
                                                 </div>
                                             </div>
                                         </div>
