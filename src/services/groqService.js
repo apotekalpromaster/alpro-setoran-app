@@ -26,16 +26,16 @@ export async function askAssistant(userQuery, username) {
     return sendChatMessages([{ role: 'user', content: userQuery }], username);
 }
 
-export async function getAdminSummary(dataString) {
+export async function generateAnalyticsSummary(tableData) {
     try {
         const { data, error } = await supabase.functions.invoke('groq-ai-service', {
-            body: { action: 'admin_summary', prompt: dataString }
+            body: { action: 'admin_summary', prompt: JSON.stringify(tableData) }
         });
 
         if (error) throw error;
-        return data.reply || "Gagal membuat summary.";
+        return data.reply || "Gagal membuat analisis AI.";
     } catch (error) {
         console.error("Admin Summary Error:", error);
-        return "Gagal mendapatkan analisis AI.";
+        return "Gagal mendapatkan analisis AI. Edge function mungkin tidak merespons.";
     }
 }

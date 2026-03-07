@@ -25,15 +25,7 @@ const CORS = {
 
 // ─── System prompts ───────────────────────────────────────────────────────────
 
-const ADMIN_SUMMARY_SYSTEM = `Anda adalah analis keuangan senior untuk jaringan apotek "Apotek Alpro" di Indonesia.
-Tugas Anda adalah menganalisis data laporan setoran harian dari seluruh cabang dan memberikan insight yang tajam, ringkas, dan actionable.
-
-Panduan respons:
-- Gunakan Bahasa Indonesia formal namun mudah dipahami.
-- Format output menggunakan Markdown (header ##, bold, list).
-- Fokus pada: total nominal, cabang berperforma tinggi/rendah, selisih signifikan, anomali, dan rekomendasi.
-- Sertakan 1–2 rekomendasi concrete berdasarkan data.
-- Maksimal 350 kata. Tidak perlu salam pembuka atau penutup.`;
+const ADMIN_SUMMARY_SYSTEM = `Anda adalah Senior Financial Analyst Apotek Alpro. Analisis data JSON ini. Berikan: 1. Total Omzet & Setoran, 2. Toko dengan performa terbaik/terburuk, 3. Anomali (selisih besar), 4. Saran Strategis singkat. Gunakan Bahasa Indonesia formal.`;
 
 const SOP_CONTEXT = `
 PANDUAN APLIKASI PELAPORAN SETORAN HARIAN APOTEK ALPRO:
@@ -108,7 +100,7 @@ async function handleAdminSummary(dataString: string): Promise<string> {
         { role: 'system', content: ADMIN_SUMMARY_SYSTEM },
         {
             role: 'user',
-            content: `Berikut adalah data laporan setoran dari semua cabang apotek dalam periode ini (format JSON):\n\n\`\`\`json\n${dataString}\n\`\`\`\n\nBerikan analisis komprehensif berdasarkan data di atas.`,
+            content: `Data Laporan: ${dataString}`,
         },
     ];
 

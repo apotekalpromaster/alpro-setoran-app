@@ -4,8 +4,8 @@ import {
     LineElement, ArcElement, Title, Tooltip, Legend, Filler,
 } from 'chart.js';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
-import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
+import { generateAnalyticsSummary } from '../services/groqService';
 import AdminLayout from '../components/AdminLayout';
 import AutocompleteInput from '../components/AutocompleteInput';
 
@@ -54,6 +54,10 @@ export default function LaporanAnalitikPage() {
     const [analytics, setAnalytics] = useState(null);
     const [tableData, setTableData] = useState([]);
 
+    // AI States
+    const [aiSummary, setAiSummary] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+
     const effectiveDates = period !== 'custom' ? getDateRange(period) : { start: startDate, end: endDate };
 
     useEffect(() => {
@@ -64,6 +68,7 @@ export default function LaporanAnalitikPage() {
         const { start, end } = overrideDates || effectiveDates;
         if (!start || !end) { setError('Pilih tanggal terlebih dahulu.'); return; }
         setLoading(true); setError(''); setAnalytics(null); setTableData([]);
+        setAiSummary(''); // Reset AI on new filter
         try {
             // Supabase query — join profiles for username
             let query = supabase
@@ -161,6 +166,21 @@ export default function LaporanAnalitikPage() {
         loadAnalytics(dates);
     };
 
+    const handleAiAnalysis = async () => {
+        if (!tableData.length) return;
+        setAiLoading(true);
+        setAiSummary('');
+        try {
+            // Pass the currently filtered table data to AI
+            const result = await generateAnalyticsSummary(tableData);
+            setAiSummary(result);
+        } catch (err) {
+            setAiSummary('Terjadi kesalahan saat memanggil asisten AI.');
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     const downloadCSV = () => {
         if (!tableData.length) return;
         const header = 'Nama Apotek,Total Penjualan,Potongan,Nominal Setoran,Selisih\n';
@@ -222,8 +242,17 @@ export default function LaporanAnalitikPage() {
                             </button>
                         </div>
                         <div className="flex gap-3 justify-end items-center flex-wrap">
-                            <button onClick={() => alert('Fitur AI sedang dalam pengembangan')} className="flex items-center gap-2 h-10 px-5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-bold rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-md shadow-purple-500/20">
-                                <span className="material-symbols-outlined text-sm">smart_toy</span> Analisis AI
+                            <button
+                                onClick={handleAiAnalysis}
+                                disabled={aiLoading || !tableData.length}
+                                className="flex items-center gap-2 h-10 px-5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-bold rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {aiLoading ? (
+                                    <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                                ) : (
+                                    <span className="material-symbols-outlined text-sm">smart_toy</span>
+                                )}
+                                Analisis AI
                             </button>
                             <button onClick={downloadCSV} disabled={!tableData.length} className="flex items-center gap-2 h-10 px-5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm">
                                 <span className="material-symbols-outlined text-sm">download</span> CSV
@@ -231,6 +260,30 @@ export default function LaporanAnalitikPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* AI ANALYSIS CONTAINER */}
+                {(aiLoading || aiSummary) && (
+                    <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-6 shadow-sm animate-slide-in relative overflow-hidden">
+                        {/* Decorative background element */}
+                        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-purple-200 rounded-full opacity-50 blur-3xl"></div>
+
+                        <div className="flex items-center gap-2 mb-4">
+                            <span className="material-symbols-outlined text-purple-600 text-2xl">smart_toy</span>
+                            <h3 className="font-bold text-gray-800 text-lg">Hasil Analisis Asisten AI</h3>
+                        </div>
+
+                        {aiLoading ? (
+                            <div className="flex items-center gap-3 text-purple-600">
+                                <span className="material-symbols-outlined animate-spin">sync</span>
+                                <span className="font-medium">AI sedang menganalisis data, mohon tunggu...</span>
+                            </div>
+                        ) : (
+                            <div className="prose prose-sm prose-purple max-w-none text-gray-700 whitespace-pre-wrap">
+                                {aiSummary}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="flex justify-center py-20">
