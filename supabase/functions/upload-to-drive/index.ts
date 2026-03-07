@@ -1,17 +1,18 @@
 // Supabase Edge Function: upload-to-drive
 // Receives a multipart/form-data request with a 'file' field,
-// authenticates to Google Drive via a Service Account JWT,
-// and uploads the file to a configured shared Drive folder.
+// authenticates to Google Drive via OAuth2 Refresh Token,
+// and uploads the file to a configured Drive folder.
 //
 // Required Supabase Secrets:
-//   GOOGLE_SERVICE_ACCOUNT_JSON  — full JSON key from Google Cloud Console
+//   GOOGLE_CLIENT_ID             — OAuth Client ID
+//   GOOGLE_CLIENT_SECRET         — OAuth Client Secret
+//   GOOGLE_REFRESH_TOKEN         — OAuth Refresh Token
 //   GOOGLE_DRIVE_FOLDER_ID       — ID of the destination Drive folder
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const TIMEOUT_MS = 40_000; // 40 s — Allows larger files before Supabase 50s limit hits
 
 // ─── CORS headers ────────────────────────────────────────────────────────────
@@ -23,55 +24,16 @@ const CORS = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Base64url-encode a Uint8Array */
-function b64url(bytes: Uint8Array): string {
-    return btoa(String.fromCharCode(...bytes))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-/** Build a signed JWT so we can exchange it for an OAuth2 access token */
-async function buildServiceAccountJWT(sa: {
-    client_email: string;
-    private_key: string;
-}): Promise<string> {
-    const now = Math.floor(Date.now() / 1000);
-    const header = b64url(new TextEncoder().encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
-    const payload = b64url(new TextEncoder().encode(JSON.stringify({
-        iss: sa.client_email,
-        scope: SCOPE,
-        aud: TOKEN_URL,
-        iat: now,
-        exp: now + 3600,
-    })));
-
-    // Import RSA private key
-    const pem = sa.private_key.replace(/\\n/g, '\n');
-    const pemBody = pem.replace(/-----[A-Z ]+-----/g, '').replace(/\s/g, '');
-    const keyBytes = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
-
-    const cryptoKey = await crypto.subtle.importKey(
-        'pkcs8', keyBytes.buffer,
-        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-        false, ['sign']
-    );
-
-    const data = new TextEncoder().encode(`${header}.${payload}`);
-    const sigBuf = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, data);
-    const sig = b64url(new Uint8Array(sigBuf));
-
-    return `${header}.${payload}.${sig}`;
-}
-
-/** Exchange a signed JWT for a short-lived Google OAuth2 access token */
-async function getAccessToken(sa: { client_email: string; private_key: string }): Promise<string> {
-    const jwt = await buildServiceAccountJWT(sa);
-
+/** Exchange OAuth2 refresh token for a short-lived Google access token */
+async function getAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string> {
     const res = await fetch(TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-            grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-            assertion: jwt,
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: refreshToken,
+            grant_type: 'refresh_token',
         }),
         signal: AbortSignal.timeout(10_000),
     });
@@ -104,17 +66,19 @@ serve(async (req: Request) => {
 
         // Removed size validations as per user request to allow flexibility
 
-        // 2) Load service account from Supabase secret
-        const saRaw = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON');
-        if (!saRaw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON secret tidak dikonfigurasi.');
-        const sa = JSON.parse(saRaw);
-
+        // 2) Load OAuth2 credentials from Supabase secret
+        const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
+        const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
+        const refreshToken = Deno.env.get('GOOGLE_REFRESH_TOKEN');
         const folderId = Deno.env.get('GOOGLE_DRIVE_FOLDER_ID');
-        if (!folderId) throw new Error('GOOGLE_DRIVE_FOLDER_ID secret tidak dikonfigurasi.');
+
+        if (!clientId || !clientSecret || !refreshToken || !folderId) {
+            throw new Error('Konfigurasi Google OAuth (Client ID, Secret, Refresh Token) atau Folder ID tidak lengkap di secrets.');
+        }
 
         // 3) Get access token (with timeout guard)
         const accessToken = await Promise.race([
-            getAccessToken(sa),
+            getAccessToken(clientId, clientSecret, refreshToken),
             new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error('Autentikasi Google timeout. Coba lagi.')), 10_000)
             ),
