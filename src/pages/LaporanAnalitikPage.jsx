@@ -221,7 +221,10 @@ export default function LaporanAnalitikPage() {
                                 <span className="material-symbols-outlined text-sm">filter_list</span> Terapkan
                             </button>
                         </div>
-                        <div className="flex gap-3 justify-end">
+                        <div className="flex gap-3 justify-end items-center flex-wrap">
+                            <button onClick={() => alert('Fitur AI sedang dalam pengembangan')} className="flex items-center gap-2 h-10 px-5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-bold rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-md shadow-purple-500/20">
+                                <span className="material-symbols-outlined text-sm">smart_toy</span> Analisis AI
+                            </button>
                             <button onClick={downloadCSV} disabled={!tableData.length} className="flex items-center gap-2 h-10 px-5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm">
                                 <span className="material-symbols-outlined text-sm">download</span> CSV
                             </button>

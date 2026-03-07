@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-/* ─── Navigation items ──────────────────────────────────────────────────────── */
 const NAV_ITEMS = [
     { label: 'Dashboard', icon: 'dashboard', path: '/admin' },
     { label: 'Manajemen Laporan', icon: 'table_view', path: '/admin/laporan' },
     { label: 'Laporan Analitik', icon: 'bar_chart', path: '/admin/analitik' },
     { label: 'Laporan Pending', icon: 'pending_actions', path: '/admin/pending' },
-    { label: 'Pengaturan', icon: 'settings', path: '/admin/pengaturan' },
+    { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
+    { label: 'Petunjuk Penggunaan', icon: 'help', path: '/bantuan' },
 ];
 
 /* ─── Floating Chat FAB ─────────────────────────────────────────────────────── */
