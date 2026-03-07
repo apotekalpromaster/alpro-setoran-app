@@ -8,7 +8,7 @@ const NAV_ITEMS = [
     { label: 'Laporan Analitik', icon: 'bar_chart', path: '/admin/analitik' },
     { label: 'Laporan Pending', icon: 'pending_actions', path: '/admin/pending' },
     { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
-    { label: 'Petunjuk Penggunaan', icon: 'help', path: '/bantuan' },
+    { label: 'Petunjuk Penggunaan', icon: 'help', path: '/admin/bantuan' },
 ];
 
 /* ─── Floating Chat FAB ─────────────────────────────────────────────────────── */

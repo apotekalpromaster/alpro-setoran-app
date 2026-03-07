@@ -26,6 +26,7 @@ import LaporanPendingPage from './pages/LaporanPendingPage';
 // Phase 8
 import PengaturanPage from './pages/PengaturanPage';
 import BantuanPage from './pages/BantuanPage';
+import BantuanAdminPage from './pages/BantuanAdminPage';
 
 function AppRoutes() {
   const { user, profile } = useAuth();
@@ -102,6 +103,7 @@ function AppRoutes() {
       <Route path="/admin/laporan" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><ManajemenLaporanPage /></ProtectedRoute>} />
       <Route path="/admin/analitik" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanAnalitikPage /></ProtectedRoute>} />
       <Route path="/admin/pending" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanPendingPage /></ProtectedRoute>} />
+      <Route path="/admin/bantuan" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><BantuanAdminPage /></ProtectedRoute>} />
 
       {/* ===== SHARED ROUTES (User + Admin) ===== */}
       <Route
