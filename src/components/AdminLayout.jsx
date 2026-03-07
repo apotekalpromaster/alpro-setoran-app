@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import AIChatFAB from './AIChatFAB';
 
 const NAV_ITEMS = [
     { label: 'Dashboard', icon: 'dashboard', path: '/admin' },
@@ -11,79 +12,7 @@ const NAV_ITEMS = [
     { label: 'Petunjuk Penggunaan', icon: 'help', path: '/admin/bantuan' },
 ];
 
-/* ─── Floating Chat FAB ─────────────────────────────────────────────────────── */
-function ChatFAB() {
-    const [open, setOpen] = useState(false);
-    return (
-        <>
-            {/* Chat window */}
-            {open && (
-                <div
-                    className="fixed bottom-24 right-5 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-slide-in"
-                    style={{ maxHeight: '420px' }}
-                >
-                    {/* Header */}
-                    <div className="bg-primary-500 px-4 py-3 flex items-center justify-between flex-shrink-0">
-                        <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-white text-xl">smart_toy</span>
-                            <span className="text-white font-bold text-sm">Asisten Alpro</span>
-                        </div>
-                        <button
-                            onClick={() => setOpen(false)}
-                            className="text-white/80 hover:text-white transition-colors"
-                            aria-label="Tutup chat"
-                        >
-                            <span className="material-symbols-outlined text-lg">close</span>
-                        </button>
-                    </div>
-
-                    {/* Messages area */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
-                        <div className="flex items-start gap-2">
-                            <div className="h-7 w-7 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                <span className="material-symbols-outlined text-primary-500 text-sm">smart_toy</span>
-                            </div>
-                            <div className="bg-white border border-gray-200 rounded-xl rounded-tl-none px-3 py-2 text-sm text-gray-700 shadow-sm max-w-[85%]">
-                                Halo Admin! Saya asisten digital Alpro. Fitur chat AI akan segera hadir. 🚀
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Input bar */}
-                    <div className="border-t border-gray-200 p-3 bg-white flex items-center gap-2 flex-shrink-0">
-                        <input
-                            type="text"
-                            placeholder="Ketik pesan..."
-                            disabled
-                            className="flex-1 text-sm border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 cursor-not-allowed text-gray-400"
-                        />
-                        <button disabled className="h-9 w-9 rounded-full bg-primary-500 flex items-center justify-center opacity-40 cursor-not-allowed">
-                            <span className="material-symbols-outlined text-white text-sm">send</span>
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* FAB button */}
-            <button
-                onClick={() => setOpen((o) => !o)}
-                aria-label="Buka asisten chat"
-                className={`
-                    fixed bottom-5 right-5 z-50
-                    h-14 w-14 rounded-full shadow-lg shadow-primary-500/40
-                    bg-primary-500 hover:bg-primary-600
-                    flex items-center justify-center
-                    transition-all duration-300
-                    ${open ? 'rotate-12 scale-95' : 'hover:scale-110'}
-                `}
-            >
-                <span className="material-symbols-outlined text-white text-2xl">
-                    {open ? 'close' : 'smart_toy'}
-                </span>
-            </button>
-        </>
-    );
-}
+// AIChatFAB is imported from './AIChatFAB'
 
 /* ─── Main AdminLayout ───────────────────────────────────────────────────────── */
 export default function AdminLayout({ children, title }) {
@@ -235,7 +164,7 @@ export default function AdminLayout({ children, title }) {
             </div>
 
             {/* ══ FLOATING ACTION BUTTON ══════════════════════════════════════════ */}
-            <ChatFAB />
+            <AIChatFAB role="admin" />
         </div>
     );
 }

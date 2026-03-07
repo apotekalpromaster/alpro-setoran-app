@@ -14,7 +14,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL_ADMIN = 'llama-3.3-70b-versatile';
-const MODEL_CHAT = 'llama-3.1-8b-instant';
+const MODEL_CHAT = 'llama3-70b-8192';
 const TIMEOUT_MS = 30_000;
 
 const CORS = {
@@ -47,8 +47,9 @@ Panduan:
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface RequestBody {
-    action: 'admin_summary' | 'chat';
-    prompt: string;
+    action: 'admin_summary' | 'chat' | 'chat_history';
+    prompt?: string;
+    messages?: GroqMessage[];
     username?: string;
 }
 
@@ -132,8 +133,8 @@ serve(async (req: Request) => {
     try {
         const body = (await req.json()) as RequestBody;
 
-        if (!body?.action || !body?.prompt) {
-            return new Response(JSON.stringify({ error: 'Parameter action dan prompt diperlukan.' }), {
+        if (!body?.action) {
+            return new Response(JSON.stringify({ error: 'Parameter action diperlukan.' }), {
                 status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
             });
         }
@@ -142,10 +143,16 @@ serve(async (req: Request) => {
 
         switch (body.action) {
             case 'admin_summary':
-                reply = await handleAdminSummary(body.prompt);
+                reply = await handleAdminSummary(body.prompt || '');
                 break;
             case 'chat':
-                reply = await handleChat(body.prompt, body.username);
+                reply = await handleChat(body.prompt || '', body.username);
+                break;
+            case 'chat_history':
+                if (!body.messages || !Array.isArray(body.messages)) {
+                    throw new Error("Parameter messages (array) diperlukan untuk aksi chat_history.");
+                }
+                reply = await callGroq(body.messages, MODEL_CHAT, 600);
                 break;
             default:
                 return new Response(JSON.stringify({ error: `Action '${body.action}' tidak dikenali.` }), {
