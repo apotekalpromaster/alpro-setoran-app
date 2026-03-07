@@ -18,7 +18,18 @@ Ikuti petunjuk di bawah ini untuk mendapatkan **Client ID**, **Client Secret**, 
 6. Klik **CREATE**.
 7. Akan muncul popup yang menampilkan **Client ID** dan **Client Secret** Anda. *Copy* (salin) dan amankan kedua nilai rahasia ini. 
 
-> **Catatan Penting**: Jika Anda belum pernah mengatur *OAuth consent screen* di Project tersebut, layar akan otomatis meminta Anda mengaturnya terlebih dahulu. Pilih User Type: **External**, lalu isi nama aplikasi yang pantas, isi email dukungan, dan kontak developer. Saat ditanya *scopes*, tambahkan (atau skip dan ketik nanti). Terakhir, pastikan Anda menambahkan email Google Utama yang dipakai sebagai **Admin** ke bagian kolom "Test users".
+### Penting: Hindari Error 403: access_denied (Test Users)
+
+Jika Anda melihat error `403: access_denied` saat login di OAuth Playground, itu artinya Google memblokir akses karena aplikasi Anda masih dalam status "Testing" dan email Anda belum terdaftar sebagai tester.
+
+**Cara Memperbaikinya:**
+1. Di Google Cloud Console, buka menu **APIs & Services** -> **OAuth consent screen**.
+2. Pastikan **Publishing status** adalah `Testing`.
+3. Scroll ke bawah ke bagian **Test users**.
+4. Klik **+ ADD USERS**.
+5. Masukkan alamat email Google yang akan Anda gunakan untuk login di OAuth Playground.
+6. Klik **SAVE**.
+7. Sekarang, ulangi Langkah 2 di bawah ini.
 
 ## Langkah 2: Dapatkan Refresh Token via OAuth 2.0 Playground
 
