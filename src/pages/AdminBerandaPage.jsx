@@ -63,31 +63,29 @@ export default function AdminBerandaPage() {
             // 2. Determine Date Range
             const today = new Date();
             let startDate = new Date();
-            today.setHours(23, 59, 59, 999);
 
             if (filterPeriod === 'today') {
-                startDate.setHours(0, 0, 0, 0);
+                startDate = new Date(today);
             } else if (filterPeriod === 'yesterday') {
                 startDate.setDate(today.getDate() - 1);
-                startDate.setHours(0, 0, 0, 0);
                 today.setDate(today.getDate() - 1); // target end of yesterday too
             } else if (filterPeriod === 'last_7') {
                 startDate.setDate(today.getDate() - 6);
-                startDate.setHours(0, 0, 0, 0);
             } else if (filterPeriod === 'last_30') {
                 startDate.setDate(today.getDate() - 29);
-                startDate.setHours(0, 0, 0, 0);
             } else if (filterPeriod === 'this_month') {
                 startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-                startDate.setHours(0, 0, 0, 0);
             }
+
+            const startStr = startDate.toISOString().split('T')[0];
+            const endStr = today.toISOString().split('T')[0];
 
             // 3. Fetch Laporan
             const { data: laporanData, error: laporanErr } = await supabase
                 .from('laporan')
-                .select('id, user_id, tanggal_setor, nominal_jual, nominal_setoran, potongan_penjualan')
-                .gte('tanggal_setor', startDate.toISOString())
-                .lte('tanggal_setor', today.toISOString());
+                .select('id, user_id, tanggal_setor, nominal_jual, nominal_setoran, potongan')
+                .gte('tanggal_setor', startStr)
+                .lte('tanggal_setor', endStr);
 
             if (laporanErr) throw laporanErr;
 
@@ -105,7 +103,7 @@ export default function AdminBerandaPage() {
             laporan.forEach(item => {
                 const sales = Number(item.nominal_jual) || 0;
                 const setoran = Number(item.nominal_setoran) || 0;
-                const potongan = Number(item.potongan_penjualan) || 0;
+                const potongan = Number(item.potongan) || 0;
 
                 sumSales += sales;
                 sumSetoran += setoran;
