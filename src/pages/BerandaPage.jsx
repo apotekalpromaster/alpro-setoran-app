@@ -24,7 +24,9 @@ export default function BerandaPage() {
                     .from('laporan')
                     .select('*')
                     .eq('user_id', profile.id)
-                    .order('tanggal_setor', { ascending: false });
+                    .order('tanggal_setor', { ascending: false })
+                    .order('tanggal_jual', { ascending: false, nullsFirst: false })
+                    .order('id', { ascending: false });
 
                 if (error) throw error;
 
