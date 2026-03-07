@@ -5,7 +5,7 @@ import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 30;
 
 /** Visual badge config keyed by jenis_pelaporan */
 const BADGE_CONFIG = {
@@ -71,7 +71,7 @@ export default function RiwayatPage() {
           nominal_setoran,
           timestamp
         `)
-                .order('tanggal_setor', { ascending: false })
+                .order('tanggal_jual', { ascending: false })
                 .limit(50);
 
             if (err) throw err;
@@ -98,10 +98,10 @@ export default function RiwayatPage() {
 
             let matchDate = true;
             if (activeFilters.startDate) {
-                matchDate = matchDate && item.tanggal_setor >= activeFilters.startDate;
+                matchDate = matchDate && item.tanggal_jual >= activeFilters.startDate;
             }
             if (activeFilters.endDate) {
-                matchDate = matchDate && item.tanggal_setor <= activeFilters.endDate;
+                matchDate = matchDate && item.tanggal_jual <= activeFilters.endDate;
             }
 
             return matchSearch && matchMethode && matchDate;
@@ -149,11 +149,11 @@ export default function RiwayatPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Dari Tanggal Setor</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Dari Tanggal Sales</label>
                             <input type="date" value={startDate} min="2025-12-15" onChange={(e) => setStartDate(e.target.value)} className="form-input w-full py-2 px-3" />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Sampai Tanggal Setor</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Sampai Tanggal Sales</label>
                             <input type="date" value={endDate} min="2025-12-15" onChange={(e) => setEndDate(e.target.value)} className="form-input w-full py-2 px-3" />
                         </div>
                         <div>
