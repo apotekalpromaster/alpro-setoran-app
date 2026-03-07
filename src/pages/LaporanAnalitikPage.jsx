@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
-    Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement,
     LineElement, ArcElement, Title, Tooltip, Legend, Filler,
 } from 'chart.js';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
+import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import { generateAnalyticsSummary } from '../services/groqService';
 import AdminLayout from '../components/AdminLayout';
