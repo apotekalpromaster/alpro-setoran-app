@@ -101,6 +101,11 @@ export default function DetailSetoranPage() {
         setIsSubmitting(true);
 
         try {
+            // Wajib Lampirkan Bukti
+            if (!stagedFiles || stagedFiles.length === 0) {
+                throw new Error('Anda wajib mengunggah minimal 1 file Bukti Setoran/Lampiran sebelum melanjutkan.');
+            }
+
             // Combine form data for validation
             const combined = {
                 ...formData,
