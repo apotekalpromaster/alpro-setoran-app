@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { SmtpClient } from "https://deno.land/x/smtp/mod.ts";
+import nodemailer from 'npm:nodemailer';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -63,25 +63,25 @@ serve(async (req: Request) => {
       </div>
     `;
 
-    // 🔥 PENGIRIMAN EMAIL via Deno SMTP 🔥
+    // 🔥 PENGIRIMAN EMAIL via Nodemailer SMTP 🔥
     try {
-      const client = new SmtpClient();
-      await client.connectTLS({
-        hostname: "smtp.gmail.com",
+      const transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
         port: 465,
-        username: smtpUser,
-        password: smtpPass,
+        secure: true,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
       });
 
-      await client.send({
+      await transporter.sendMail({
         from: fromEmail,
         to: targetEmail,
         subject: subject,
-        content: "Laporan Darurat Apotek Alpro - Anda tidak bisa melihat pesan HTML.",
         html: htmlContent
       });
 
-      await client.close();
       console.log(`[send-critical-alert] Sent OK to: ${targetEmail} via Gmail SMTP`);
     } catch (smtpErr) {
       console.error('[send-critical-alert] SMTP Error:', smtpErr);
