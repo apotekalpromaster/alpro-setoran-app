@@ -33,7 +33,7 @@ serve(async (req: Request) => {
     const { data: profiles, error: profileErr } = await supabase
       .from('profiles')
       .select('*')
-      .eq('role', 'user');
+      .eq('role', 'User');
 
     if (profileErr) throw profileErr;
     if (!profiles || profiles.length === 0) {
