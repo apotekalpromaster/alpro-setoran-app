@@ -86,8 +86,8 @@ export default function RingkasanPage() {
 
             // 3. Trigger critical alert email if needed (Asynchronous / Background)
             const isCriticalIssue =
-                formData.penjelasan?.includes('Deposit Card Tertelan Mesin ATM') ||
-                formData.penjelasan?.includes('Deposit Card Terblokir (Salah Input PIN 3x)');
+                formData.jenisPelaporan === 'Deposit Card Tertelan Mesin ATM' ||
+                formData.jenisPelaporan === 'Deposit Card Terblokir (Salah Input PIN 3x)';
 
             if (isCriticalIssue) {
                 // Jangan pakai 'await' agar berjalan non-blocking di background,
@@ -96,7 +96,7 @@ export default function RingkasanPage() {
                     body: {
                         cabang: profile?.username || 'Tidak Diketahui',
                         tanggal: new Date().toISOString(),
-                        masalah: formData.penjelasan
+                        masalah: formData.jenisPelaporan + (formData.penjelasan ? `\nCatatan: ${formData.penjelasan}` : '')
                     },
                 }).catch(err => console.error("Gagal mengirim critical alert", err));
             }
