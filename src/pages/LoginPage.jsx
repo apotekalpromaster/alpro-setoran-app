@@ -72,7 +72,7 @@ export default function LoginPage() {
                 <div className="text-center">
                     <div className="mx-auto flex justify-center mb-6">
                         {/* Logo placeholder - assuming logo comes from Google Drive normally, we use a placeholder or local asset in Vite */}
-                        <img src="https://drive.google.com/uc?id=1R0xf7JY6pgK_nijpzeL6lLfQL8bEQk45" alt="Logo Apotek Alpro" className="h-20 w-auto object-contain transition-transform hover:scale-105" />
+                        <img src="/logo.png" alt="Logo Apotek Alpro" className="h-20 w-auto object-contain transition-transform hover:scale-105" />
                     </div>
                     <h2 className="mt-5 text-3xl font-extrabold text-primary-500">Selamat Datang Kembali</h2>
                     <p className="mt-2 text-sm text-gray-500">Silakan masuk untuk melanjutkan</p>
