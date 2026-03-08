@@ -84,11 +84,21 @@ export default function RingkasanPage() {
             const { error: insertError } = await supabase.from('laporan').insert(rows);
             if (insertError) throw insertError;
 
-            // 3. Trigger critical alert email if needed
-            if (NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan)) {
-                await supabase.functions.invoke('send-critical-alert', {
-                    body: { formData, username: profile?.username },
-                });
+            // 3. Trigger critical alert email if needed (Asynchronous / Background)
+            const isCriticalIssue =
+                formData.penjelasan?.includes('Deposit Card Tertelan Mesin ATM') ||
+                formData.penjelasan?.includes('Deposit Card Terblokir (Salah Input PIN 3x)');
+
+            if (isCriticalIssue) {
+                // Jangan pakai 'await' agar berjalan non-blocking di background,
+                // tangkap error silently agar user form tidak terblokir
+                supabase.functions.invoke('send-critical-alert', {
+                    body: {
+                        cabang: profile?.username || 'Tidak Diketahui',
+                        tanggal: new Date().toISOString(),
+                        masalah: formData.penjelasan
+                    },
+                }).catch(err => console.error("Gagal mengirim critical alert", err));
             }
 
             // 4. Clear wizard state and go to confirmation
