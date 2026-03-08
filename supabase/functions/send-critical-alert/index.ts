@@ -9,6 +9,7 @@ const CORS = {
 
 interface AlertPayload {
   cabang: string;
+  pelaporEmail?: string;
   tanggal: string;
   masalah: string;
 }
@@ -39,7 +40,11 @@ serve(async (req: Request) => {
 
     // 🔴 HARDCODED UAT EMAIL 🔴
     const fromEmail = 'apotekalpro.master@gmail.com';
-    const targetEmail = 'hendri.apotekalpro@gmail.com';
+    const targetEmail = 'operation@apotekalpro.id';
+    const ccEmails = ['hendri@apotekalpro.id'];
+    if (payload.pelaporEmail) {
+      ccEmails.push(payload.pelaporEmail);
+    }
     const subject = `[URGENT] Masalah Deposit Card - ${payload.cabang}`;
 
     // Build HTML Email
@@ -78,6 +83,7 @@ serve(async (req: Request) => {
       await transporter.sendMail({
         from: fromEmail,
         to: targetEmail,
+        cc: ccEmails.length > 0 ? ccEmails.join(', ') : undefined,
         subject: subject,
         html: htmlContent
       });

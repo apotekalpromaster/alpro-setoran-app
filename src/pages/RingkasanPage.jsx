@@ -95,6 +95,7 @@ export default function RingkasanPage() {
                 supabase.functions.invoke('send-critical-alert', {
                     body: {
                         cabang: profile?.username || 'Tidak Diketahui',
+                        pelaporEmail: profile?.email || '',
                         tanggal: new Date().toISOString(),
                         masalah: formData.jenisPelaporan + (formData.penjelasan ? `\nCatatan: ${formData.penjelasan}` : '')
                     },
