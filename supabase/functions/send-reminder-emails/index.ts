@@ -1,94 +1,178 @@
-// Supabase Edge Function: send-reminder-emails
-// Sends batch courtesy reminder emails via Gmail SMTP to pharmacies that
-// have not submitted their deposit reports on expected working days.
-//
-// Required Supabase Secrets:
-//   GMAIL_SMTP_USER     — Gmail address (e.g., alerts@gmail.com)
-//   GMAIL_SMTP_PASSWORD — Gmail App Password
-//   APP_URL             — Frontend URL for the CTA link
-
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import nodemailer from 'npm:nodemailer';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface PendingItem {
-  namaToko: string;
-  email: string | null;
-  tanggalBolong: string[];
-  frekuensi?: string;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('id-ID', {
-    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
-  });
-}
-
-function buildHTML(item: PendingItem, appUrl: string): string {
-  const dateItems = item.tanggalBolong
-    .map((d) => `<li style="margin-bottom:6px;color:#b91c1c;font-weight:600">${formatDate(d)}</li>`)
-    .join('');
-
-  return `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:Inter,Arial,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:32px auto">
-<tr><td>
-  <table width="100%" style="background:#f97316;border-radius:12px 12px 0 0">
-    <tr><td style="padding:24px 32px">
-      <p style="margin:0 0 4px;color:#fed7aa;font-size:12px;font-weight:700;text-transform:uppercase">Pengingat Laporan Setoran — Apotek Alpro</p>
-      <h1 style="margin:0;color:#fff;font-size:20px;font-weight:800">Halo, ${item.namaToko} 👋</h1>
-    </td></tr>
-  </table>
-  <table width="100%" style="background:#fff;border-radius:0 0 12px 12px;box-shadow:0 4px 12px rgba(0,0,0,.08)">
-    <tr><td style="padding:28px 32px">
-      <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.7">
-        Sistem kami mendeteksi bahwa toko Anda <strong>belum mengirimkan laporan setoran</strong> pada hari-hari berikut:
-      </p>
-      <ul style="margin:0 0 20px 16px;padding:0;list-style:disc">${dateItems}</ul>
-      <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.7">
-        Mohon segera lengkapi laporan. Jika Anda merasa sudah melaporkan, abaikan email ini.
-      </p>
-      <div style="text-align:center;margin-top:8px">
-        <a href="${appUrl}/setoran"
-           style="display:inline-block;background:#f97316;color:#fff;padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none">
-          Buat Laporan Sekarang →
-        </a>
-      </div>
-    </td></tr>
-    <tr><td style="padding:14px 32px;background:#f9fafb;border-top:1px solid #f1f5f9;border-radius:0 0 12px 12px">
-      <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center">Email otomatis — jangan balas email ini.</p>
-    </td></tr>
-  </table>
-</td></tr></table>
-</body></html>`;
-}
-
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
-  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: CORS });
 
   try {
-    const body = await req.json() as { pending: PendingItem[] };
-    const pending = body?.pending ?? [];
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!pending.length) {
-      return new Response(JSON.stringify({ success: 0, failed: 0, skipped: 0 }), {
-        status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
-      });
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Supabase URL / Service Key tidak dikonfigurasi.');
     }
 
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // 1. Logika Gap Analysis (7 Hari Terakhir)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // D-7
+    const lastWeek = new Date(today);
+    lastWeek.setDate(lastWeek.getDate() - 7);
+
+    // Tarik profil yang aktif
+    const { data: profiles, error: profileErr } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'user');
+
+    if (profileErr) throw profileErr;
+    if (!profiles || profiles.length === 0) {
+      return new Response(JSON.stringify({ message: 'Tidak ada profil cabang.' }), { status: 200, headers: CORS });
+    }
+
+    // Tarik laporan dalam 7 hari terakhir
+    const { data: laporan, error: lapErr } = await supabase
+      .from('laporan')
+      .select('user_id, tanggal_jual, tanggal_setor')
+      .gte('tanggal_jual', lastWeek.toISOString().split('T')[0])
+      .lte('tanggal_jual', today.toISOString().split('T')[0]);
+
+    if (lapErr) throw lapErr;
+
+    // Kalkulasi Tunggakan
+    const targetWorkingDates: Date[] = [];
+    let loopDate = new Date(lastWeek);
+    const endDate = new Date(today);
+    endDate.setDate(endDate.getDate() - 1); // sampai H-1
+
+    while (loopDate <= endDate) {
+      if (loopDate.getDay() !== 0) { // Lewati hari Minggu
+        const clone = new Date(loopDate);
+        targetWorkingDates.push(clone);
+      }
+      loopDate.setDate(loopDate.getDate() + 1);
+    }
+
+    const menunggakList: Array<{ cabang: string, frekuensi: string, tunggakan: string[] }> = [];
+
+    for (const p of profiles) {
+      // Laporan milik cabang ini dalam 7 hari terakhir
+      const cabangLaporan = (laporan || []).filter((l: any) => l.user_id === p.id);
+
+      const reportedDates = new Set<string>();
+      cabangLaporan.forEach((l: any) => {
+        if (l.tanggal_jual) {
+          const d = new Date(l.tanggal_jual);
+          d.setHours(0, 0, 0, 0);
+          reportedDates.add(d.getTime().toString());
+        }
+      });
+
+      const missingDates: Date[] = [];
+      for (const wDate of targetWorkingDates) {
+        if (!reportedDates.has(wDate.getTime().toString())) {
+          missingDates.push(wDate);
+        }
+      }
+
+      // Hitung ekspektasi berdasar frekuensi_setoran (dalam skala 7 hari)
+      const freq = (p.frekuensi_setoran || '').toUpperCase();
+      let expectedCount = targetWorkingDates.length; // Default Harian (sekitar 6 hari/minggu)
+
+      if (freq.includes('3X SEMINGGU')) {
+        expectedCount = Math.floor(targetWorkingDates.length / 2);
+      } else if (freq.includes('2X SEMINGGU')) {
+        expectedCount = Math.floor(targetWorkingDates.length / 3);
+      } else if (freq.includes('SEMINGGU SEKALI') || freq.includes('1X SEMINGGU')) {
+        expectedCount = Math.floor(targetWorkingDates.length / 6);
+      }
+
+      const totalReported = reportedDates.size;
+
+      if (totalReported < expectedCount && missingDates.length > 0) {
+        menunggakList.push({
+          cabang: p.username || 'Cabang Tidak Diketahui',
+          frekuensi: p.frekuensi_setoran || 'Harian',
+          tunggakan: missingDates.map(d => d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }))
+        });
+      }
+    }
+
+    if (menunggakList.length === 0) {
+      return new Response(JSON.stringify({ message: 'Semua cabang patuh! Tidak ada email yang perlu dikirim.' }), { status: 200, headers: CORS });
+    }
+
+    // 2. Pengaturan Email
     const smtpUser = Deno.env.get('GMAIL_SMTP_USER');
     const smtpPass = Deno.env.get('GMAIL_SMTP_PASSWORD');
-    const appUrl = Deno.env.get('APP_URL') ?? 'https://apotek-alpro.com';
 
-    if (!smtpUser || !smtpPass) throw new Error('GMAIL_SMTP_USER / GMAIL_SMTP_PASSWORD tidak dikonfigurasi.');
+    if (!smtpUser || !smtpPass) {
+      throw new Error("GMAIL_SMTP_USER / GMAIL_SMTP_PASSWORD tidak dikonfigurasi.");
+    }
 
-    // Open a single smtp connection for the entire batch
+    const fromEmail = 'apotekalpro.master@gmail.com';
+    const targetEmail = 'hendri.apotekalpro@gmail.com'; // UAT Phase
+
+    // PRODUCTION TARGETS (KODE KOMENTAR)
+    // const prodTo = 'outlets@apotekalpro.id, areamanager@apotekalpro.id';
+    // const prodCc = 'operation@apotekalpro.id, finance@apotekalpro.id';
+
+    const subject = `[REPORT] Laporan Apotek Menunggak Setoran (Mingguan)`;
+
+    // 3. Perakitan HTML Email
+    let tableRows = '';
+    menunggakList.forEach(m => {
+      tableRows += `
+            <tr style="border-bottom: 1px solid #e5e7eb;">
+                <td style="padding: 12px; color: #374151; font-weight: bold;">${m.cabang}<br><span style="font-size: 10px; font-weight: normal; color: #6b7280;">(${m.frekuensi})</span></td>
+                <td style="padding: 12px; color: #b91c1c; font-size: 13px;">
+                    <ul style="margin: 0; padding-left: 16px;">
+                        ${m.tunggakan.map(t => `<li style="margin-bottom: 2px;">${t}</li>`).join('')}
+                    </ul>
+                </td>
+            </tr>
+        `;
+    });
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; background: #f3f4f6; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+          <div style="background: #ea580c; padding: 20px; text-align: center;">
+            <h2 style="color: white; margin: 0;">⚠️ LAPORAN CABANG MENUNGGAK ⚠️</h2>
+            <p style="color: #ffedd5; font-size: 12px; margin-top: 5px;">Rekapitulasi 7 Hari Terakhir</p>
+          </div>
+          <div style="padding: 20px;">
+            <p style="color: #374151; font-size: 14px; line-height: 1.6;">Berikut adalah daftar cabang apotek yang terdeteksi <strong>belum melengkapi</strong> Laporan Setoran Harian (melewati batas toleransi frekuensi setoran):</p>
+            
+            <table width="100%" style="border-collapse: collapse; margin-top: 20px; border: 1px solid #e5e7eb;">
+              <thead>
+                <tr style="background: #fef3c7;">
+                  <th style="padding: 12px; text-align: left; font-size: 12px; color: #92400e; border-bottom: 2px solid #fde68a;">Nama Toko</th>
+                  <th style="padding: 12px; text-align: left; font-size: 12px; color: #92400e; border-bottom: 2px solid #fde68a;">Tanggal Tunggakan</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRows}
+              </tbody>
+            </table>
+            
+            <p style="margin-top: 30px; font-size: 11px; color: #6b7280; text-align: center;">Dihasilkan secara otomatis oleh pg_cron & Edge Functions<br>Aplikasi Setoran Harian Apotek Alpro</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Pengiriman SMTP NodeMailer
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -99,34 +183,22 @@ serve(async (req: Request) => {
       },
     });
 
-    let success = 0, failed = 0, skipped = 0;
+    await transporter.sendMail({
+      from: fromEmail,
+      to: targetEmail,
+      subject: subject,
+      html: htmlContent
+    });
 
-    for (const item of pending) {
-      if (!item.email) { skipped++; continue; }
+    console.log(`[send-reminder-emails] Sent OK to: ${targetEmail}. Cabang menunggak: ${menunggakList.length}`);
 
-      try {
-        await transporter.sendMail({
-          from: smtpUser,
-          to: item.email,
-          subject: `📋 Pengingat: ${item.tanggalBolong.length} Hari Laporan Belum Masuk — ${item.namaToko}`,
-          html: buildHTML(item, appUrl),
-        });
-        success++;
-      } catch (e) {
-        failed++;
-        console.error(`[reminder] Failed ${item.namaToko}:`, e);
-      }
-    }
-
-
-    console.log(`[send-reminder-emails] Done — success:${success} failed:${failed} skipped:${skipped}`);
-    return new Response(JSON.stringify({ success, failed, skipped }), {
+    return new Response(JSON.stringify({ success: true, count: menunggakList.length, menunggak: menunggakList }), {
       status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
 
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Terjadi kesalahan.';
-    console.error('[send-reminder-emails] Error:', message);
+    const message = err instanceof Error ? err.message : 'Terjadi kesalahan tidak terduga.';
+    console.error('[send-reminder-emails] Global Error:', message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
