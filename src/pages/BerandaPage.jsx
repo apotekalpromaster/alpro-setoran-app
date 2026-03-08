@@ -145,7 +145,7 @@ export default function BerandaPage() {
                             {loading ? (
                                 <div className="h-8 w-12 bg-gray-200 rounded animate-pulse mb-1"></div>
                             ) : (
-                                <h3 className="text-3xl font-extrabold text-gray-800 leading-none">{recentReports.length === 0 ? '-' : hariBelumLapor}</h3>
+                                <h3 className="text-3xl font-extrabold text-gray-800 leading-none">{hariBelumLapor}</h3>
                             )}
                             <p className="text-sm text-gray-500 mt-1 font-medium">Hari Belum Lapor</p>
                         </div>
