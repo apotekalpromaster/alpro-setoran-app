@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { SmtpClient } from "https://deno.land/x/smtp/mod.ts";
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -25,10 +26,19 @@ serve(async (req: Request) => {
       });
     }
 
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    if (!resendApiKey) throw new Error('RESEND_API_KEY tidak dikonfigurasi.');
+    const smtpUser = Deno.env.get('GMAIL_SMTP_USER');
+    const smtpPass = Deno.env.get('GMAIL_SMTP_PASSWORD');
+
+    if (!smtpUser || !smtpPass) {
+      console.error("GMAIL_SMTP_USER / GMAIL_SMTP_PASSWORD tidak dikonfigurasi.");
+      // Margin of Safety: non-blocking response to frontend
+      return new Response(JSON.stringify({ success: true, warning: 'SMTP secrets missing' }), {
+        status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
+      });
+    }
 
     // 🔴 HARDCODED UAT EMAIL 🔴
+    const fromEmail = 'apotekalpro.master@gmail.com';
     const targetEmail = 'hendri.apotekalpro@gmail.com';
     const subject = `[URGENT] Masalah Deposit Card - ${payload.cabang}`;
 
@@ -53,34 +63,39 @@ serve(async (req: Request) => {
       </div>
     `;
 
-    // Kirim menggunakan Resend API
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${resendApiKey}`
-      },
-      body: JSON.stringify({
-        from: 'Apotek Alpro Alerts <onboarding@resend.dev>',
+    // 🔥 PENGIRIMAN EMAIL via Deno SMTP 🔥
+    try {
+      const client = new SmtpClient();
+      await client.connectTLS({
+        hostname: "smtp.gmail.com",
+        port: 465,
+        username: smtpUser,
+        password: smtpPass,
+      });
+
+      await client.send({
+        from: fromEmail,
         to: targetEmail,
         subject: subject,
+        content: "Laporan Darurat Apotek Alpro - Anda tidak bisa melihat pesan HTML.",
         html: htmlContent
-      })
-    });
+      });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Resend API Error: ${errorText}`);
+      await client.close();
+      console.log(`[send-critical-alert] Sent OK to: ${targetEmail} via Gmail SMTP`);
+    } catch (smtpErr) {
+      console.error('[send-critical-alert] SMTP Error:', smtpErr);
+      // Margin of Safety: JANGAN throw error agar tidak mengembalikan status 500
+      // sehingga UI form cabang tetap melaju sukses tanpa blocking
     }
 
-    console.log(`[send-critical-alert] Sent OK to: ${targetEmail}`);
     return new Response(JSON.stringify({ success: true }), {
       status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan tidak terduga.';
-    console.error('[send-critical-alert] Error:', message);
+    console.error('[send-critical-alert] Global Error:', message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
