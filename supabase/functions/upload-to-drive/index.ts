@@ -4,10 +4,10 @@
 // and uploads the file to a configured Drive folder.
 //
 // Required Supabase Secrets:
-//   GOOGLE_CLIENT_ID             — OAuth Client ID
-//   GOOGLE_CLIENT_SECRET         — OAuth Client Secret
-//   GOOGLE_REFRESH_TOKEN         — OAuth Refresh Token
-//   GOOGLE_DRIVE_FOLDER_ID       — ID of the destination Drive folder
+//   GOOGLE_CLIENT_ID             — 
+//   GOOGLE_CLIENT_SECRET         — 
+//   GOOGLE_REFRESH_TOKEN         — 
+//   GOOGLE_DRIVE_FOLDER_ID       — 
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 
