@@ -138,23 +138,32 @@ export default function LoginPage() {
                 <div className="border-t border-primary-500/30"></div>
 
                 <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
-                    {/* Username field — resolusi ke email dilakukan via RPC di backend */}
-                    <div className="relative fade-in">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span className="material-symbols-outlined text-gray-400">person</span>
-                        </div>
-                        <input
-                            id="username"
-                            name="username"
-                            type="text"
-                            required
-                            autoComplete="off"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value.toUpperCase())}
-                            className="block w-full rounded-lg border border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm pl-10 pr-4 py-3 uppercase transition-all"
-                            placeholder="USERNAME"
-                        />
-                    </div>
+                    {/* Username field dengan autocomplete dropdown via RPC search_usernames */}
+                    <AutocompleteInput
+                        value={username}
+                        onChange={setUsername}
+                        onSelect={(item) => item && setUsername(item.username)}
+                        column="username"
+                        queryFn={async (term) => {
+                            const { data, error } = await supabase.rpc('search_usernames', { search_term: term });
+                            if (error) {
+                                console.error('[LoginPage] search_usernames error:', error);
+                                return [];
+                            }
+                            return (data || []).map((row) => ({ username: row.username }));
+                        }}
+                        placeholder="USERNAME"
+                        icon="person"
+                        minChars={2}
+                        className="w-full"
+                        inputProps={{
+                            id: 'username',
+                            name: 'username',
+                            required: true,
+                            style: { textTransform: 'uppercase' },
+                        }}
+                    />
+
 
                     <div className="relative fade-in">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
