@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import AutocompleteInput from '../components/AutocompleteInput';
 
 export default function LoginPage() {
-    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [status, setStatus] = useState({ message: '', type: '' });
@@ -19,16 +19,36 @@ export default function LoginPage() {
         setStatus({ message: '', type: '' });
 
         try {
-            const { data, error } = await signIn(email, password);
+            if (!username.trim()) throw new Error('Username tidak boleh kosong.');
 
-            if (error) {
-                throw error;
+            // Step 1: Cari email dari username via RPC SECURITY DEFINER
+            // Fungsi ini bypass RLS secara aman agar anon role bisa membaca email
+            setStatus({ message: 'Memverifikasi username...', type: 'loading' });
+            const { data: emailResult, error: rpcLookupErr } = await supabase
+                .rpc('get_email_by_username', { p_username: username.trim() });
+
+            if (rpcLookupErr) {
+                console.error('[LoginPage] RPC get_email_by_username error:', rpcLookupErr);
+                throw new Error('Gagal memverifikasi username. Coba lagi beberapa saat.');
             }
+
+            // emailResult is a scalar TEXT (null if not found)
+            const resolvedEmail = emailResult ?? null;
+
+            if (!resolvedEmail) {
+                throw new Error('Username tidak ditemukan. Periksa kembali username Anda.');
+            }
+
+            // Step 2: Login dengan email yang sudah di-resolve
+            setStatus({ message: 'Masuk...', type: 'loading' });
+            const { data, error } = await signIn(resolvedEmail, password);
+
+            if (error) throw error;
 
             setStatus({ message: 'Login berhasil! Mengalihkan...', type: 'success' });
 
-            // Gunakan RPC SECURITY DEFINER untuk bypass RLS saat fetch profil
-            // Ini mencegah "Database error querying schema" akibat RLS policy yang ketat
+            // Step 3: Ambil role via RPC untuk menentukan redirect
+            // Menggunakan SECURITY DEFINER agar tidak terkena RLS setelah login
             let role = null;
             try {
                 const { data: rpcData, error: rpcError } = await supabase
@@ -42,7 +62,6 @@ export default function LoginPage() {
                     role = rpcData.role;
                 }
             } catch (profileErr) {
-                // Jika RPC gagal (misal belum dibuat), fallback ke query langsung
                 console.error('[LoginPage] Fallback ke query direct profiles:', profileErr);
                 const { data: profileRows } = await supabase
                     .from('profiles')
@@ -61,9 +80,8 @@ export default function LoginPage() {
 
         } catch (err) {
             console.error('[LoginPage] Login error:', err);
-            // Berikan pesan yang ramah ke user, bukan raw error dari Supabase
             const friendlyMsg = err.message?.includes('Invalid login credentials')
-                ? 'Email atau kata sandi salah.'
+                ? 'Username atau kata sandi salah.'
                 : err.message?.includes('Database error')
                 ? 'Terjadi gangguan koneksi database. Coba lagi beberapa saat.'
                 : err.message || 'Login gagal. Hubungi administrator.';
@@ -74,16 +92,29 @@ export default function LoginPage() {
 
     const handleForgotPassword = async (e) => {
         e.preventDefault();
-        if (!email) {
-            setStatus({ message: 'Masukkan email terlebih dahulu.', type: 'error' });
+        if (!username.trim()) {
+            setStatus({ message: 'Masukkan username terlebih dahulu untuk reset password.', type: 'error' });
             return;
         }
-        const upperEmail = email.toUpperCase();
 
-        if (!window.confirm(`Kirim instruksi reset password ke "${upperEmail}"?`)) return;
+        setStatus({ message: 'Mencari akun...', type: 'loading' });
+
+        // Cari email berdasarkan username via RPC (aman, bypass RLS)
+        const { data: resolvedEmail, error: lookupErr } = await supabase
+            .rpc('get_email_by_username', { p_username: username.trim() });
+
+        if (lookupErr || !resolvedEmail) {
+            setStatus({ message: 'Username tidak ditemukan atau terjadi kesalahan.', type: 'error' });
+            return;
+        }
+
+        if (!window.confirm(`Kirim instruksi reset password ke email terdaftar untuk "${username}"?`)) {
+            setStatus({ message: '', type: '' });
+            return;
+        }
 
         setStatus({ message: 'Memproses permintaan...', type: 'loading' });
-        const { error } = await supabase.auth.resetPasswordForEmail(upperEmail);
+        const { error } = await supabase.auth.resetPasswordForEmail(resolvedEmail);
 
         if (error) {
             setStatus({ message: 'Gagal: ' + error.message, type: 'error' });
@@ -107,23 +138,23 @@ export default function LoginPage() {
                 <div className="border-t border-primary-500/30"></div>
 
                 <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
-                    <AutocompleteInput
-                        value={email}
-                        onChange={setEmail}
-                        onSelect={(item) => item && setEmail(item.email)}
-                        column="email"
-                        queryFn={async (term) => {
-                            const { data, error } = await supabase.rpc('search_emails', { search_term: term });
-                            if (error) throw error;
-                            // RPC returns [{email: '...'}], normalize for AutocompleteInput
-                            return (data || []).map((row) => ({ email: row.email }));
-                        }}
-                        placeholder="EMAIL ALPRO"
-                        icon="email"
-                        minChars={2}
-                        className="w-full"
-                        inputProps={{ id: 'email', name: 'email', required: true }}
-                    />
+                    {/* Username field — resolusi ke email dilakukan via RPC di backend */}
+                    <div className="relative fade-in">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <span className="material-symbols-outlined text-gray-400">person</span>
+                        </div>
+                        <input
+                            id="username"
+                            name="username"
+                            type="text"
+                            required
+                            autoComplete="off"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value.toUpperCase())}
+                            className="block w-full rounded-lg border border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm pl-10 pr-4 py-3 uppercase transition-all"
+                            placeholder="USERNAME"
+                        />
+                    </div>
 
                     <div className="relative fade-in">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
