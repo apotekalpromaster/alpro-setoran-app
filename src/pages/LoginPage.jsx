@@ -27,21 +27,47 @@ export default function LoginPage() {
 
             setStatus({ message: 'Login berhasil! Mengalihkan...', type: 'success' });
 
-            // Fetch profile to redirect correctly
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', data.user.id)
-                .single();
+            // Gunakan RPC SECURITY DEFINER untuk bypass RLS saat fetch profil
+            // Ini mencegah "Database error querying schema" akibat RLS policy yang ketat
+            let role = null;
+            try {
+                const { data: rpcData, error: rpcError } = await supabase
+                    .rpc('get_profile_by_user_id', { p_user_id: data.user.id });
 
-            if (profile?.role === 'Admin' || profile?.role === 'Finance') {
+                if (rpcError) {
+                    console.error('[LoginPage] RPC get_profile_by_user_id error:', rpcError);
+                } else if (Array.isArray(rpcData) && rpcData.length > 0) {
+                    role = rpcData[0]?.role;
+                } else if (rpcData?.role) {
+                    role = rpcData.role;
+                }
+            } catch (profileErr) {
+                // Jika RPC gagal (misal belum dibuat), fallback ke query langsung
+                console.error('[LoginPage] Fallback ke query direct profiles:', profileErr);
+                const { data: profileRows } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', data.user.id)
+                    .limit(1);
+                role = profileRows?.[0]?.role ?? null;
+            }
+
+            // Redirect berdasarkan role, default ke /beranda jika role tidak diketahui
+            if (role === 'Admin' || role === 'Finance') {
                 navigate('/admin');
             } else {
                 navigate('/beranda');
             }
 
         } catch (err) {
-            setStatus({ message: err.message || 'Login gagal.', type: 'error' });
+            console.error('[LoginPage] Login error:', err);
+            // Berikan pesan yang ramah ke user, bukan raw error dari Supabase
+            const friendlyMsg = err.message?.includes('Invalid login credentials')
+                ? 'Email atau kata sandi salah.'
+                : err.message?.includes('Database error')
+                ? 'Terjadi gangguan koneksi database. Coba lagi beberapa saat.'
+                : err.message || 'Login gagal. Hubungi administrator.';
+            setStatus({ message: friendlyMsg, type: 'error' });
             setIsLoading(false);
         }
     };
