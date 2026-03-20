@@ -25,3 +25,9 @@ dist-ssr
 
 # Supabase
 supabase/.temp/
+
+# Data migration temp files
+*.csv
+import-*.mjs
+import-*.json
+import-*.sql
