@@ -41,7 +41,7 @@ serve(async (req: Request) => {
     // 🔴 HARDCODED UAT EMAIL 🔴
     const fromEmail = 'apotekalpro.master@gmail.com';
     const targetEmail = 'operation@apotekalpro.id';
-    const ccEmails = ['hendri@apotekalpro.id'];
+    const ccEmails = ['hendri@apotekalpro.id', 'finance@apotekalpro.id'];
     if (payload.pelaporEmail) {
       ccEmails.push(payload.pelaporEmail);
     }

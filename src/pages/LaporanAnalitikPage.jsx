@@ -234,8 +234,8 @@ export default function LaporanAnalitikPage() {
                             {/* Custom date range */}
                             {period === 'custom' && (
                                 <div className="flex gap-2">
-                                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Dari</label><input type="date" value={startDate} min="2025-12-15" onChange={(e) => setStartDate(e.target.value)} className="form-input w-36" /></div>
-                                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Sampai</label><input type="date" value={endDate} min="2025-12-15" onChange={(e) => setEndDate(e.target.value)} className="form-input w-36" /></div>
+                                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Dari</label><input type="date" value={startDate} min="2026-04-01" onChange={(e) => setStartDate(e.target.value)} className="form-input w-36" /></div>
+                                    <div><label className="block text-xs font-medium text-gray-500 mb-1">Sampai</label><input type="date" value={endDate} min="2026-04-01" onChange={(e) => setEndDate(e.target.value)} className="form-input w-36" /></div>
                                 </div>
                             )}
                             <button onClick={handleApply} className="btn-primary h-10 px-5 text-sm flex-shrink-0">

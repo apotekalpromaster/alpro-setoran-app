@@ -35,8 +35,8 @@ export default function SetoranPage() {
 
     const validate = () => {
         const e = {};
-        const CUTOFF_DATE = '2026-03-01';
-        const CUTOFF_MSG = 'Tanggal pelaporan paling awal yang diizinkan adalah 1 Maret 2026';
+        const CUTOFF_DATE = '2026-04-01';
+        const CUTOFF_MSG = 'Tanggal pelaporan paling awal yang diizinkan adalah 1 April 2026';
 
         if (!formData.jenisPelaporan) e.jenisPelaporan = 'Jenis pelaporan harus diisi.';
 
@@ -113,7 +113,7 @@ export default function SetoranPage() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Penjualan</label>
                             <input
-                                type="date" max={today} min="2026-03-01"
+                                type="date" max={today} min="2026-04-01"
                                 value={formData.tanggalPenjualan}
                                 onChange={(e) => updateField({ tanggalPenjualan: e.target.value })}
                                 className={`form-input ${errors.tanggalPenjualan ? 'border-red-500 ring-1 ring-red-500' : ''}`}
@@ -123,7 +123,7 @@ export default function SetoranPage() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Setoran</label>
                             <input
-                                type="date" max={today} min="2026-03-01"
+                                type="date" max={today} min="2026-04-01"
                                 value={formData.tanggalSetoran}
                                 onChange={(e) => updateField({ tanggalSetoran: e.target.value })}
                                 className={`form-input ${errors.tanggalSetoran ? 'border-red-500 ring-1 ring-red-500' : ''}`}
@@ -140,7 +140,7 @@ export default function SetoranPage() {
                                 {formData.tanggalPenjualanTambahan.map((tgl, idx) => (
                                     <div key={idx} className="flex items-center gap-3">
                                         <input
-                                            type="date" max={today} min="2026-03-01"
+                                            type="date" max={today} min="2026-04-01"
                                             value={tgl}
                                             onChange={(e) => handleTanggalTambahanChange(idx, e.target.value)}
                                             className="form-input flex-1"

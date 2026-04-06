@@ -150,11 +150,11 @@ export default function RiwayatPage() {
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Dari Tanggal Sales</label>
-                            <input type="date" value={startDate} min="2025-12-15" onChange={(e) => setStartDate(e.target.value)} className="form-input w-full py-2 px-3" />
+                            <input type="date" value={startDate} min="2026-04-01" onChange={(e) => setStartDate(e.target.value)} className="form-input w-full py-2 px-3" />
                         </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Sampai Tanggal Sales</label>
-                            <input type="date" value={endDate} min="2025-12-15" onChange={(e) => setEndDate(e.target.value)} className="form-input w-full py-2 px-3" />
+                        <div className="w-1/2">
+                            <label className="block text-sm text-gray-500 mb-1">Sampai</label>
+                            <input type="date" value={endDate} min="2026-04-01" onChange={(e) => setEndDate(e.target.value)} className="form-input w-full py-2 px-3" />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Metode Setoran</label>

@@ -121,11 +121,8 @@ serve(async (req: Request) => {
     }
 
     const fromEmail = 'apotekalpro.master@gmail.com';
-    const targetEmail = 'hendri.apotekalpro@gmail.com'; // UAT Phase
-
-    // PRODUCTION TARGETS (KODE KOMENTAR)
-    // const prodTo = 'outlets@apotekalpro.id, areamanager@apotekalpro.id';
-    // const prodCc = 'operation@apotekalpro.id, finance@apotekalpro.id';
+    const targetEmail = 'outlets@apotekalpro.id, areamanager@apotekalpro.id';
+    const ccEmails = 'operation@apotekalpro.id, finance@apotekalpro.id';
 
     const subject = `[REPORT] Laporan Apotek Menunggak Setoran (Mingguan)`;
 
@@ -186,6 +183,7 @@ serve(async (req: Request) => {
     await transporter.sendMail({
       from: fromEmail,
       to: targetEmail,
+      cc: ccEmails,
       subject: subject,
       html: htmlContent
     });

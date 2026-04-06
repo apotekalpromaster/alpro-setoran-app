@@ -37,7 +37,7 @@ export default function BerandaPage() {
 
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                const cutOffDate = new Date('2026-03-01T00:00:00');
+                const cutOffDate = new Date('2026-04-01T00:00:00');
 
                 // Last Report Date
                 if (allReports.length > 0) {
