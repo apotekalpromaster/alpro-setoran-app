@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFormWizard } from '../context/FormWizardContext';
@@ -316,6 +316,9 @@ function TextareaField({ label, value, onChange, placeholder }) {
 }
 
 function UploadSection({ label, stagedFiles, onAdd, onRemove }) {
+    const galleryRef = useRef(null);
+    const cameraRef = useRef(null);
+
     return (
         <div>
             <label className="block text-sm font-medium text-gray-500 mb-2">{label}</label>
@@ -345,19 +348,48 @@ function UploadSection({ label, stagedFiles, onAdd, onRemove }) {
                 </div>
             )}
 
+            {/* Hidden inputs */}
+            <input
+                ref={galleryRef}
+                type="file"
+                accept="image/*,application/pdf"
+                style={{ display: 'none' }}
+                onChange={onAdd}
+            />
+            <input
+                ref={cameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: 'none' }}
+                onChange={onAdd}
+            />
+
             {stagedFiles.length < 3 && (
-                <label className="cursor-pointer">
-                    <div className="upload-box p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 text-center hover:border-primary-400 hover:bg-orange-50 transition-colors group">
-                        <div className="flex justify-center text-gray-400 group-hover:text-primary-500 mb-2">
-                            <span className="material-symbols-outlined text-4xl">cloud_upload</span>
-                        </div>
-                        <p className="text-sm font-medium text-gray-600 group-hover:text-primary-600">
-                            <span className="text-primary-500">Pilih File</span> atau ambil foto
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">Format apa saja — maks. 3 file</p>
+                <div className="upload-box p-5 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 text-center hover:border-primary-400 hover:bg-orange-50 transition-colors">
+                    <div className="flex justify-center text-gray-400 mb-3">
+                        <span className="material-symbols-outlined text-4xl">cloud_upload</span>
                     </div>
-                    <input type="file" accept="image/*" className="sr-only" onChange={onAdd} />
-                </label>
+                    <p className="text-xs text-gray-400 mb-3">Pilih sumber file — maks. 3 file</p>
+                    <div className="flex justify-center gap-3 flex-wrap">
+                        <button
+                            type="button"
+                            onClick={() => galleryRef.current?.click()}
+                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold rounded-lg shadow-sm hover:bg-primary-50 hover:border-primary-400 hover:text-primary-600 transition-all active:scale-95"
+                        >
+                            <span className="material-symbols-outlined text-base">photo_library</span>
+                            Pilih File
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => cameraRef.current?.click()}
+                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold rounded-lg shadow-sm hover:bg-primary-50 hover:border-primary-400 hover:text-primary-600 transition-all active:scale-95"
+                        >
+                            <span className="material-symbols-outlined text-base">photo_camera</span>
+                            Ambil Foto
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );
