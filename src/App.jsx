@@ -85,7 +85,7 @@ function AppRoutes() {
       <Route
         path="/riwayat/:id"
         element={
-          <ProtectedRoute allowedRoles={['User']}>
+          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance']}>
             <DetailRiwayatPage />
           </ProtectedRoute>
         }
