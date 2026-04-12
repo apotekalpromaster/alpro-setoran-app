@@ -356,7 +356,7 @@ function UploadSection({ label, stagedFiles, onAdd, onRemove }) {
                         </p>
                         <p className="text-xs text-gray-400 mt-1">Format apa saja — maks. 3 file</p>
                     </div>
-                    <input type="file" capture="environment" className="sr-only" onChange={onAdd} />
+                    <input type="file" accept="image/*" className="sr-only" onChange={onAdd} />
                 </label>
             )}
         </div>
