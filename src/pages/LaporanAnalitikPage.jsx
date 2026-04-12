@@ -106,7 +106,7 @@ export default function LaporanAnalitikPage() {
                     .select(`
                         tanggal_setor, jenis_pelaporan,
                         nominal_jual, nominal_setoran, potongan,
-                        profiles!laporan_user_id_fkey ( username )
+                        profiles!laporan_user_id_fkey!inner ( username )
                     `)
                     .gte('tanggal_setor', start)
                     .lte('tanggal_setor', end)
