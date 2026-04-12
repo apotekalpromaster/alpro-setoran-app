@@ -6,10 +6,13 @@ import AdminLayout from '../components/AdminLayout';
 import AutocompleteInput from '../components/AutocompleteInput';
 
 const DISCREPANCY_THRESHOLD = 50000;
+const PAGE_SIZE = 500;
+const MAX_ROWS = 5000;
 
 export default function ManajemenLaporanPage() {
     const navigate = useNavigate();
-    const today = new Date().toISOString().split('T')[0];
+    // Fix timezone: use local date (sv-SE) instead of UTC
+    const today = new Date().toLocaleDateString('sv-SE');
 
     // Filters
     const [startDate, setStartDate] = useState(today);
@@ -21,45 +24,69 @@ export default function ManajemenLaporanPage() {
     // Data
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [loadingMsg, setLoadingMsg] = useState('Memuat data laporan...');
     const [error, setError] = useState('');
     const [fetchTriggered, setFetchTriggered] = useState(false);
+    const [hitLimit, setHitLimit] = useState(false);
 
     const fetchData = async () => {
         if (!startDate || !endDate) return;
         setLoading(true);
+        setLoadingMsg('Memuat data laporan...');
         setError('');
         setFetchTriggered(true);
+        setHitLimit(false);
 
         try {
-            /**
-             * Admin query — no RLS restriction for role=Admin/Finance
-             * JOIN profiles via user_id to get username, email, kcp_terdekat
-             */
-            const { data, error: err } = await supabase
-                .from('laporan')
-                .select(`
-          id,
-          tanggal_jual,
-          tanggal_setor,
-          jenis_pelaporan,
-          metode_setoran,
-          nominal_jual,
-          nominal_setoran,
-          potongan,
-          nomor_deposit_card,
-          kcp_terdekat,
-          user_id,
-          profiles!laporan_user_id_fkey ( username, email )
-        `)
-                .gte('tanggal_setor', startDate)
-                .lte('tanggal_setor', endDate)
-                .order('tanggal_setor', { ascending: false })
-                .limit(500);
+            let allData = [];
+            let from = 0;
+            let done = false;
 
-            if (err) throw err;
+            while (!done) {
+                const to = from + PAGE_SIZE - 1;
+                const { data, error: err } = await supabase
+                    .from('laporan')
+                    .select(`
+                        id,
+                        tanggal_jual,
+                        tanggal_setor,
+                        jenis_pelaporan,
+                        metode_setoran,
+                        nominal_jual,
+                        nominal_setoran,
+                        potongan,
+                        nomor_deposit_card,
+                        kcp_terdekat,
+                        user_id,
+                        profiles!laporan_user_id_fkey ( username, email )
+                    `)
+                    .gte('tanggal_setor', startDate)
+                    .lte('tanggal_setor', endDate)
+                    .order('tanggal_setor', { ascending: false })
+                    .range(from, to);
+
+                if (err) throw err;
+
+                const batch = data || [];
+                allData = allData.concat(batch);
+
+                // Update progress indicator
+                setLoadingMsg(`Mengambil data... (${allData.length} baris ditemukan)`);
+
+                // Kill switch — stop if hit 5000 rows
+                if (allData.length >= MAX_ROWS) {
+                    setHitLimit(true);
+                    done = true;
+                } else if (batch.length < PAGE_SIZE) {
+                    // Last page — no more data
+                    done = true;
+                } else {
+                    from += PAGE_SIZE;
+                }
+            }
 
             setRows(
-                (data || []).map((row) => ({
+                allData.map((row) => ({
                     ...row,
                     selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
                     username: row.profiles?.username || '-',
@@ -144,14 +171,14 @@ export default function ManajemenLaporanPage() {
                                 />
                             </div>
 
-                            {/* Date range */}
-                            <div className="flex gap-2">
+                            {/* Date range — items-end ensures alignment when labels differ */}
+                            <div className="flex items-end gap-2">
                                 <div>
                                     <label className="block text-xs font-medium text-gray-500 mb-1">Dari</label>
                                     <input type="date" value={startDate} min="2026-04-01" onChange={(e) => setStartDate(e.target.value)} className="form-input w-36" />
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-gray-500 text-sm">ke</span>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Sampai</label>
                                     <input type="date" value={endDate} min="2026-04-01" onChange={(e) => setEndDate(e.target.value)} className="form-input w-36" />
                                 </div>
                             </div>
@@ -186,11 +213,18 @@ export default function ManajemenLaporanPage() {
                 </div>
 
                 {/* TABLE */}
+                {/* Kill switch warning */}
+                {hitLimit && (
+                    <div className="flex items-center gap-3 bg-amber-50 border border-amber-300 text-amber-800 px-4 py-3 rounded-xl text-sm">
+                        <span className="material-symbols-outlined text-amber-500">warning</span>
+                        <span><strong>Data terlalu besar ({MAX_ROWS.toLocaleString()} baris maks).</strong> Mohon persempit rentang tanggal filter untuk mendapatkan data yang lebih akurat.</span>
+                    </div>
+                )}
                 {loading ? (
                     <div className="flex justify-center py-20">
                         <div className="flex flex-col items-center gap-2 text-primary-600">
                             <span className="material-symbols-outlined animate-spin text-4xl">sync</span>
-                            <span className="font-medium text-sm">Memuat data laporan...</span>
+                            <span className="font-medium text-sm">{loadingMsg}</span>
                         </div>
                     </div>
                 ) : error ? (
