@@ -33,6 +33,7 @@ export default function AdminBerandaPage() {
     const { profile } = useAuth();
 
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [filterPeriod, setFilterPeriod] = useState('last_30');
 
     const [metrics, setMetrics] = useState({
@@ -51,6 +52,7 @@ export default function AdminBerandaPage() {
 
     const fetchDashboardData = async () => {
         setLoading(true);
+        setError(null);
         try {
             // 1. Fetch Total Active Users (Role 'User')
             const { count: totalApotek, error: profileErr } = await supabase
@@ -60,47 +62,62 @@ export default function AdminBerandaPage() {
 
             if (profileErr) throw profileErr;
 
-            // 2. Determine Date Range
-            const today = new Date();
+            // 2. Determine Date Range — using local timezone (sv-SE) to prevent H-1 leak
+            const todayDate = new Date();
             let startDate = new Date();
 
             if (filterPeriod === 'today') {
-                startDate = new Date(today);
+                startDate = new Date(todayDate);
             } else if (filterPeriod === 'yesterday') {
-                startDate.setDate(today.getDate() - 1);
-                today.setDate(today.getDate() - 1); // target end of yesterday too
+                startDate.setDate(todayDate.getDate() - 1);
+                todayDate.setDate(todayDate.getDate() - 1);
             } else if (filterPeriod === 'last_7') {
-                startDate.setDate(today.getDate() - 6);
+                startDate.setDate(todayDate.getDate() - 6);
             } else if (filterPeriod === 'last_30') {
-                startDate.setDate(today.getDate() - 29);
+                startDate.setDate(todayDate.getDate() - 29);
             } else if (filterPeriod === 'this_month') {
-                startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                startDate = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
             }
 
-            const startStr = startDate.toISOString().split('T')[0];
-            const endStr = today.toISOString().split('T')[0];
+            const startStr = startDate.toLocaleDateString('sv-SE');
+            const endStr = todayDate.toLocaleDateString('sv-SE');
 
-            // 3. Fetch Laporan
-            const { data: laporanData, error: laporanErr } = await supabase
-                .from('laporan')
-                .select('id, user_id, tanggal_setor, nominal_jual, nominal_setoran, potongan')
-                .gte('tanggal_setor', startStr)
-                .lte('tanggal_setor', endStr);
+            // 3. Sequential Fetch — loop 500 rows/batch until all data retrieved
+            const PAGE_SIZE = 500;
+            const MAX_ROWS = 5000;
+            let allLaporan = [];
+            let from = 0;
+            let done = false;
 
-            if (laporanErr) throw laporanErr;
+            while (!done) {
+                const to = from + PAGE_SIZE - 1;
+                const { data: batch, error: laporanErr } = await supabase
+                    .from('laporan')
+                    .select('id, user_id, tanggal_setor, nominal_jual, nominal_setoran, potongan')
+                    .gte('tanggal_setor', startStr)
+                    .lte('tanggal_setor', endStr)
+                    .range(from, to);
 
-            const laporan = laporanData || [];
+                if (laporanErr) throw laporanErr;
+
+                const rows = batch || [];
+                allLaporan = allLaporan.concat(rows);
+
+                if (allLaporan.length >= MAX_ROWS || rows.length < PAGE_SIZE) {
+                    done = true;
+                } else {
+                    from += PAGE_SIZE;
+                }
+            }
 
             // 4. Calculate Metrics
             let sumSales = 0;
             let sumSetoran = 0;
             let sumPotongan = 0;
             const uniqueReporters = new Set();
-
-            // Prepare grouping for Chart
             const dailyData = {};
 
-            laporan.forEach(item => {
+            allLaporan.forEach(item => {
                 const sales = Number(item.nominal_jual) || 0;
                 const setoran = Number(item.nominal_setoran) || 0;
                 const potongan = Number(item.potongan) || 0;
@@ -110,7 +127,6 @@ export default function AdminBerandaPage() {
                 sumPotongan += potongan;
                 uniqueReporters.add(item.user_id);
 
-                // Group for chart by tanggal_setor
                 const dateKey = item.tanggal_setor.split('T')[0];
                 if (!dailyData[dateKey]) {
                     dailyData[dateKey] = { sales: 0, setoran: 0 };
@@ -119,7 +135,6 @@ export default function AdminBerandaPage() {
                 dailyData[dateKey].setoran += setoran;
             });
 
-            // Calculate pending money (Sales - Potongan - Setoran)
             const uangBelumDisetor = Math.max(0, sumSales - sumPotongan - sumSetoran);
             const belumLapor = (totalApotek || 0) - uniqueReporters.size;
 
@@ -133,14 +148,10 @@ export default function AdminBerandaPage() {
 
             // 5. Build Chart Data
             const sortedDates = Object.keys(dailyData).sort();
-
             const labels = sortedDates.map(d => {
-                const dateObj = new Date(d);
+                const dateObj = new Date(d + 'T00:00:00');
                 return dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
             });
-
-            const salesData = sortedDates.map(d => dailyData[d].sales);
-            const setoranData = sortedDates.map(d => dailyData[d].setoran);
 
             setChartData({
                 labels,
@@ -148,18 +159,18 @@ export default function AdminBerandaPage() {
                     {
                         type: 'line',
                         label: 'Tren Penjualan Tunai',
-                        borderColor: '#f97316', // orange-500
+                        borderColor: '#f97316',
                         backgroundColor: '#f97316',
                         borderWidth: 2,
                         tension: 0.3,
                         pointRadius: 4,
-                        data: salesData,
+                        data: sortedDates.map(d => dailyData[d].sales),
                     },
                     {
                         type: 'bar',
                         label: 'Total Setoran',
-                        backgroundColor: '#22c55e', // green-500
-                        data: setoranData,
+                        backgroundColor: '#22c55e',
+                        data: sortedDates.map(d => dailyData[d].setoran),
                         borderRadius: 4,
                         barPercentage: 0.6,
                     }
@@ -167,7 +178,7 @@ export default function AdminBerandaPage() {
             });
 
         } catch (err) {
-            console.error("Failed to fetch dashboard data", err);
+            setError(err.message || 'Gagal memuat data dashboard. Coba refresh halaman.');
         } finally {
             setLoading(false);
         }
@@ -241,6 +252,15 @@ export default function AdminBerandaPage() {
 
     return (
         <AdminLayout title="Dashboard Keuangan">
+
+            {/* Error Banner */}
+            {error && (
+                <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4 text-sm">
+                    <span className="material-symbols-outlined text-red-500">error</span>
+                    <span><strong>Gagal memuat data:</strong> {error}</span>
+                    <button onClick={fetchDashboardData} className="ml-auto text-xs font-bold underline hover:text-red-900">Coba Lagi</button>
+                </div>
+            )}
 
             {/* Filter Bar */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
