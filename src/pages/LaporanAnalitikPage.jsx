@@ -25,15 +25,34 @@ const PERIOD_OPTIONS = [
 
 const JENIS_COLORS = ['#F97316', '#10B981', '#3B82F6', '#EF4444', '#F59E0B', '#8B5CF6', '#EC4899'];
 
+const PAGE_SIZE = 500;
+const MAX_ROWS = 5000;
+
+const JENIS_LABEL_MAP = {
+    'Setoran Tunai BCA': 'BCA Tunai',
+    'Setoran Tunai': 'Tunai',
+    'Setoran Uang Lebih': 'Uang Lebih',
+    'Setoran Uang Pecahan Kecil': 'Uang Pecahan',
+    'Setoran Sales Dengan Potongan Penjualan': 'Sales + Potongan',
+    'Pengembalian Petty Cash': 'Petty Cash',
+    'Deposit Card Terblokir (Salah Input PIN 3x)': 'Card Terblokir',
+    'Deposit Card Tertelan Mesin ATM': 'Card Tertelan',
+};
+
 function getDateRange(period) {
-    const today = new Date(); today.setHours(23, 59, 59, 999);
-    let start = new Date(today); start.setHours(0, 0, 0, 0);
-    if (period === 'yesterday') { start.setDate(today.getDate() - 1); today.setDate(today.getDate() - 1); }
-    else if (period === 'last_7') { start.setDate(today.getDate() - 6); }
-    else if (period === 'last_30') { start.setDate(today.getDate() - 29); }
+    const todayDate = new Date();
+    let start = new Date(todayDate);
+    if (period === 'yesterday') {
+        start.setDate(todayDate.getDate() - 1);
+        todayDate.setDate(todayDate.getDate() - 1);
+    } else if (period === 'last_7') {
+        start.setDate(todayDate.getDate() - 6);
+    } else if (period === 'last_30') {
+        start.setDate(todayDate.getDate() - 29);
+    }
     return {
-        start: start.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
+        start: start.toLocaleDateString('sv-SE'),
+        end: todayDate.toLocaleDateString('sv-SE'),
     };
 }
 
@@ -44,13 +63,14 @@ function formatCompact(num) {
 }
 
 export default function LaporanAnalitikPage() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('sv-SE');
     const [period, setPeriod] = useState('last_30');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [pharmacyFilter, setPharmacyFilter] = useState('');
 
     const [loading, setLoading] = useState(false);
+    const [loadingMsg, setLoadingMsg] = useState('Memuat data analitik...');
     const [error, setError] = useState('');
     const [analytics, setAnalytics] = useState(null);
     const [tableData, setTableData] = useState([]);
@@ -68,26 +88,47 @@ export default function LaporanAnalitikPage() {
     const loadAnalytics = async (overrideDates) => {
         const { start, end } = overrideDates || effectiveDates;
         if (!start || !end) { setError('Pilih tanggal terlebih dahulu.'); return; }
-        setLoading(true); setError(''); setAnalytics(null); setTableData([]);
-        setAiSummary(''); // Reset AI on new filter
+        setLoading(true);
+        setLoadingMsg('Memuat data analitik...');
+        setError('');
+        setAnalytics(null);
+        setTableData([]);
+        setAiSummary('');
         try {
-            // Supabase query — join profiles for username
-            let query = supabase
-                .from('laporan')
-                .select(`
-          tanggal_setor, jenis_pelaporan,
-          nominal_jual, nominal_setoran, potongan,
-          profiles!laporan_user_id_fkey ( username )
-        `)
-                .gte('tanggal_setor', start)
-                .lte('tanggal_setor', end);
+            let allData = [];
+            let from = 0;
+            let done = false;
 
-            if (pharmacyFilter) query = query.ilike('profiles.username', `%${pharmacyFilter}%`);
+            while (!done) {
+                const to = from + PAGE_SIZE - 1;
+                let query = supabase
+                    .from('laporan')
+                    .select(`
+                        tanggal_setor, jenis_pelaporan,
+                        nominal_jual, nominal_setoran, potongan,
+                        profiles!laporan_user_id_fkey ( username )
+                    `)
+                    .gte('tanggal_setor', start)
+                    .lte('tanggal_setor', end)
+                    .range(from, to);
 
-            const { data, error: err } = await query;
-            if (err) throw err;
+                if (pharmacyFilter) query = query.ilike('profiles.username', `%${pharmacyFilter}%`);
 
-            processAnalytics(data || []);
+                const { data, error: err } = await query;
+                if (err) throw err;
+
+                const batch = data || [];
+                allData = allData.concat(batch);
+                setLoadingMsg(`Memproses data... [${allData.length} baris]`);
+
+                if (allData.length >= MAX_ROWS || batch.length < PAGE_SIZE) {
+                    done = true;
+                } else {
+                    from += PAGE_SIZE;
+                }
+            }
+
+            processAnalytics(allData, period, start, end);
         } catch (e) {
             setError(e.message || 'Gagal memuat data analitik.');
         } finally {
@@ -95,7 +136,7 @@ export default function LaporanAnalitikPage() {
         }
     };
 
-    const processAnalytics = (rows) => {
+    const processAnalytics = (rows, activePeriod, start, end) => {
         if (!rows.length) { setAnalytics(null); setTableData([]); return; }
 
         // Scorecard
@@ -111,20 +152,43 @@ export default function LaporanAnalitikPage() {
         });
         const totalSelisih = (totalPenjualan - totalPotongan) - totalSetoran;
 
-        // Weekly trend chart (by day-of-week)
-        const dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-        const salesByDay = Array(7).fill(0);
-        const depositByDay = Array(7).fill(0);
-        const countByDay = Array(7).fill(0);
-        rows.forEach((r) => {
-            const d = new Date(r.tanggal_setor);
-            const dow = (d.getDay() + 6) % 7; // Mon=0
-            salesByDay[dow] += r.nominal_jual || 0;
-            depositByDay[dow] += r.nominal_setoran || 0;
-            countByDay[dow] += 1;
-        });
+        // Line chart: weekly DOW average for last_7, chronological for others
+        let weeklyChart;
+        const useChronological = activePeriod === 'last_30' || activePeriod === 'custom';
+        if (useChronological) {
+            const byDate = {};
+            rows.forEach((r) => {
+                const d = r.tanggal_setor;
+                if (!byDate[d]) byDate[d] = { sales: 0, deposit: 0 };
+                byDate[d].sales += r.nominal_jual || 0;
+                byDate[d].deposit += r.nominal_setoran || 0;
+            });
+            const sortedDates = Object.keys(byDate).sort();
+            weeklyChart = {
+                labels: sortedDates.map((d) => d.slice(5)),
+                avgDeposit: sortedDates.map((d) => byDate[d].deposit),
+                avgSales: sortedDates.map((d) => byDate[d].sales),
+            };
+        } else {
+            const dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+            const salesByDay = Array(7).fill(0);
+            const depositByDay = Array(7).fill(0);
+            const countByDay = Array(7).fill(0);
+            rows.forEach((r) => {
+                const d = new Date(r.tanggal_setor);
+                const dow = (d.getDay() + 6) % 7;
+                salesByDay[dow] += r.nominal_jual || 0;
+                depositByDay[dow] += r.nominal_setoran || 0;
+                countByDay[dow] += 1;
+            });
+            weeklyChart = {
+                labels: dayNames,
+                avgDeposit: depositByDay.map((v, i) => countByDay[i] ? Math.round(v / countByDay[i]) : 0),
+                avgSales: salesByDay.map((v, i) => countByDay[i] ? Math.round(v / countByDay[i]) : 0),
+            };
+        }
 
-        // Jenis distribution chart
+        // Jenis distribution chart — mapped labels to prevent duplicate
         const jenisTotals = {};
         rows.forEach((r) => {
             jenisTotals[r.jenis_pelaporan] = (jenisTotals[r.jenis_pelaporan] || 0) + (r.nominal_setoran || 0);
@@ -150,13 +214,10 @@ export default function LaporanAnalitikPage() {
         setTableData(table);
         setAnalytics({
             scorecard: { totalPenjualan, totalPotongan, totalSetoran, totalSelisih, kasusAnomali },
-            weeklyChart: {
-                labels: dayNames,
-                avgDeposit: depositByDay.map((v, i) => countByDay[i] ? Math.round(v / countByDay[i]) : 0),
-                avgSales: salesByDay.map((v, i) => countByDay[i] ? Math.round(v / countByDay[i]) : 0),
-            },
+            weeklyChart,
+            useChronological,
             distChart: {
-                labels: Object.keys(jenisTotals).map((k) => k.split(' ').slice(0, 2).join(' ')),
+                labels: Object.keys(jenisTotals).map((k) => JENIS_LABEL_MAP[k] || k.split(' ').slice(0, 3).join(' ')),
                 values: Object.values(jenisTotals),
             },
         });
@@ -166,6 +227,8 @@ export default function LaporanAnalitikPage() {
         const dates = period !== 'custom' ? getDateRange(period) : { start: startDate, end: endDate };
         loadAnalytics(dates);
     };
+
+    const currentPeriodLabel = useChronological => useChronological ? 'Total Setoran Harian' : 'Rata-rata per Hari';
 
     const handleAiAnalysis = async () => {
         if (!tableData.length) return;
@@ -233,7 +296,7 @@ export default function LaporanAnalitikPage() {
                             </div>
                             {/* Custom date range */}
                             {period === 'custom' && (
-                                <div className="flex gap-2">
+                                <div className="flex items-end gap-2">
                                     <div><label className="block text-xs font-medium text-gray-500 mb-1">Dari</label><input type="date" value={startDate} min="2026-04-01" onChange={(e) => setStartDate(e.target.value)} className="form-input w-36" /></div>
                                     <div><label className="block text-xs font-medium text-gray-500 mb-1">Sampai</label><input type="date" value={endDate} min="2026-04-01" onChange={(e) => setEndDate(e.target.value)} className="form-input w-36" /></div>
                                 </div>
@@ -290,7 +353,7 @@ export default function LaporanAnalitikPage() {
                     <div className="flex justify-center py-20">
                         <div className="flex flex-col items-center gap-2 text-primary-600">
                             <span className="material-symbols-outlined animate-spin text-4xl">sync</span>
-                            <span className="font-medium text-sm">Mengolah Data Analitik...</span>
+                            <span className="font-medium text-sm">{loadingMsg}</span>
                         </div>
                     </div>
                 ) : error ? (
@@ -310,16 +373,18 @@ export default function LaporanAnalitikPage() {
 
                         {/* CHARTS */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {/* Line: daily trend */}
+                            {/* Line: daily trend — chronological for 30d/custom, DOW average for 7d */}
                             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                                 <h3 className="font-bold text-gray-800 mb-1">Tren Setoran Harian</h3>
-                                <p className="text-xs text-gray-400 mb-4">Rata-rata per hari (Sen–Min)</p>
+                                <p className="text-xs text-gray-400 mb-4">
+                                    {analytics.useChronological ? 'Total setoran per tanggal (kronologis)' : 'Rata-rata per hari (Sen–Min)'}
+                                </p>
                                 <div className="relative h-56">
                                     <Line
                                         data={{
                                             labels: analytics.weeklyChart.labels,
                                             datasets: [{
-                                                label: 'Rata-rata Setoran',
+                                                label: analytics.useChronological ? 'Total Setoran' : 'Rata-rata Setoran',
                                                 data: analytics.weeklyChart.avgDeposit,
                                                 borderColor: '#F97316',
                                                 backgroundColor: 'rgba(249,115,22,0.12)',
@@ -327,7 +392,14 @@ export default function LaporanAnalitikPage() {
                                                 pointBackgroundColor: '#F97316',
                                             }],
                                         }}
-                                        options={{ ...chartOptions, plugins: { legend: { display: false } } }}
+                                        options={{
+                                            ...chartOptions,
+                                            plugins: { legend: { display: false } },
+                                            scales: {
+                                                ...chartOptions.scales,
+                                                x: { ...chartOptions.scales.x, ticks: { maxRotation: analytics.useChronological ? 45 : 0, autoSkip: true, maxTicksLimit: 15 } },
+                                            },
+                                        }}
                                     />
                                 </div>
                             </div>
