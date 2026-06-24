@@ -23,6 +23,11 @@ import ManajemenLaporanPage from './pages/ManajemenLaporanPage';
 import LaporanAnalitikPage from './pages/LaporanAnalitikPage';
 import LaporanPendingPage from './pages/LaporanPendingPage';
 
+// Phase 9 (Improvement V2)
+import RekonsiliasiPOSPage from './pages/RekonsiliasiPOSPage';
+import KoreksiLaporanPage from './pages/KoreksiLaporanPage';
+import FinanceKoreksiApprovalPage from './pages/FinanceKoreksiApprovalPage';
+
 // Phase 8
 import PengaturanPage from './pages/PengaturanPage';
 import BantuanPage from './pages/BantuanPage';
@@ -73,12 +78,20 @@ function AppRoutes() {
         }
       />
 
-      {/* ===== RIWAYAT ROUTES ===== */}
+            {/* ===== RIWAYAT ROUTES ===== */}
       <Route
         path="/riwayat"
         element={
           <ProtectedRoute allowedRoles={['User']}>
             <RiwayatPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/koreksi"
+        element={
+          <ProtectedRoute allowedRoles={['User']}>
+            <KoreksiLaporanPage />
           </ProtectedRoute>
         }
       />
@@ -102,7 +115,9 @@ function AppRoutes() {
       />
       <Route path="/admin/laporan" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><ManajemenLaporanPage /></ProtectedRoute>} />
       <Route path="/admin/analitik" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanAnalitikPage /></ProtectedRoute>} />
-      <Route path="/admin/pending" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanPendingPage /></ProtectedRoute>} />
+            <Route path="/admin/pending" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanPendingPage /></ProtectedRoute>} />
+      <Route path="/finance/rekonsiliasi-pos" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><RekonsiliasiPOSPage /></ProtectedRoute>} />
+      <Route path="/finance/koreksi-approval" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><FinanceKoreksiApprovalPage /></ProtectedRoute>} />
       <Route path="/admin/bantuan" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><BantuanAdminPage /></ProtectedRoute>} />
 
       {/* ===== SHARED ROUTES (User + Admin) ===== */}
