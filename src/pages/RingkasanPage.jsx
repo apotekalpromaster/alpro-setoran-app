@@ -44,19 +44,22 @@ export default function RingkasanPage() {
 
         try {
             // 1. Upload staged files to Google Drive (via Edge Function)
-            //    Strict requirement: If Drive upload fails, fail the entire submission.
             let buktiUrls = [...(formData.buktiUrls || [])];
             if (formData.buktiFiles?.length > 0) {
+                const filesToUpload = formData.buktiFiles.filter(Boolean);
+                let uploadCount = 1;
                 for (let i = 0; i < formData.buktiFiles.length; i++) {
-                    const { file } = formData.buktiFiles[i];
-                    try {
-                        setUploadStatus(`Mengunggah lampiran (${i + 1}/${formData.buktiFiles.length})...`);
-                        const url = await uploadToDrive(file);
-                        if (!url) throw new Error("Gagal mendapatkan URL Google Drive.");
-                        buktiUrls.push(url);
-                    } catch (driveErr) {
-                        // Throw to outer catch block to stop submission and display error
-                        throw new Error(`Gagal saat mengunggah "${file.name}": ${driveErr.message}. Silahkan coba beberapa saat lagi.`);
+                    const item = formData.buktiFiles[i];
+                    if (item && item.file) {
+                        try {
+                            setUploadStatus(`Mengunggah lampiran (${uploadCount}/${filesToUpload.length})...`);
+                            const url = await uploadToDrive(item.file);
+                            if (!url) throw new Error("Gagal mendapatkan URL Google Drive.");
+                            buktiUrls.push(url);
+                            uploadCount++;
+                        } catch (driveErr) {
+                            throw new Error(`Gagal saat mengunggah "${item.file.name}": ${driveErr.message}. Silahkan coba beberapa saat lagi.`);
+                        }
                     }
                 }
                 setUploadStatus('Menyimpan data laporan...');
