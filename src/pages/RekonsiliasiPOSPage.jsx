@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
@@ -75,6 +75,8 @@ export default function RekonsiliasiPOSPage() {
                     .select(`
                         tanggal_jual,
                         nominal_jual,
+                        nominal_setoran,
+                        potongan,
                         profiles!laporan_user_id_fkey!inner ( username )
                     `)
                     .gte('tanggal_jual', startDate)
@@ -97,6 +99,8 @@ export default function RekonsiliasiPOSPage() {
                         branch,
                         date,
                         reportSales: 0,
+                        reportSetoran: 0,
+                        reportPotongan: 0,
                         posSales: 0,
                         hasReport: false,
                         hasPOS: false
@@ -110,6 +114,8 @@ export default function RekonsiliasiPOSPage() {
                 if (!branch) return;
                 const entry = getEntry(branch, r.tanggal_jual);
                 entry.reportSales += Number(r.nominal_jual || 0);
+                entry.reportSetoran += Number(r.nominal_setoran || 0);
+                entry.reportPotongan += Number(r.potongan || 0);
                 entry.hasReport = true;
             });
 
@@ -120,16 +126,36 @@ export default function RekonsiliasiPOSPage() {
             });
 
             const merged = Object.values(map).map(entry => {
-                const delta = entry.reportSales - entry.posSales;
-                let status = 'Cocok';
-                if (!entry.hasReport) {
-                    status = 'KurangLaporan';
-                } else if (!entry.hasPOS) {
-                    status = 'KurangPOS';
-                } else if (delta !== 0) {
-                    status = 'Selisih';
+                // Selisih 1: POS vs Sales Manual (Laporan)
+                const delta1 = entry.posSales - entry.reportSales;
+                let status1 = 'Cocok';
+                if (!entry.hasReport && entry.hasPOS) {
+                    status1 = 'BelumLapor';
+                } else if (!entry.hasPOS && entry.hasReport) {
+                    status1 = 'BelumPOS';
+                } else if (!entry.hasReport && !entry.hasPOS) {
+                    status1 = 'KurangData';
+                } else if (delta1 !== 0) {
+                    status1 = 'Selisih';
                 }
-                return { ...entry, delta, status };
+
+                // Selisih 2: POS vs (Setoran + Potongan)
+                const setoranPlusPotongan = entry.reportSetoran + entry.reportPotongan;
+                const delta2 = entry.posSales - setoranPlusPotongan;
+                let status2 = 'Cocok';
+                if (!entry.hasReport && entry.hasPOS) {
+                    status2 = 'BelumLapor';
+                } else if (!entry.hasPOS && entry.hasReport) {
+                    status2 = 'BelumPOS';
+                } else if (!entry.hasReport && !entry.hasPOS) {
+                    status2 = 'KurangData';
+                } else if (delta2 !== 0) {
+                    status2 = 'Selisih';
+                }
+
+                // Legacy status for stats summary card (use status1 as primary)
+                const status = status1;
+                return { ...entry, delta1, status1, delta2, status2, setoranPlusPotongan, status };
             });
 
             merged.sort((a, b) => {
@@ -157,18 +183,31 @@ export default function RekonsiliasiPOSPage() {
         let total = reconData.length;
         let cocok = 0;
         let selisih = 0;
-        let kurangLaporan = 0;
-        let kurangPOS = 0;
+        let belumLapor = 0;
+        let belumPOS = 0;
 
         reconData.forEach(item => {
-            if (item.status === 'Cocok') cocok++;
-            else if (item.status === 'Selisih') selisih++;
-            else if (item.status === 'KurangLaporan') kurangLaporan++;
-            else if (item.status === 'KurangPOS') kurangPOS++;
+            if (item.status1 === 'Cocok') cocok++;
+            else if (item.status1 === 'Selisih') selisih++;
+            else if (item.status1 === 'BelumLapor') belumLapor++;
+            else if (item.status1 === 'BelumPOS') belumPOS++;
         });
 
-        return { total, cocok, selisih, kurangLaporan, kurangPOS };
+        return { total, cocok, selisih, belumLapor, belumPOS };
     }, [reconData]);
+
+    const grandTotals = useMemo(() => {
+        return filteredReconData.reduce((acc, item) => {
+            acc.posSales += item.posSales || 0;
+            acc.reportSales += item.reportSales || 0;
+            acc.reportSetoran += item.reportSetoran || 0;
+            acc.reportPotongan += item.reportPotongan || 0;
+            acc.setoranPlusPotongan += item.setoranPlusPotongan || 0;
+            acc.delta1 += item.delta1 || 0;
+            acc.delta2 += item.delta2 || 0;
+            return acc;
+        }, { posSales: 0, reportSales: 0, reportSetoran: 0, reportPotongan: 0, setoranPlusPotongan: 0, delta1: 0, delta2: 0 });
+    }, [filteredReconData]);
 
 const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -544,7 +583,7 @@ const handleFileChange = (e) => {
                         </div>
 
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-xs text-gray-600 space-y-2">
-                            <span className="font-bold text-gray-700 block">💡 Ketentuan Format Excel:</span>
+                            <span className="font-bold text-gray-700 block">ðŸ’¡ Ketentuan Format Excel:</span>
                             <ul className="list-disc pl-5 space-y-1">
                                 <li>Menerima berkas spreadsheet Excel (*.xlsx, *.xls).</li>
                                 <li>Baris header wajib berada pada <strong>baris 13</strong>, yang mendefinisikan kolom: <strong>Date</strong> (Kolom A), <strong>Store</strong> (Kolom B), dan <strong>Cash Amount Total</strong> (Kolom C).</li>
