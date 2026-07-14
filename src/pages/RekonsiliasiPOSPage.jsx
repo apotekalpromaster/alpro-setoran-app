@@ -49,29 +49,45 @@ export default function RekonsiliasiPOSPage() {
         }
     };
 
+    // Helper: fetch all rows with automatic pagination (bypass Supabase 1000 row limit)
+    const fetchAllPaginated = async (queryBuilder) => {
+        const PAGE_SIZE = 1000;
+        let allData = [];
+        let page = 0;
+        while (true) {
+            const { data, error } = await queryBuilder.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            allData = [...allData, ...data];
+            if (data.length < PAGE_SIZE) break;
+            page++;
+        }
+        return allData;
+    };
+
     const fetchReconciliationData = async () => {
         setLoading(true);
         setError('');
         try {
-            const { data: reports, error: rErr } = await supabase
-                .from('laporan')
-                .select(`
-                    tanggal_jual,
-                    nominal_jual,
-                    profiles!laporan_user_id_fkey!inner ( username )
-                `)
-                .gte('tanggal_jual', startDate)
-                .lte('tanggal_jual', endDate);
+            const reports = await fetchAllPaginated(
+                supabase
+                    .from('laporan')
+                    .select(`
+                        tanggal_jual,
+                        nominal_jual,
+                        profiles!laporan_user_id_fkey!inner ( username )
+                    `)
+                    .gte('tanggal_jual', startDate)
+                    .lte('tanggal_jual', endDate)
+            );
 
-            if (rErr) throw rErr;
-
-            const { data: posData, error: pErr } = await supabase
-                .from('pos_sales_data')
-                .select('kode_cabang, tanggal_jual, sales_pos')
-                .gte('tanggal_jual', startDate)
-                .lte('tanggal_jual', endDate);
-
-            if (pErr) throw pErr;
+            const posData = await fetchAllPaginated(
+                supabase
+                    .from('pos_sales_data')
+                    .select('kode_cabang, tanggal_jual, sales_pos')
+                    .gte('tanggal_jual', startDate)
+                    .lte('tanggal_jual', endDate)
+            );
 
             const map = {};
             const getEntry = (branch, date) => {
