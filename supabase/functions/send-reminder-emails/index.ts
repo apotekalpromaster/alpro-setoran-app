@@ -122,7 +122,7 @@ serve(async (req: Request) => {
 
     const fromEmail = 'apotekalpro.master@gmail.com';
     const targetEmail = 'outlets@apotekalpro.id, areamanager@apotekalpro.id';
-    const ccEmails = 'operation@apotekalpro.id, finance@apotekalpro.id';
+    const ccEmails = 'operation@apotekalpro.id, finance@apotekalpro.id, operation.excellence@apotekalpro.id';
 
     const subject = `[REPORT] Laporan Apotek Menunggak Setoran (Mingguan)`;
 
