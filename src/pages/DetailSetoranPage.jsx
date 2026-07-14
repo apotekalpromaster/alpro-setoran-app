@@ -38,6 +38,53 @@ export default function DetailSetoranPage() {
         }
     }, []);
 
+    // Auto-fill nominal penjualan from POS sales data if available
+    useEffect(() => {
+        const fetchPOSSalesForDates = async () => {
+            if (!profile?.username || allSalesDates.length === 0) return;
+            const validTypes = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'];
+            if (!validTypes.includes(jenis)) return;
+
+            try {
+                const { data, error } = await supabase
+                    .from('pos_sales_data')
+                    .select('tanggal_jual, sales_pos')
+                    .eq('kode_cabang', profile.username)
+                    .in('tanggal_jual', allSalesDates);
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    const posMap = {};
+                    data.forEach(item => {
+                        posMap[item.tanggal_jual] = item.sales_pos;
+                    });
+
+                    const currentNominals = Array.isArray(formData.nominalPenjualan)
+                        ? [...formData.nominalPenjualan]
+                        : Array(allSalesDates.length).fill('');
+
+                    const updatedNominals = allSalesDates.map((date, idx) => {
+                        const posSales = posMap[date];
+                        if (posSales !== undefined && posSales !== null) {
+                            return formatRupiah(posSales);
+                        }
+                        return currentNominals[idx] || '';
+                    });
+
+                    const hasChanged = updatedNominals.some((val, idx) => val !== currentNominals[idx]);
+                    if (hasChanged) {
+                        updateField({ nominalPenjualan: updatedNominals });
+                    }
+                }
+            } catch (err) {
+                console.error('Gagal mengambil data sales POS:', err.message);
+            }
+        };
+
+        fetchPOSSalesForDates();
+    }, [jenis, profile?.username, serializedSalesDates]);
+
     // Auto-fill deposit card and KCP from profile
     useEffect(() => {
         if (metode === 'ATM BCA Menggunakan Deposit Card' && profile?.deposit_card && !formData.nomorDepositCard) {
