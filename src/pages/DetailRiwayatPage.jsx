@@ -97,9 +97,17 @@ export default function DetailRiwayatPage() {
                     <span className="text-gray-800 font-semibold">Detail Laporan</span>
                 </div>
 
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Detail Laporan Setoran</h1>
-                    <p className="text-gray-500 text-sm mt-1">Informasi lengkap mengenai setoran yang telah Anda laporkan.</p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">Detail Laporan Setoran</h1>
+                        <p className="text-gray-500 text-sm mt-1">Informasi lengkap mengenai setoran yang telah Anda laporkan.</p>
+                    </div>
+                    <button
+                        onClick={() => navigate('/koreksi', { state: { prefilledReport: data } })}
+                        className="flex items-center justify-center gap-1.5 bg-white text-primary-600 hover:bg-orange-50 font-bold py-2 px-4 rounded-lg border border-primary-200 transition-all shadow-sm text-sm"
+                    >
+                        <span className="material-symbols-outlined text-lg">edit_note</span> Ajukan Koreksi Laporan
+                    </button>
                 </div>
 
                 {/* 1. INFORMASI UMUM */}

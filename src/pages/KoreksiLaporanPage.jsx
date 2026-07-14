@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah, parseRupiah } from '../lib/validators';
@@ -6,6 +7,8 @@ import UserLayout from '../components/UserLayout';
 
 export default function KoreksiLaporanPage() {
     const { profile } = useAuth();
+    const location = useLocation();
+    const prefilledReport = location.state?.prefilledReport;
     
     // UI states
     const [loading, setLoading] = useState(false);
@@ -14,7 +17,12 @@ export default function KoreksiLaporanPage() {
     const [successMsg, setSuccessMsg] = useState('');
     
     // Form states
-    const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
+    const [selectedDate, setSelectedDate] = useState(() => {
+        if (prefilledReport?.tanggal_jual) {
+            return prefilledReport.tanggal_jual;
+        }
+        return new Date().toLocaleDateString('sv-SE');
+    });
     const [reportsForDate, setReportsForDate] = useState([]);
     const [selectedReportId, setSelectedReportId] = useState('');
     const [selectedReport, setSelectedReport] = useState(null);
@@ -70,6 +78,11 @@ export default function KoreksiLaporanPage() {
 
             if (err) throw err;
             setReportsForDate(data || []);
+            
+            // Prefill selected report if it matches the prefilled id and is in the list
+            if (prefilledReport && data && data.some(r => r.id === prefilledReport.id)) {
+                setSelectedReportId(prefilledReport.id);
+            }
         } catch (e) {
             setError('Gagal memuat laporan cabang: ' + e.message);
         }
