@@ -15,6 +15,7 @@ export default function DetailRiwayatPage() {
     const { id } = useParams();
     const navigate = useNavigate();
     const [data, setData] = useState(null);
+    const [corrections, setCorrections] = useState([]);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
 
@@ -26,7 +27,7 @@ export default function DetailRiwayatPage() {
     const fetchDetail = async () => {
         setLoading(true);
         try {
-            // RLS ensures user can only fetch their own rows; extra filter by id
+            // Fetch original report
             const { data: row, error } = await supabase
                 .from('laporan')
                 .select('*')
@@ -35,7 +36,18 @@ export default function DetailRiwayatPage() {
 
             if (error || !row) throw error || new Error('Not found');
             setData(row);
-        } catch {
+
+            // Fetch related correction requests
+            const { data: corrData, error: corrErr } = await supabase
+                .from('koreksi_requests')
+                .select('id, nominal_jual_baru, nominal_setoran_baru, potongan_baru, penjelasan_koreksi, status, created_at, processed_at')
+                .eq('laporan_id', id)
+                .order('created_at', { ascending: false });
+
+            if (!corrErr) {
+                setCorrections(corrData || []);
+            }
+        } catch (e) {
             setNotFound(true);
         } finally {
             setLoading(false);
@@ -70,7 +82,6 @@ export default function DetailRiwayatPage() {
     const hasExtra = data.penjelasan || data.nomor_deposit_card || data.nomor_mesin_atm ||
         data.lokasi_mesin_atm || data.waktu_kejadian || data.kcp_terdekat;
 
-    // bukti_urls: JSONB array or null — always handle gracefully
     const buktiUrls = Array.isArray(data.bukti_urls) ? data.bukti_urls.filter(Boolean) : [];
 
     return (
@@ -100,10 +111,14 @@ export default function DetailRiwayatPage() {
                         <InfoField label="Metode Setoran" value={
                             data.metode_setoran === 'Metode Setoran Lain' ? data.metodeLain || '-' : data.metode_setoran
                         } />
+                        <InfoField 
+                            label="Waktu Submit Laporan (WIB)" 
+                            value={data.timestamp ? new Date(data.timestamp).toLocaleString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' WIB' : '-'} 
+                        />
                     </div>
                 </SectionCard>
 
-                {/* 2. DETAIL KEUANGAN (hidden for non-financial types) */}
+                {/* 2. DETAIL KEUANGAN */}
                 {!isNonFinancial && (
                     <SectionCard icon="payments" iconColor="text-green-500" title="Detail Keuangan">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -113,7 +128,7 @@ export default function DetailRiwayatPage() {
                             </div>
                             <div>
                                 <p className="text-xs font-medium text-gray-400 mb-1">Potongan (Expense)</p>
-                                <p className="text-lg font-bold text-red-500">{data.potongan > 0 ? `(${formatRupiah(data.potongan)})` : '-'}</p>
+                                <p className="text-lg font-bold text-red-500">{data.potongan > 0 ? "(" + formatRupiah(data.potongan) + ")" : '-'}</p>
                             </div>
                             <div>
                                 <p className="text-xs font-medium text-gray-400 mb-1">Nominal Disetor</p>
@@ -123,7 +138,7 @@ export default function DetailRiwayatPage() {
                     </SectionCard>
                 )}
 
-                {/* 3. INFORMASI TAMBAHAN (conditional) */}
+                {/* 3. INFORMASI TAMBAHAN */}
                 {hasExtra && (
                     <SectionCard icon="description" iconColor="text-orange-500" title="Informasi Tambahan">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -137,10 +152,9 @@ export default function DetailRiwayatPage() {
                     </SectionCard>
                 )}
 
-                {/* 4. BUKTI SETORAN — Graceful empty state */}
+                {/* 4. BUKTI SETORAN */}
                 <SectionCard icon="image" iconColor="text-gray-500" title="Bukti Setoran">
                     {buktiUrls.length === 0 ? (
-                        /* ===== ELEGANT PLACEHOLDER (Phase 7 Drive upload not yet implemented) ===== */
                         <div className="col-span-full flex flex-col items-center py-8 text-center">
                             <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mb-3">
                                 <span className="material-symbols-outlined text-3xl text-gray-300">cloud_off</span>
@@ -173,6 +187,54 @@ export default function DetailRiwayatPage() {
                         </div>
                     )}
                 </SectionCard>
+
+                {/* 5. RIWAYAT KOREKSI */}
+                {corrections.length > 0 && (
+                    <SectionCard icon="history" iconColor="text-purple-500" title="Riwayat Koreksi Laporan">
+                        <div className="space-y-4">
+                            {corrections.map((c, idx) => {
+                                let statusCls = '';
+                                let statusText = '';
+                                if (c.status === 'Approved') {
+                                    statusCls = 'text-green-700 bg-green-50 border-green-200';
+                                    statusText = 'Disetujui oleh Finance';
+                                } else if (c.status === 'Rejected') {
+                                    statusCls = 'text-red-700 bg-red-50 border-red-200';
+                                    statusText = 'Ditolak oleh Finance';
+                                } else {
+                                    statusCls = 'text-yellow-700 bg-yellow-50 border-yellow-200';
+                                    statusText = 'Menunggu Persetujuan';
+                                }
+                                
+                                const reqDate = new Date(c.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' WIB';
+                                const procDate = c.processed_at ? new Date(c.processed_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' WIB' : null;
+
+                                return (
+                                    <div key={c.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-2">
+                                            <span className="font-bold text-gray-800 text-xs">Pengajuan #{corrections.length - idx}</span>
+                                            <span className={"px-2.5 py-0.5 rounded-full text-[10px] font-bold border " + statusCls}>{statusText}</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                            <div className="space-y-1">
+                                                <p className="text-gray-400 font-semibold uppercase tracking-wider text-[9px] mb-1">Nilai Koreksi Diajukan:</p>
+                                                <p className="text-gray-700 font-medium">Sales: <span className="font-bold font-mono">{formatRupiah(c.nominal_jual_baru)}</span></p>
+                                                <p className="text-gray-700 font-medium">Setoran: <span className="font-bold font-mono">{formatRupiah(c.nominal_setoran_baru)}</span></p>
+                                                <p className="text-gray-700 font-medium">Potongan: <span className="font-bold font-mono">{formatRupiah(c.potongan_baru)}</span></p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-gray-400 font-semibold uppercase tracking-wider text-[9px] mb-1">Detail Waktu &amp; Alasan:</p>
+                                                <p className="text-gray-600">Diajukan: {reqDate}</p>
+                                                {procDate && <p className="text-gray-600">Diproses: {procDate}</p>}
+                                                <p className="text-gray-700 font-semibold mt-1">Alasan: <span className="italic font-normal">"{c.penjelasan_koreksi}"</span></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </SectionCard>
+                )}
 
             </div>
         </UserLayout>

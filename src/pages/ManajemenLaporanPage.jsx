@@ -50,6 +50,7 @@ export default function ManajemenLaporanPage() {
                         id,
                         tanggal_jual,
                         tanggal_setor,
+                        timestamp,
                         jenis_pelaporan,
                         metode_setoran,
                         nominal_jual,
@@ -122,12 +123,13 @@ export default function ManajemenLaporanPage() {
     // CSV export
     const downloadCSV = () => {
         if (!filtered.length) return;
-        const header = 'Nama Apotek,Tgl Jual,Tgl Setor,Jenis,Metode,Deposit Card,KCP,Nominal Jual,Potongan,Nominal Setor,Selisih\n';
+        const header = 'Nama Apotek,Tgl Jual,Tgl Setor,Waktu Kirim,Jenis,Metode,Deposit Card,KCP,Nominal Jual,Potongan,Nominal Setor,Selisih\n';
         const body = filtered.map((r) =>
             [
                 `"${r.username}"`,
                 r.tanggal_jual,
                 r.tanggal_setor,
+                r.timestamp ? new Date(r.timestamp).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '-',
                 `"${r.jenis_pelaporan}"`,
                 `"${r.metode_setoran}"`,
                 `"${r.nomor_deposit_card || ''}"`,
@@ -364,6 +366,7 @@ export default function ManajemenLaporanPage() {
                                         <tr>
                                             <th className="px-5 py-4">Nama Apotek</th>
                                             <th className="px-5 py-4">Tgl Setor</th>
+                                            <th className="px-5 py-4">Waktu Kirim</th>
                                             <th className="px-5 py-4">Jenis Pelaporan</th>
                                             <th className="px-5 py-4">Metode</th>
                                             <th className="px-5 py-4">Deposit Card</th>
@@ -379,6 +382,9 @@ export default function ManajemenLaporanPage() {
                                                 <td className="px-5 py-4 font-bold text-gray-900">{row.username}</td>
                                                 <td className="px-5 py-4 text-gray-600 text-xs">
                                                     {new Date(row.tanggal_setor).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                </td>
+                                                <td className="px-5 py-4 text-gray-500 text-xs font-mono">
+                                                    {row.timestamp ? new Date(row.timestamp).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' WIB' : '-'}
                                                 </td>
                                                 <td className="px-5 py-4">{renderJenisBadge(row.jenis_pelaporan)}</td>
                                                 <td className="px-5 py-4 text-gray-500 text-xs">{row.metode_setoran}</td>
@@ -400,7 +406,7 @@ export default function ManajemenLaporanPage() {
                                     </tbody>
                                     <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200 text-gray-900 sticky bottom-0">
                                         <tr>
-                                            <td colSpan="6" className="px-5 py-4 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
+                                            <td colSpan="7" className="px-5 py-4 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
                                                 Grand Total
                                             </td>
                                             <td className="px-5 py-4 text-right font-extrabold text-gray-900 font-mono">
