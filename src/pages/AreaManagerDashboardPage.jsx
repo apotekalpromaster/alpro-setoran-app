@@ -7,31 +7,50 @@ import UserLayout from '../components/UserLayout';
 
 const DISCREPANCY_THRESHOLD = 50000;
 
+// Global cache variables to prevent loading spinner flickers when navigating back to this tab
+let cachedOutlets = [];
+let cachedReports = [];
+let cachedCorrections = [];
+let cachedStartDate = '';
+let cachedEndDate = '';
+
 export default function AreaManagerDashboardPage() {
     const { profile } = useAuth();
     const navigate = useNavigate();
     const today = new Date().toLocaleDateString('sv-SE');
 
-    // States
-    const [outlets, setOutlets] = useState([]);
-    const [reports, setReports] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // Default dates (Default to last 7 days)
+    const defaultStart = () => {
+        if (cachedStartDate) return cachedStartDate;
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        return d.toLocaleDateString('sv-SE');
+    };
+    const defaultEnd = () => cachedEndDate || today;
+
+    // States initialized from cache if available
+    const [outlets, setOutlets] = useState(cachedOutlets);
+    const [reports, setReports] = useState(cachedReports);
+    const [loading, setLoading] = useState(cachedOutlets.length === 0);
     const [error, setError] = useState('');
     const [copiedId, setCopiedId] = useState(null);
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterDate, setFilterDate] = useState('');
+    const [reportsStartDate, setReportsStartDate] = useState(defaultStart());
+    const [reportsEndDate, setReportsEndDate] = useState(defaultEnd());
     const [showHighSelisih, setShowHighSelisih] = useState(false);
 
+    // Fetch data whenever profile or selected date range changes
     useEffect(() => {
         if (profile?.username) {
-            fetchData();
+            const hasCache = cachedOutlets.length > 0;
+            fetchData(reportsStartDate, reportsEndDate, hasCache);
         }
-    }, [profile]);
+    }, [profile, reportsStartDate, reportsEndDate]);
 
-    const fetchData = async () => {
-        setLoading(true);
+    const fetchData = async (start, end, silent = false) => {
+        if (!silent) setLoading(true);
         setError('');
         try {
             // 1. Fetch profiles of outlets in this AM's area
@@ -45,6 +64,7 @@ export default function AreaManagerDashboardPage() {
             if (oErr) throw oErr;
             const outletList = outletData || [];
             setOutlets(outletList);
+            cachedOutlets = outletList;
 
             if (outletList.length === 0) {
                 setLoading(false);
@@ -53,26 +73,26 @@ export default function AreaManagerDashboardPage() {
 
             const outletIds = outletList.map(o => o.id);
 
-            // 2. Fetch reports for these outlets (last 30 days)
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            const startDateStr = thirtyDaysAgo.toLocaleDateString('sv-SE');
-
+            // 2. Fetch reports for these outlets within chosen date range
             const { data: reportData, error: rErr } = await supabase
                 .from('laporan')
                 .select('*')
                 .in('user_id', outletIds)
-                .gte('tanggal_setor', startDateStr)
+                .gte('tanggal_setor', start)
+                .lte('tanggal_setor', end)
                 .order('tanggal_setor', { ascending: false });
 
             if (rErr) throw rErr;
-            setReports(
-                (reportData || []).map(row => ({
-                    ...row,
-                    selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
-                    username: outletList.find(o => o.id === row.user_id)?.username || '-'
-                }))
-            );
+            const mappedReports = (reportData || []).map(row => ({
+                ...row,
+                selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
+                username: outletList.find(o => o.id === row.user_id)?.username || '-'
+            }));
+            
+            setReports(mappedReports);
+            cachedReports = mappedReports;
+            cachedStartDate = start;
+            cachedEndDate = end;
 
         } catch (e) {
             setError(e.message || 'Gagal memuat data dashboard.');
@@ -133,15 +153,14 @@ export default function AreaManagerDashboardPage() {
         };
     }, [outlets, reports, outletTunggakanList, today]);
 
-    // Client-side filter for report table
+    // Client-side filter for report table (search & toggle)
     const filteredReports = useMemo(() => {
         return reports.filter(r => {
             const matchName = !searchTerm || r.username.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchDate = !filterDate || r.tanggal_setor === filterDate;
             const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD;
-            return matchName && matchDate && matchSelisih;
+            return matchName && matchSelisih;
         });
-    }, [reports, searchTerm, filterDate, showHighSelisih]);
+    }, [reports, searchTerm, showHighSelisih]);
 
     const handleCopyReminder = (outletName, missingDates, id) => {
         const dateStr = missingDates.map(d => d.formatted).join(', ');
@@ -154,10 +173,8 @@ export default function AreaManagerDashboardPage() {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
         if (isMobile) {
-            // Mobile: use deep link to open WhatsApp native app directly
             window.open('whatsapp://send?text=' + encoded, '_blank');
         } else {
-            // Desktop: use direct WhatsApp Web link to open share contact picker directly
             window.open('https://web.whatsapp.com/send?text=' + encoded, '_blank');
         }
     };
@@ -166,6 +183,15 @@ export default function AreaManagerDashboardPage() {
         if (selisih > 0) return <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold">-${formatRupiah(selisih)}</span>;
         if (selisih < 0) return <span className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">+{formatRupiah(Math.abs(selisih))}</span>;
         return <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-bold">Sesuai</span>;
+    };
+
+    const handleResetFilters = () => {
+        setSearchTerm('');
+        setShowHighSelisih(false);
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        setReportsStartDate(d.toLocaleDateString('sv-SE'));
+        setReportsEndDate(today);
     };
 
     return (
@@ -178,7 +204,7 @@ export default function AreaManagerDashboardPage() {
                         <h2 className="text-xl font-bold text-gray-900">Selamat Datang, {profile?.username}!</h2>
                         <p className="text-xs text-gray-500 mt-1">Gunakan dashboard ini untuk memantau kepatuhan pelaporan setoran harian di wilayah binaan Anda.</p>
                     </div>
-                    <button onClick={fetchData} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-700 border border-gray-200 rounded-lg transition-colors">
+                    <button onClick={() => fetchData(reportsStartDate, reportsEndDate, false)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-700 border border-gray-200 rounded-lg transition-colors">
                         <span className="material-symbols-outlined text-sm">sync</span> Segarkan Data
                     </button>
                 </div>
@@ -226,7 +252,7 @@ export default function AreaManagerDashboardPage() {
                                 color="bg-red-50 text-red-700" 
                                 title="Selisih > 50rb" 
                                 value={stats.totalDiscrepancies} 
-                                desc="Data laporan berselisih (30 hari terakhir)" 
+                                desc="Data laporan berselisih (periode terpilih)" 
                             />
                         </div>
 
@@ -290,7 +316,7 @@ export default function AreaManagerDashboardPage() {
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                 <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
                                     <span className="material-symbols-outlined text-indigo-500">table_view</span>
-                                    Pemantauan Laporan Masuk (30 Hari Terakhir)
+                                    Pemantauan Laporan Masuk
                                 </h3>
                             </div>
 
@@ -308,15 +334,24 @@ export default function AreaManagerDashboardPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Tanggal Setor</label>
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Dari Tanggal Setor</label>
                                         <input 
                                             type="date" 
-                                            value={filterDate} 
-                                            onChange={(e) => setFilterDate(e.target.value)} 
+                                            value={reportsStartDate} 
+                                            onChange={(e) => setReportsStartDate(e.target.value)} 
                                             className="form-input w-full py-1.5 px-3 text-xs" 
                                         />
                                     </div>
-                                    <div className="sm:col-span-2 flex items-center justify-between pb-1">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Sampai Tanggal</label>
+                                        <input 
+                                            type="date" 
+                                            value={reportsEndDate} 
+                                            onChange={(e) => setReportsEndDate(e.target.value)} 
+                                            className="form-input w-full py-1.5 px-3 text-xs" 
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between pb-1">
                                         <label className="flex items-center gap-2 cursor-pointer select-none">
                                             <div
                                                 onClick={() => setShowHighSelisih((p) => !p)}
@@ -327,12 +362,12 @@ export default function AreaManagerDashboardPage() {
                                             <span className="text-xs font-bold text-gray-700">Selisih &gt; 50rb</span>
                                         </label>
                                         
-                                        {(searchTerm || filterDate || showHighSelisih) && (
+                                        {(searchTerm || showHighSelisih || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
                                             <button 
-                                                onClick={() => { setSearchTerm(''); setFilterDate(''); setShowHighSelisih(false); }}
+                                                onClick={handleResetFilters}
                                                 className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
                                             >
-                                                <span className="material-symbols-outlined text-sm">clear_all</span> Reset Filter
+                                                <span className="material-symbols-outlined text-sm">clear_all</span> Reset
                                             </button>
                                         )}
                                     </div>
@@ -347,7 +382,7 @@ export default function AreaManagerDashboardPage() {
                                             <span className="material-symbols-outlined text-2xl">search_off</span>
                                         </div>
                                         <p className="text-gray-500 font-bold text-sm">Data tidak ditemukan.</p>
-                                        <p className="text-xs text-gray-400 mt-1">Coba bersihkan atau sesuaikan kriteria filter Anda.</p>
+                                        <p className="text-xs text-gray-400 mt-1">Coba bersihkan atau sesuaikan rentang tanggal pencarian Anda.</p>
                                     </div>
                                 ) : (
                                     <div className="overflow-x-auto custom-scrollbar">
