@@ -476,67 +476,68 @@ const handleFileChange = (e) => {
                             <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200 text-left">
                                     <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                        <tr>
-                                            <th className="py-3.5 px-6">Tanggal Jual</th>
-                                            <th className="py-3.5 px-6">Nama Cabang</th>
-                                            <th className="py-3.5 px-6 text-right">Sales POS</th>
-                                            <th className="py-3.5 px-6 text-right">Sales Manual (Laporan)</th>
-                                            <th className="py-3.5 px-6 text-right">Selisih</th>
-                                            <th className="py-3.5 px-6 text-center">Status</th>
+                                        <tr className="border-b border-gray-200">
+                                            <th className="py-3 px-4 whitespace-nowrap" rowSpan="2">Tanggal Jual</th>
+                                            <th className="py-3 px-4 whitespace-nowrap" rowSpan="2">Nama Cabang</th>
+                                            <th className="py-3 px-4 text-right whitespace-nowrap bg-blue-50 text-blue-700" rowSpan="2">Sales POS</th>
+                                            <th className="py-3 px-4 text-center text-purple-700 bg-purple-50" colSpan="3">Data Laporan Manual</th>
+                                            <th className="py-3 px-4 text-center text-red-700 bg-red-50" colSpan="2">Selisih POS vs Sales Manual</th>
+                                            <th className="py-3 px-4 text-center text-orange-700 bg-orange-50" colSpan="2">Selisih POS vs Setoran+Potongan</th>
+                                        </tr>
+                                        <tr className="border-b-2 border-gray-300">
+                                            <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-600">Sales Manual</th>
+                                            <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-600">Potongan</th>
+                                            <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-600">Nominal Setoran</th>
+                                            <th className="py-2 px-4 text-right whitespace-nowrap bg-red-50 text-red-500">Selisih 1</th>
+                                            <th className="py-2 px-4 text-center whitespace-nowrap bg-red-50 text-red-500">Status 1</th>
+                                            <th className="py-2 px-4 text-right whitespace-nowrap bg-orange-50 text-orange-500">Selisih 2</th>
+                                            <th className="py-2 px-4 text-center whitespace-nowrap bg-orange-50 text-orange-500">Status 2</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
                                         {loading ? (
-                                            <tr>
-                                                <td colSpan="6" className="py-10 text-center text-gray-400">
-                                                    <span className="animate-spin inline-block h-6 w-6 border-2 border-primary-500 border-t-transparent rounded-full mr-2"></span>
-                                                    Memuat data...
-                                                </td>
-                                            </tr>
+                                            <tr><td colSpan="10" className="py-10 text-center text-gray-400"><span className="animate-spin inline-block h-6 w-6 border-2 border-primary-500 border-t-transparent rounded-full mr-2"></span>Memuat data...</td></tr>
                                         ) : filteredReconData.length === 0 ? (
-                                            <tr>
-                                                <td colSpan="6" className="py-10 text-center text-gray-400">
-                                                    Tidak ada data rekonsiliasi yang cocok dengan kriteria filter.
-                                                </td>
-                                            </tr>
+                                            <tr><td colSpan="10" className="py-10 text-center text-gray-400">Tidak ada data rekonsiliasi yang cocok dengan kriteria filter.</td></tr>
                                         ) : (
                                             filteredReconData.map((item, idx) => {
-                                                let statusBadge = '';
-                                                let rowCls = '';
-
-                                                if (item.status === 'Cocok') {
-                                                    statusBadge = <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-green-50 text-green-700 border border-green-200">Cocok</span>;
-                                                } else if (item.status === 'Selisih') {
-                                                    statusBadge = <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-red-50 text-red-700 border border-red-200">Selisih</span>;
-                                                    rowCls = 'bg-red-50/40';
-                                                } else if (item.status === 'KurangLaporan') {
-                                                    statusBadge = <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">Belum Lapor</span>;
-                                                    rowCls = 'bg-yellow-50/20';
-                                                } else {
-                                                    statusBadge = <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-gray-50 text-gray-600 border border-gray-200">POS Kosong</span>;
-                                                }
-
+                                                const rowCls2 = (item.status1 === "Selisih" || item.status2 === "Selisih") ? "bg-red-50/30" : item.status1 === "BelumLapor" ? "bg-yellow-50/20" : "";
+                                                const B = (s, theme) => {
+                                                    const col = s === "Cocok" ? "bg-green-50 text-green-700 border-green-200" : s === "Selisih" ? (theme === "orange" ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-red-50 text-red-700 border-red-200") : s === "BelumLapor" ? "bg-yellow-50 text-yellow-700 border-yellow-200" : "bg-gray-100 text-gray-600 border-gray-300";
+                                                    const lbl = {Cocok:"Cocok",Selisih:"Selisih",BelumLapor:"Blm Lapor",BelumPOS:"POS Kosong"}[s] || "-";
+                                                    return <span className={"px-2 py-0.5 text-[10px] font-bold rounded-full border " + col}>{lbl}</span>;
+                                                };
+                                                const D = (v) => v === 0 ? <span className="text-gray-400">Rp 0</span> : <span className={v > 0 ? "text-blue-600" : "text-red-600"}>{(v > 0 ? "+" : "") + formatRupiah(v)}</span>;
                                                 return (
-                                                    <tr key={idx} className={`hover:bg-gray-50/50 transition-colors ${rowCls}`}>
-                                                        <td className="py-4 px-6 font-medium text-gray-900">
-                                                            {new Date(item.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                                        </td>
-                                                        <td className="py-4 px-6 font-semibold">{item.branch}</td>
-                                                        <td className="py-4 px-6 text-right font-mono">
-                                                            {item.hasPOS ? formatRupiah(item.posSales) : '-'}
-                                                        </td>
-                                                        <td className="py-4 px-6 text-right font-mono">
-                                                            {item.hasReport ? formatRupiah(item.reportSales) : '-'}
-                                                        </td>
-                                                        <td className={`py-4 px-6 text-right font-bold font-mono ${item.delta < 0 ? 'text-red-600' : item.delta > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
-                                                            {item.delta !== 0 ? (item.delta > 0 ? '+' : '') + formatRupiah(item.delta) : 'Rp 0'}
-                                                        </td>
-                                                        <td className="py-4 px-6 text-center">{statusBadge}</td>
+                                                    <tr key={idx} className={"hover:bg-gray-50/50 transition-colors " + rowCls2}>
+                                                        <td className="py-2.5 px-4 font-medium text-gray-900 whitespace-nowrap text-xs">{new Date(item.date).toLocaleDateString("id-ID",{day:"2-digit",month:"short",year:"numeric"})}</td>
+                                                        <td className="py-2.5 px-4 text-xs font-semibold">{item.branch}</td>
+                                                        <td className="py-2.5 px-4 text-right font-mono text-xs bg-blue-50/40">{item.hasPOS ? formatRupiah(item.posSales) : <span className="text-gray-300">-</span>}</td>
+                                                        <td className="py-2.5 px-4 text-right font-mono text-xs bg-purple-50/30">{item.hasReport ? formatRupiah(item.reportSales) : <span className="text-gray-300">-</span>}</td>
+                                                        <td className="py-2.5 px-4 text-right font-mono text-xs bg-purple-50/30">{item.hasReport ? formatRupiah(item.reportPotongan) : <span className="text-gray-300">-</span>}</td>
+                                                        <td className="py-2.5 px-4 text-right font-mono text-xs bg-purple-50/30">{item.hasReport ? formatRupiah(item.reportSetoran) : <span className="text-gray-300">-</span>}</td>
+                                                        <td className="py-2.5 px-4 text-right font-mono text-xs bg-red-50/20">{D(item.delta1)}</td>
+                                                        <td className="py-2.5 px-4 text-center bg-red-50/20">{B(item.status1,"red")}</td>
+                                                        <td className="py-2.5 px-4 text-right font-mono text-xs bg-orange-50/20">{D(item.delta2)}</td>
+                                                        <td className="py-2.5 px-4 text-center bg-orange-50/20">{B(item.status2,"orange")}</td>
                                                     </tr>
                                                 );
                                             })
                                         )}
                                     </tbody>
+                                    <tfoot className="bg-gray-100 border-t-2 border-gray-400 text-xs font-bold text-gray-800">
+                                        <tr>
+                                            <td className="py-3 px-4" colSpan="2">Grand Total ({filteredReconData.length} baris)</td>
+                                            <td className="py-3 px-4 text-right font-mono bg-blue-100">{formatRupiah(grandTotals.posSales)}</td>
+                                            <td className="py-3 px-4 text-right font-mono bg-purple-100">{formatRupiah(grandTotals.reportSales)}</td>
+                                            <td className="py-3 px-4 text-right font-mono bg-purple-100">{formatRupiah(grandTotals.reportPotongan)}</td>
+                                            <td className="py-3 px-4 text-right font-mono bg-purple-100">{formatRupiah(grandTotals.reportSetoran)}</td>
+                                            <td className="py-3 px-4 text-right font-mono bg-red-100"><span className={grandTotals.delta1 < 0 ? "text-red-700" : grandTotals.delta1 > 0 ? "text-blue-700" : "text-gray-500"}>{grandTotals.delta1 !== 0 ? (grandTotals.delta1 > 0 ? "+" : "") + formatRupiah(grandTotals.delta1) : "Rp 0"}</span></td>
+                                            <td className="py-3 px-4 bg-red-100"></td>
+                                            <td className="py-3 px-4 text-right font-mono bg-orange-100"><span className={grandTotals.delta2 < 0 ? "text-red-700" : grandTotals.delta2 > 0 ? "text-blue-700" : "text-gray-500"}>{grandTotals.delta2 !== 0 ? (grandTotals.delta2 > 0 ? "+" : "") + formatRupiah(grandTotals.delta2) : "Rp 0"}</span></td>
+                                            <td className="py-3 px-4 bg-orange-100"></td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         </div>
@@ -643,3 +644,4 @@ const handleFileChange = (e) => {
         </AdminLayout>
     );
 }
+
