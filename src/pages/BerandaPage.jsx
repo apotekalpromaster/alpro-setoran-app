@@ -60,11 +60,13 @@ export default function BerandaPage() {
                         ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
                     );
                     if (!hasReport) {
-                        missingDates.push(date);
+                        const formatted = new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+                        missingDates.push({ date, formatted });
                     }
                 });
 
                 setHariBelumLapor(missingDates.length);
+                setTunggakanDates(missingDates);
 
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
