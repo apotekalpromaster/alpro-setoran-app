@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
@@ -7,7 +7,6 @@ import UserLayout from '../components/UserLayout';
 
 const ITEMS_PER_PAGE = 30;
 
-/** Visual badge config keyed by jenis_pelaporan */
 const BADGE_CONFIG = {
     'Setoran Harian': { label: 'Harian', cls: 'badge-normal' },
     'Setoran 3x Seminggu': { label: '3x Seminggu', cls: 'badge-normal' },
@@ -15,9 +14,20 @@ const BADGE_CONFIG = {
     'Setoran Uang Pecahan Kecil': { label: 'Pecahan Kecil', cls: 'badge-normal' },
     'Setoran Uang Lebih': { label: 'Uang Lebih', cls: 'badge-info' },
     'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'badge-purple' },
-    'Deposit Card Terblokir (Salah Input PIN 3x)': { label: '⚠ Terblokir', cls: 'badge-danger' },
-    'Deposit Card Tertelan Mesin ATM': { label: '⚠ Tertelan ATM', cls: 'badge-danger' },
+    'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'badge-danger' },
+    'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'badge-danger' },
 };
+
+const JELAS_TYPES = [
+    { id: 'Setoran Harian', label: 'Setoran Harian' },
+    { id: 'Setoran 3x Seminggu', label: 'Setoran 3x Seminggu' },
+    { id: 'Setoran Sales Dengan Potongan Penjualan', label: 'Setoran Potongan' },
+    { id: 'Setoran Uang Pecahan Kecil', label: 'Uang Pecahan' },
+    { id: 'Setoran Uang Lebih', label: 'Uang Lebih' },
+    { id: 'Pengembalian Petty Cash', label: 'Petty Cash' },
+    { id: 'Deposit Card Terblokir (Salah Input PIN 3x)', label: 'Card Terblokir' },
+    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Card Tertelan' }
+];
 
 function getBadge(jenis) {
     return BADGE_CONFIG[jenis] || { label: jenis, cls: 'badge-normal' };
@@ -42,7 +52,8 @@ export default function RiwayatPage() {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [methodeFilter, setMethodeFilter] = useState('');
-    const [activeFilters, setActiveFilters] = useState({ search: '', startDate: '', endDate: '', methode: '' });
+    const [selectedJenis, setSelectedJenis] = useState([]);
+    const [activeFilters, setActiveFilters] = useState({ search: '', startDate: '', endDate: '', methode: '', jenis: [] });
 
     useEffect(() => {
         if (!profile?.id) return;
@@ -53,26 +64,13 @@ export default function RiwayatPage() {
         setLoading(true);
         setError('');
         try {
-            /**
-             * Optimized query:
-             * - RLS automatically filters to profile.id === auth.uid()
-             * - ORDER BY uses index on tanggal_setor DESC
-             * - LIMIT 50 caps result set
-             */
+            // Fetch all reports for this user (up to 5000 rows) without arbitrary cap limit
             const { data, error: err } = await supabase
                 .from('laporan')
-                .select(`
-          id,
-          tanggal_jual,
-          tanggal_setor,
-          jenis_pelaporan,
-          metode_setoran,
-          nominal_jual,
-          nominal_setoran,
-          timestamp
-        `)
+                .select('*')
+                .eq('user_id', profile.id)
                 .order('tanggal_jual', { ascending: false })
-                .limit(50);
+                .limit(5000);
 
             if (err) throw err;
             setReports(data || []);
@@ -82,10 +80,12 @@ export default function RiwayatPage() {
             setLoading(false);
         }
     };
-
     // Client-side filtering (applied on Apply click)
     const filteredReports = useMemo(() => {
-        return reports.filter((item) => {
+        return reports.map(r => ({
+            ...r,
+            selisih: (r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0)
+        })).filter((item) => {
             const term = activeFilters.search.toLowerCase();
             const matchSearch =
                 !term ||
@@ -104,9 +104,29 @@ export default function RiwayatPage() {
                 matchDate = matchDate && item.tanggal_jual <= activeFilters.endDate;
             }
 
-            return matchSearch && matchMethode && matchDate;
+            const matchJenis =
+                !activeFilters.jenis ||
+                activeFilters.jenis.length === 0 ||
+                activeFilters.jenis.includes(item.jenis_pelaporan);
+
+            return matchSearch && matchMethode && matchDate && matchJenis;
         });
     }, [reports, activeFilters]);
+
+    // Grand Totals for the entire filtered set
+    const tableTotals = useMemo(() => {
+        let totalSales = 0;
+        let totalPotongan = 0;
+        let totalSetor = 0;
+        let totalSelisih = 0;
+        filteredReports.forEach((r) => {
+            totalSales += Number(r.nominal_jual || 0);
+            totalPotongan += Number(r.potongan || 0);
+            totalSetor += Number(r.nominal_setoran || 0);
+            totalSelisih += Number(r.selisih || 0);
+        });
+        return { totalSales, totalPotongan, totalSetor, totalSelisih };
+    }, [filteredReports]);
 
     const totalPages = Math.ceil(filteredReports.length / ITEMS_PER_PAGE);
     const paginatedReports = filteredReports.slice(
@@ -115,16 +135,28 @@ export default function RiwayatPage() {
     );
 
     const applyFilters = () => {
-        setActiveFilters({ search, startDate, endDate, methode: methodeFilter });
+        setActiveFilters({ search, startDate, endDate, methode: methodeFilter, jenis: selectedJenis });
         setCurrentPage(1);
     };
 
     const resetFilters = () => {
         setSearch(''); setStartDate(''); setEndDate(''); setMethodeFilter('');
-        setActiveFilters({ search: '', startDate: '', endDate: '', methode: '' });
+        setSelectedJenis([]);
+        setActiveFilters({ search: '', startDate: '', endDate: '', methode: '', jenis: [] });
         setCurrentPage(1);
     };
 
+    const toggleJenisFilter = (id) => {
+        setSelectedJenis(prev =>
+            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        );
+    };
+
+    const selisihChip = (val) => {
+        if (val > 0) return <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold">-{formatRupiah(val)}</span>;
+        if (val < 0) return <span className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">+{formatRupiah(Math.abs(val))}</span>;
+        return <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-bold">Sesuai</span>;
+    };
     return (
         <UserLayout title="Riwayat Laporan" activeRoute="/riwayat">
             <div className="max-w-screen-xl mx-auto space-y-6">
@@ -152,8 +184,8 @@ export default function RiwayatPage() {
                             <label className="block text-xs font-medium text-gray-500 mb-1">Dari Tanggal Sales</label>
                             <input type="date" value={startDate} min="2026-04-01" onChange={(e) => setStartDate(e.target.value)} className="form-input w-full py-2 px-3" />
                         </div>
-                        <div className="w-1/2">
-                            <label className="block text-sm text-gray-500 mb-1">Sampai</label>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Sampai</label>
                             <input type="date" value={endDate} min="2026-04-01" onChange={(e) => setEndDate(e.target.value)} className="form-input w-full py-2 px-3" />
                         </div>
                         <div>
@@ -166,24 +198,39 @@ export default function RiwayatPage() {
                             </select>
                         </div>
                     </div>
+
+                    {/* Multi-select chips for Jenis Pelaporan */}
+                    <div className="mt-4 pt-3 border-t border-gray-100">
+                        <label className="block text-xs font-semibold text-gray-500 mb-2">Filter Jenis Pelaporan (Bisa pilih &gt; 1):</label>
+                        <div className="flex flex-wrap gap-2">
+                            {JELAS_TYPES.map((t) => {
+                                const isSelected = selectedJenis.includes(t.id);
+                                return (
+                                    <button
+                                        key={t.id}
+                                        type="button"
+                                        onClick={() => toggleJenisFilter(t.id)}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                                            isSelected
+                                                ? 'bg-primary-500 border-primary-500 text-white shadow-sm'
+                                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        {t.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
                     <div className="mt-4 flex justify-end">
-                        <button onClick={applyFilters} className="btn-primary py-2 px-6 text-sm">
+                        <button onClick={applyFilters} className="btn-primary py-2 px-6 text-sm flex items-center gap-2">
                             <span className="material-symbols-outlined text-base">search</span> Terapkan Filter
                         </button>
                     </div>
                 </div>
-
-                {/* LIST SECTION */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    {/* Column headers (desktop) */}
-                    <div className="hidden md:flex items-center text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-4">
-                        <div className="w-[25%]">Tanggal Sales</div>
-                        <div className="w-[35%]">Jenis Laporan</div>
-                        <div className="w-[20%]">Metode</div>
-                        <div className="w-[20%] text-right pr-10">Nominal Setor</div>
-                    </div>
-
-                    {/* Content */}
+                {/* TABLE SECTION */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     {loading ? (
                         <div className="flex flex-col gap-3">
                             {[1, 2, 3].map((i) => (
@@ -210,62 +257,90 @@ export default function RiwayatPage() {
                             <p className="text-sm text-gray-400">Tidak ada laporan sesuai filter yang dipilih.</p>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-2">
-                            {paginatedReports.map((item, idx) => {
-                                const badge = getBadge(item.jenis_pelaporan);
-                                const isAnomali = badge.cls === 'badge-danger';
-                                return (
-                                    <button
-                                        key={item.id}
-                                        onClick={() => navigate(`/riwayat/${item.id}`)}
-                                        className={`fade-in-item w-full text-left flex flex-col md:flex-row md:items-center p-4 rounded-xl border transition-all duration-200 group gap-2 md:gap-0
-                      ${isAnomali
-                                                ? 'border-red-200 bg-red-50 hover:border-red-300 hover:shadow-md'
-                                                : 'border-gray-100 bg-white hover:border-orange-200 hover:shadow-md'
-                                            }`}
-                                        style={{ animationDelay: `${idx * 0.04}s` }}
-                                    >
-                                        {/* Date */}
-                                        <div className="md:w-[25%] flex items-center gap-3">
-                                            <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${isAnomali ? 'bg-red-100 text-red-500' : 'bg-orange-50 text-primary-500'}`}>
-                                                <span className="material-symbols-outlined text-xl">{isAnomali ? 'warning' : 'calendar_today'}</span>
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-gray-800 text-sm">{formatDisplayDate(item.tanggal_jual)}</p>
-                                                <p className="text-xs text-gray-400">Penjualan</p>
-                                            </div>
-                                        </div>
-
-                                        {/* Jenis + Badge */}
-                                        <div className="md:w-[35%] flex items-center gap-2 pl-0 md:pl-2">
-                                            <div>
-                                                <p className={`font-semibold text-sm group-hover:text-primary-600 transition-colors ${isAnomali ? 'text-red-700' : 'text-gray-700'}`}>
-                                                    {item.jenis_pelaporan}
-                                                </p>
-                                                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${badge.cls}`}>
-                                                    {badge.label}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        {/* Metode */}
-                                        <div className="md:w-[20%] hidden md:flex items-center">
-                                            <p className="text-xs text-gray-500 truncate">{item.metode_setoran}</p>
-                                        </div>
-
-                                        {/* Nominal + Arrow */}
-                                        <div className="md:w-[20%] flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-gray-100 pt-2 md:pt-0 mt-1 md:mt-0">
-                                            <div className="text-left md:text-right">
-                                                <p className="font-bold text-gray-900 text-sm">{formatRupiah(item.nominal_setoran || 0)}</p>
-                                                <p className="text-xs text-gray-400">Setor</p>
-                                            </div>
-                                            <div className="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 group-hover:bg-primary-50 group-hover:text-primary-600 transition-colors border border-gray-200">
-                                                <span className="material-symbols-outlined text-lg">chevron_right</span>
-                                            </div>
-                                        </div>
-                                    </button>
-                                );
-                            })}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left text-gray-500">
+                                <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                                    <tr>
+                                        <th className="px-5 py-4">Tgl Sales</th>
+                                        <th className="px-5 py-4">Jenis Laporan</th>
+                                        <th className="px-5 py-4">Metode</th>
+                                        <th className="px-5 py-4 text-right">Nominal Sales</th>
+                                        <th className="px-5 py-4 text-right">Potongan</th>
+                                        <th className="px-5 py-4 text-right">Nominal Setor</th>
+                                        <th className="px-5 py-4 text-center">Selisih</th>
+                                        <th className="px-5 py-4 text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 text-gray-700">
+                                    {paginatedReports.map((item, idx) => {
+                                        const badge = getBadge(item.jenis_pelaporan);
+                                        const isAnomali = badge.cls === 'badge-danger';
+                                        return (
+                                            <tr
+                                                key={item.id}
+                                                className={`hover:bg-gray-50/50 transition-colors group ${
+                                                    isAnomali ? 'bg-red-50/30' : ''
+                                                }`}
+                                            >
+                                                <td className="px-5 py-4 font-bold text-gray-900">
+                                                    {formatDisplayDate(item.tanggal_jual)}
+                                                </td>
+                                                <td className="px-5 py-4">
+                                                    <div>
+                                                        <p className="font-semibold text-gray-800 text-[13px]">{item.jenis_pelaporan}</p>
+                                                        <span className={`inline-block text-[9px] font-bold px-2 py-0.25 rounded-full mt-0.5 ${badge.cls}`}>
+                                                            {badge.label}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-4 text-xs text-gray-500">
+                                                    {item.metode_setoran}
+                                                </td>
+                                                <td className="px-5 py-4 text-right text-gray-900 font-mono">
+                                                    {formatRupiah(item.nominal_jual || 0)}
+                                                </td>
+                                                <td className="px-5 py-4 text-right text-gray-500 font-mono">
+                                                    {formatRupiah(item.potongan || 0)}
+                                                </td>
+                                                <td className="px-5 py-4 text-right font-bold text-gray-900 font-mono">
+                                                    {formatRupiah(item.nominal_setoran || 0)}
+                                                </td>
+                                                <td className="px-5 py-4 text-center font-mono">
+                                                    {selisihChip(item.selisih)}
+                                                </td>
+                                                <td className="px-5 py-4 text-center">
+                                                    <button
+                                                        onClick={() => navigate(`/riwayat/${item.id}`)}
+                                                        className="h-8 w-8 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
+                                                    >
+                                                        <span className="material-symbols-outlined text-lg">chevron_right</span>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                                <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200 text-gray-900">
+                                    <tr>
+                                        <td colSpan="3" className="px-5 py-4 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
+                                            Grand Total
+                                        </td>
+                                        <td className="px-5 py-4 text-right font-extrabold text-gray-900 font-mono">
+                                            {formatRupiah(tableTotals.totalSales)}
+                                        </td>
+                                        <td className="px-5 py-4 text-right font-extrabold text-gray-600 font-mono">
+                                            {formatRupiah(tableTotals.totalPotongan)}
+                                        </td>
+                                        <td className="px-5 py-4 text-right font-extrabold text-gray-900 font-mono">
+                                            {formatRupiah(tableTotals.totalSetor)}
+                                        </td>
+                                        <td className="px-5 py-4 text-center font-extrabold font-mono">
+                                            {selisihChip(tableTotals.totalSelisih)}
+                                        </td>
+                                        <td className="px-5 py-4"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
                         </div>
                     )}
 
