@@ -130,15 +130,13 @@ export default function AreaManagerDashboardPage() {
         }
     };
 
-    // Calculate dates of missing reports in the last 7 days (excluding Sunday and today)
+    // Calculate dates of missing reports in the last 7 days (including Sunday, excluding today)
     const targetDates = useMemo(() => {
         const dates = [];
         for (let i = 1; i <= 7; i++) {
             const d = new Date();
             d.setDate(d.getDate() - i);
-            if (d.getDay() !== 0) { // Exclude Sunday
-                dates.push(d.toLocaleDateString('sv-SE'));
-            }
+            dates.push(d.toLocaleDateString('sv-SE'));
         }
         return dates;
     }, []);

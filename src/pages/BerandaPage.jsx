@@ -35,57 +35,36 @@ export default function BerandaPage() {
                 // Show only the 10 most recent in 'Aktivitas Terkini'
                 setRecentReports(allReports.slice(0, 10));
 
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const cutOffDate = new Date('2026-04-01T00:00:00');
-
-                // Last Report Date
-                if (allReports.length > 0) {
-                    setLastReportDate(allReports[0].tanggal_jual || allReports[0].tanggal_setor);
+                // 1. Last Report Date (Based on 3 primary report types)
+                const primaryReports = allReports.filter(r => 
+                    ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                );
+                if (primaryReports.length > 0) {
+                    setLastReportDate(primaryReports[0].tanggal_jual);
                 } else {
                     setLastReportDate(null);
                 }
 
-                // Collect unique sales dates (tanggal_jual)
-                const validReportedDates = new Set();
-                allReports.forEach(item => {
-                    if (item.tanggal_jual) {
-                        const d = new Date(item.tanggal_jual);
-                        d.setHours(0, 0, 0, 0);
-                        if (d >= cutOffDate && d <= today) {
-                            validReportedDates.add(d.getTime());
-                        }
+                // 2. Calculate missing sales dates in the last 7 days (including Sunday, excluding today)
+                const targetDates = [];
+                for (let i = 1; i <= 7; i++) {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    targetDates.push(d.toLocaleDateString('sv-SE'));
+                }
+
+                const missingDates = [];
+                targetDates.forEach(date => {
+                    const hasReport = allReports.some(r => 
+                        r.tanggal_jual === date && 
+                        ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                    );
+                    if (!hasReport) {
+                        missingDates.push(date);
                     }
                 });
 
-                // Loop from Cut-off date to Yesterday (since today's sales aren't mandatory to be reported today)
-                const endLoopDate = new Date(today);
-                endLoopDate.setDate(endLoopDate.getDate() - 1);
-
-                let workingDaysTotal = 0;
-                let loopDate = new Date(cutOffDate);
-
-                while (loopDate <= endLoopDate) {
-                    if (loopDate.getDay() !== 0) { // Exclude Sundays from mandatory quota
-                        workingDaysTotal++;
-                    }
-                    loopDate.setDate(loopDate.getDate() + 1);
-                }
-
-                const reportedCount = validReportedDates.size;
-                let expectedCount = workingDaysTotal;
-                const freq = profile.frekuensi_setoran?.toUpperCase() || '';
-
-                if (freq.includes('3X SEMINGGU')) {
-                    expectedCount = Math.floor(workingDaysTotal / 2);
-                } else if (freq.includes('2X SEMINGGU')) {
-                    expectedCount = Math.floor(workingDaysTotal / 3);
-                } else if (freq.includes('SEMINGGU SEKALI') || freq.includes('1X SEMINGGU')) {
-                    expectedCount = Math.floor(workingDaysTotal / 6);
-                }
-
-                const overdue = expectedCount - reportedCount;
-                setHariBelumLapor(Math.max(0, overdue));
+                setHariBelumLapor(missingDates.length);
 
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
@@ -128,7 +107,7 @@ export default function BerandaPage() {
                                 <h3 className="text-sm font-bold text-red-800 uppercase">Pemberitahuan Penting</h3>
                                 <div className="mt-1 text-sm text-red-700">
                                     <ul className="list-disc pl-5 space-y-1">
-                                        <li>Anda belum melakukan setoran terhitung <strong>{hariBelumLapor} hari kerja</strong>.</li>
+                                        <li>Anda belum melakukan setoran untuk <strong>{hariBelumLapor} hari penjualan (sales)</strong> dalam 7 hari kerja terakhir.</li>
                                         <li>Harap segera lengkapi laporan yang tertunda.</li>
                                     </ul>
                                 </div>
@@ -147,7 +126,7 @@ export default function BerandaPage() {
                             ) : (
                                 <h3 className="text-3xl font-extrabold text-gray-800 leading-none">{hariBelumLapor}</h3>
                             )}
-                            <p className="text-sm text-gray-500 mt-1 font-medium">Hari Belum Lapor</p>
+                            <p className="text-sm text-gray-500 mt-1 font-medium">Hari Belum Lapor (Tgl Sales)</p>
                         </div>
                         <div className="h-12 w-12 rounded-full bg-orange-50 flex items-center justify-center flex-shrink-0">
                             <span className="material-symbols-outlined text-primary-500 text-2xl">assignment_late</span>
