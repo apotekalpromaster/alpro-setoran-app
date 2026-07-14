@@ -10,7 +10,6 @@ const DISCREPANCY_THRESHOLD = 50000;
 // Global cache variables to prevent loading spinner flickers when navigating back to this tab
 let cachedOutlets = [];
 let cachedReports = [];
-let cachedCorrections = [];
 let cachedStartDate = '';
 let cachedEndDate = '';
 
@@ -19,7 +18,7 @@ export default function AreaManagerDashboardPage() {
     const navigate = useNavigate();
     const today = new Date().toLocaleDateString('sv-SE');
 
-    // Default dates (Default to last 7 days)
+    // Default dates (Default to last 7 days of sales)
     const defaultStart = () => {
         if (cachedStartDate) return cachedStartDate;
         const d = new Date();
@@ -40,6 +39,7 @@ export default function AreaManagerDashboardPage() {
     const [reportsStartDate, setReportsStartDate] = useState(defaultStart());
     const [reportsEndDate, setReportsEndDate] = useState(defaultEnd());
     const [showHighSelisih, setShowHighSelisih] = useState(false);
+    const [jenisFilter, setJenisFilter] = useState('');
 
     // Fetch data whenever profile or selected date range changes
     useEffect(() => {
@@ -73,14 +73,14 @@ export default function AreaManagerDashboardPage() {
 
             const outletIds = outletList.map(o => o.id);
 
-            // 2. Fetch reports for these outlets within chosen date range
+            // 2. Fetch reports for these outlets within chosen date range (based on tanggal_jual)
             const { data: reportData, error: rErr } = await supabase
                 .from('laporan')
                 .select('*')
                 .in('user_id', outletIds)
-                .gte('tanggal_setor', start)
-                .lte('tanggal_setor', end)
-                .order('tanggal_setor', { ascending: false });
+                .gte('tanggal_jual', start)
+                .lte('tanggal_jual', end)
+                .order('tanggal_jual', { ascending: false });
 
             if (rErr) throw rErr;
             const mappedReports = (reportData || []).map(row => ({
@@ -114,7 +114,7 @@ export default function AreaManagerDashboardPage() {
         return dates;
     }, []);
 
-    // Analyze each outlet's missing dates
+    // Analyze each outlet's missing sales dates
     const outletTunggakanList = useMemo(() => {
         return outlets.map(o => {
             const outletReports = reports.filter(r => r.user_id === o.id);
@@ -153,14 +153,15 @@ export default function AreaManagerDashboardPage() {
         };
     }, [outlets, reports, outletTunggakanList, today]);
 
-    // Client-side filter for report table (search & toggle)
+    // Client-side filter for report table (search, jenis, & toggle)
     const filteredReports = useMemo(() => {
         return reports.filter(r => {
             const matchName = !searchTerm || r.username.toLowerCase().includes(searchTerm.toLowerCase());
             const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD;
-            return matchName && matchSelisih;
+            const matchJenis = !jenisFilter || r.jenis_pelaporan === jenisFilter;
+            return matchName && matchSelisih && matchJenis;
         });
-    }, [reports, searchTerm, showHighSelisih]);
+    }, [reports, searchTerm, showHighSelisih, jenisFilter]);
 
     // Grand Totals for report table
     const tableTotals = useMemo(() => {
@@ -175,7 +176,7 @@ export default function AreaManagerDashboardPage() {
 
     const handleCopyReminder = (outletName, missingDates, id) => {
         const dateStr = missingDates.map(d => d.formatted).join(', ');
-        const message = `Halo tim Apotek Alpro ${outletName}, mohon bantuannya untuk mengunggah laporan setoran harian yang belum di-submit untuk tanggal: ${dateStr}. Terima kasih! - ${profile?.username || 'Area Manager'}`;
+        const message = `Halo tim Apotek Alpro ${outletName}, mohon bantuannya untuk mengunggah laporan setoran yang belum di-submit untuk tanggal penjualan (sales): ${dateStr}. Terima kasih! - ${profile?.username || 'Area Manager'}`;
         navigator.clipboard.writeText(message);
         setCopiedId(id);
         setTimeout(() => setCopiedId(null), 3000);
@@ -199,6 +200,7 @@ export default function AreaManagerDashboardPage() {
     const handleResetFilters = () => {
         setSearchTerm('');
         setShowHighSelisih(false);
+        setJenisFilter('');
         const d = new Date();
         d.setDate(d.getDate() - 7);
         setReportsStartDate(d.toLocaleDateString('sv-SE'));
@@ -270,10 +272,13 @@ export default function AreaManagerDashboardPage() {
                         {/* WARNING PANEL: TUNGGAKAN OUTLET */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                             <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                                <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-amber-500">warning</span>
-                                    Daftar Tunggakan Pelaporan Harian (Wilayah Anda)
-                                </h3>
+                                <div>
+                                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-amber-500">warning</span>
+                                        Daftar Tunggakan Pelaporan Harian (Wilayah Anda)
+                                    </h3>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">Dihitung berdasarkan tanggal penjualan (sales) yang belum dilaporkan/disetor dalam 7 hari terakhir.</p>
+                                </div>
                                 <span className="text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
                                     {outletTunggakanList.length} Cabang Menunggak
                                 </span>
@@ -297,7 +302,7 @@ export default function AreaManagerDashboardPage() {
                                                     <span className="text-[10px] text-gray-400 font-mono">({o.kode_toko || '-'})</span>
                                                 </div>
                                                 <div className="flex flex-wrap gap-1 items-center">
-                                                    <span className="text-xs text-gray-500 mr-1.5 font-medium">Tanggal belum lapor:</span>
+                                                    <span className="text-xs text-gray-500 mr-1.5 font-semibold">Tgl Penjualan Belum Lapor:</span>
                                                     {o.missingDates.map((d, idx) => (
                                                         <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-600 border border-red-100">
                                                             {d.formatted}
@@ -327,13 +332,13 @@ export default function AreaManagerDashboardPage() {
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                 <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
                                     <span className="material-symbols-outlined text-indigo-500">table_view</span>
-                                    Pemantauan Laporan Masuk
+                                    Pemantauan Laporan Masuk (Berdasarkan Tanggal Penjualan)
                                 </h3>
                             </div>
 
                             {/* FILTER ROW */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-3">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Cari Cabang</label>
                                         <input 
@@ -345,7 +350,25 @@ export default function AreaManagerDashboardPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Dari Tanggal Setor</label>
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Jenis Pelaporan</label>
+                                        <select
+                                            value={jenisFilter}
+                                            onChange={(e) => setJenisFilter(e.target.value)}
+                                            className="form-input w-full py-1.5 px-3 text-xs bg-gray-50 cursor-pointer"
+                                        >
+                                            <option value="">Semua Jenis</option>
+                                            <option value="Setoran Harian">Setoran Harian</option>
+                                            <option value="Setoran 3x Seminggu">Setoran 3x Seminggu</option>
+                                            <option value="Setoran Sales Dengan Potongan Penjualan">Setoran Potongan</option>
+                                            <option value="Setoran Uang Pecahan Kecil">Setoran Pecahan Kecil</option>
+                                            <option value="Setoran Uang Lebih">Setoran Uang Lebih</option>
+                                            <option value="Pengembalian Petty Cash">Pengembalian Petty Cash</option>
+                                            <option value="Deposit Card Terblokir (Salah Input PIN 3x)">Deposit Card Terblokir</option>
+                                            <option value="Deposit Card Tertelan Mesin ATM">Deposit Card Tertelan ATM</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Dari Tgl Jual</label>
                                         <input 
                                             type="date" 
                                             value={reportsStartDate} 
@@ -354,7 +377,7 @@ export default function AreaManagerDashboardPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Sampai Tanggal</label>
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Sampai Tgl Jual</label>
                                         <input 
                                             type="date" 
                                             value={reportsEndDate} 
@@ -373,7 +396,7 @@ export default function AreaManagerDashboardPage() {
                                             <span className="text-xs font-bold text-gray-700">Selisih &gt; 50rb</span>
                                         </label>
                                         
-                                        {(searchTerm || showHighSelisih || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
+                                        {(searchTerm || showHighSelisih || jenisFilter || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
                                             <button 
                                                 onClick={handleResetFilters}
                                                 className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
@@ -401,7 +424,7 @@ export default function AreaManagerDashboardPage() {
                                             <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
                                                 <tr>
                                                     <th className="px-5 py-4">Nama Apotek</th>
-                                                    <th className="px-5 py-4">Tgl Setor</th>
+                                                    <th className="px-5 py-4">Tgl Jual</th>
                                                     <th className="px-5 py-4">Jenis Pelaporan</th>
                                                     <th className="px-5 py-4">Metode</th>
                                                     <th className="px-5 py-4 text-right">Nominal Setor</th>
@@ -414,7 +437,7 @@ export default function AreaManagerDashboardPage() {
                                                     <tr key={row.id} className="hover:bg-gray-50/50 transition-colors group">
                                                         <td className="px-5 py-4 font-bold text-gray-900">{row.username}</td>
                                                         <td className="px-5 py-4 text-gray-600 text-xs">
-                                                            {new Date(row.tanggal_setor).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                            {new Date(row.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                         </td>
                                                         <td className="px-5 py-4 text-xs font-semibold text-gray-500">{row.jenis_pelaporan}</td>
                                                         <td className="px-5 py-4 text-gray-500 text-xs">{row.metode_setoran}</td>
