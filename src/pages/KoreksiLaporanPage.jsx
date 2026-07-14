@@ -380,39 +380,57 @@ export default function KoreksiLaporanPage() {
                                     </div>
 
                                     {/* UPLOAD LAMPIRAN BARU (5 optional slots for replacement) */}
-                                    <div className="pt-4 border-t border-gray-100 space-y-4">
-                                        <label className="block text-sm font-bold text-gray-500 mb-1">Ubah/Ganti Bukti Setoran Baru (Opsional)</label>
-                                        <p className="text-[11px] text-gray-400 mb-2">Unggah bukti transfer/setoran baru pada slot yang ingin diubah/diganti (Maksimal 5 file, format gambar/PDF).</p>
+                                    <div className="pt-4 border-t border-gray-150 space-y-4">
+                                        <div className="flex flex-col gap-0.5">
+                                            <label className="text-sm font-bold text-gray-800">Ubah/Ganti Bukti Setoran Baru (Opsional)</label>
+                                            <p className="text-xs text-gray-500">Unggah bukti transfer/setoran baru pada slot yang ingin diubah/diganti (Maksimal 5 file, format gambar/PDF).</p>
+                                        </div>
                                         
                                         {[
-                                            { idx: 0, label: "Ganti Bukti 1 (Kutipan Harian Toko)" },
-                                            { idx: 1, label: "Ganti Bukti 2 (Settlement EDC)" },
-                                            { idx: 2, label: "Ganti Bukti 3 (Bukti Setoran Teller/ATM)" },
-                                            { idx: 3, label: "Ganti Bukti 4 (Opsional)" },
-                                            { idx: 4, label: "Ganti Bukti 5 (Opsional)" }
+                                            { idx: 0, label: ['Setoran Uang Lebih', 'Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(selectedReport?.jenis_pelaporan) ? "Ganti Bukti 1 (Dokumentasi Utama)" : "Ganti Bukti 1 (Kutipan Harian Toko)", required: true },
+                                            { idx: 1, label: ['Setoran Uang Lebih', 'Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(selectedReport?.jenis_pelaporan) ? "Ganti Bukti 2 (Pendukung)" : "Ganti Bukti 2 (Settlement EDC)", required: false },
+                                            { idx: 2, label: ['Setoran Uang Lebih', 'Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(selectedReport?.jenis_pelaporan) ? "Ganti Bukti 3 (Pendukung)" : "Ganti Bukti 3 (Bukti Setoran Teller/ATM)", required: false },
+                                            { idx: 3, label: "Ganti Bukti 4 (Opsional)", required: false },
+                                            { idx: 4, label: "Ganti Bukti 5 (Opsional)", required: false }
                                         ].map((slot) => {
                                             const sf = stagedFiles[slot.idx];
                                             return (
-                                                <div key={slot.idx} className="p-3 border border-gray-200 rounded-xl bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                                                    <div className="space-y-1">
-                                                        <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block">
+                                                <div key={slot.idx} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-primary-200 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+                                                    <div className="flex-1 min-w-0 space-y-1.5">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">
+                                                                Slot #{slot.idx + 1}
+                                                            </span>
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-gray-50 text-gray-500 border border-gray-200 uppercase tracking-wide">Opsional</span>
+                                                        </div>
+                                                        <h4 className="text-sm font-bold text-gray-800 leading-snug">
                                                             {slot.label}
-                                                        </span>
+                                                        </h4>
+                                                        
                                                         {sf ? (
-                                                            <div className="flex items-center gap-1.5 font-semibold text-gray-800">
+                                                            <div className="flex items-center gap-2 text-xs text-gray-800 pt-1.5">
                                                                 {sf.isImage && sf.preview ? (
-                                                                    <img src={sf.preview} alt="preview" className="h-8 w-8 object-cover rounded border" />
+                                                                    <img src={sf.preview} alt="preview" className="h-9 w-9 object-cover rounded border border-gray-200 shadow-sm" />
                                                                 ) : (
-                                                                    <span className="material-symbols-outlined text-gray-400 text-lg">description</span>
+                                                                    <div className="h-9 w-9 flex items-center justify-center bg-gray-50 text-gray-400 rounded border border-gray-200 shadow-sm">
+                                                                        <span className="material-symbols-outlined text-lg">description</span>
+                                                                    </div>
                                                                 )}
-                                                                <span className="truncate max-w-[150px]" title={sf.name}>{sf.name}</span>
+                                                                <div className="min-w-0">
+                                                                    <span className="block font-medium truncate max-w-[150px]" title={sf.name}>{sf.name}</span>
+                                                                    <span className="text-[10px] text-green-600 font-bold flex items-center gap-0.5 mt-0.5">
+                                                                        <span className="material-symbols-outlined text-[10px]">check_circle</span> Siap Diupload
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         ) : (
-                                                            <span className="text-[11px] text-gray-400 italic">Tidak ada perubahan</span>
+                                                            <p className="text-xs text-gray-400 italic flex items-center gap-1 pt-1">
+                                                                <span className="material-symbols-outlined text-sm text-gray-300">cloud_off</span> Tidak ada perubahan
+                                                            </p>
                                                         )}
                                                     </div>
                                                     
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-2 flex-shrink-0">
                                                         <input
                                                             type="file"
                                                             accept="image/*,application/pdf"
@@ -427,14 +445,14 @@ export default function KoreksiLaporanPage() {
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleRemoveSlotFile(slot.idx)}
-                                                                className="px-2.5 py-1.5 bg-white border border-red-200 text-red-500 hover:bg-red-50 rounded-lg font-bold flex items-center gap-1 shadow-sm transition-all"
+                                                                className="px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 hover:border-red-300 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
                                                             >
                                                                 <span className="material-symbols-outlined text-sm">delete</span> Hapus
                                                             </button>
                                                         ) : (
                                                             <label
                                                                 htmlFor={"koreksi-slot-file-input-" + slot.idx}
-                                                                className="px-2.5 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                                                                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all active:scale-95"
                                                             >
                                                                 <span className="material-symbols-outlined text-sm">upload_file</span> Pilih File
                                                             </label>

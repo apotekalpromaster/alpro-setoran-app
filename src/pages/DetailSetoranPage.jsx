@@ -185,7 +185,7 @@ export default function DetailSetoranPage() {
                                 </>
                             )}
                             <TextareaField label="Penjelasan" value={formData.penjelasan} onChange={(v) => updateField({ penjelasan: v.toUpperCase() })} placeholder="Kronologi kejadian..." />
-                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} />
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} />
                         </>
                     )}
 
@@ -194,7 +194,7 @@ export default function DetailSetoranPage() {
                         <>
                             <CurrencyField label="Nominal Setoran" value={formData.nominalSetoran} onChange={(v) => updateField({ nominalSetoran: v })} />
                             <TextareaField label="Penjelasan" value={formData.penjelasan} onChange={(v) => updateField({ penjelasan: v.toUpperCase() })} placeholder="Jelaskan sumber uang lebih" />
-                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} />
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} />
                         </>
                     )}
 
@@ -239,7 +239,7 @@ export default function DetailSetoranPage() {
                                 <InputField label="Nomor Referensi Bank" value={formData.nomorMesinAtm} onChange={(v) => updateField({ nomorMesinAtm: v.toUpperCase() })} placeholder="Masukkan nomor referensi" />
                             )}
 
-                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} />
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} />
                         </>
                     )}
 
@@ -315,97 +315,132 @@ function TextareaField({ label, value, onChange, placeholder }) {
     );
 }
 
-function UploadSection({ stagedFiles, onSlotChange, onSlotRemove }) {
-    const slots = [
-        { idx: 0, label: "Bukti 1 (Kutipan Harian Toko)", required: true },
-        { idx: 1, label: "Bukti 2 (Settlement EDC)", required: true },
-        { idx: 2, label: "Bukti 3 (Bukti Setoran Teller/ATM)", required: true },
-        { idx: 3, label: "Bukti 4", required: false },
-        { idx: 4, label: "Bukti 5", required: false }
-    ];
+function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis }) {
+    const isSingleProofType = ['Setoran Uang Lebih', 'Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
+
+    const slots = isSingleProofType
+        ? [
+            { idx: 0, label: "Bukti 1 (Dokumentasi Utama)", required: true },
+            { idx: 1, label: "Bukti 2 (Pendukung)", required: false },
+            { idx: 2, label: "Bukti 3 (Pendukung)", required: false },
+            { idx: 3, label: "Bukti 4 (Opsional)", required: false },
+            { idx: 4, label: "Bukti 5 (Opsional)", required: false }
+          ]
+        : [
+            { idx: 0, label: "Bukti 1 (Kutipan Harian Toko)", required: true },
+            { idx: 1, label: "Bukti 2 (Settlement EDC)", required: true },
+            { idx: 2, label: "Bukti 3 (Bukti Setoran Teller/ATM)", required: true },
+            { idx: 3, label: "Bukti 4", required: false },
+            { idx: 4, label: "Bukti 5", required: false }
+          ];
 
     return (
-        <div className="space-y-4">
-            <label className="block text-sm font-bold text-gray-500 mb-2">Upload Bukti Setoran (Maksimal 5 file)</label>
+        <div className="space-y-4 pt-4 border-t border-gray-150">
+            <div className="flex flex-col gap-1">
+                <label className="text-sm font-bold text-gray-800">Upload Bukti Setoran (Maksimal 5 file)</label>
+                <p className="text-xs text-gray-500">Silakan unggah bukti setoran yang valid pada slot di bawah ini sesuai peruntukan.</p>
+            </div>
             
-            {slots.map((slot) => {
-                const sf = stagedFiles[slot.idx];
-                const fileInputRef = useRef(null);
-                const cameraInputRef = useRef(null);
+            <div className="grid grid-cols-1 gap-3.5">
+                {slots.map((slot) => {
+                    const sf = stagedFiles[slot.idx];
+                    const fileInputRef = useRef(null);
+                    const cameraInputRef = useRef(null);
 
-                return (
-                    <div key={slot.idx} className="p-4 border border-gray-200 rounded-xl bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="space-y-1">
-                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block">
-                                {slot.label} {slot.required && <span className="text-red-500 font-bold">*Wajib</span>}
-                            </span>
-                            {sf ? (
-                                <div className="flex items-center gap-2 text-xs font-semibold text-gray-800">
-                                    {sf.isImage && sf.preview ? (
-                                        <img src={sf.preview} alt="preview" className="h-10 w-10 object-cover rounded border" />
+                    return (
+                        <div key={slot.idx} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-primary-200 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex-1 min-w-0 space-y-1.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">
+                                        Slot #{slot.idx + 1}
+                                    </span>
+                                    {slot.required ? (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-50 text-red-600 border border-red-200 uppercase tracking-wide">Wajib</span>
                                     ) : (
-                                        <span className="material-symbols-outlined text-gray-400 text-2xl">description</span>
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-gray-50 text-gray-500 border border-gray-200 uppercase tracking-wide">Opsional</span>
                                     )}
-                                    <span className="truncate max-w-[200px]" title={sf.name}>{sf.name}</span>
                                 </div>
-                            ) : (
-                                <span className="text-xs text-gray-400 italic">Belum ada file diunggah</span>
-                            )}
-                        </div>
-                        
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <input
-                                type="file"
-                                accept="image/*,application/pdf"
-                                ref={fileInputRef}
-                                className="hidden"
-                                onChange={(e) => {
-                                    const file = e.target.files[0];
-                                    if (file) onSlotChange(slot.idx, file);
-                                }}
-                            />
-                            <input
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                ref={cameraInputRef}
-                                className="hidden"
-                                onChange={(e) => {
-                                    const file = e.target.files[0];
-                                    if (file) onSlotChange(slot.idx, file);
-                                }}
-                            />
+                                <h4 className="text-sm font-bold text-gray-800 leading-snug">
+                                    {slot.label}
+                                </h4>
+                                
+                                {sf ? (
+                                    <div className="flex items-center gap-2 text-xs text-gray-800 pt-1.5">
+                                        {sf.isImage && sf.preview ? (
+                                            <img src={sf.preview} alt="preview" className="h-9 w-9 object-cover rounded border border-gray-200 shadow-sm" />
+                                        ) : (
+                                            <div className="h-9 w-9 flex items-center justify-center bg-gray-50 text-gray-400 rounded border border-gray-200 shadow-sm">
+                                                <span className="material-symbols-outlined text-lg">description</span>
+                                            </div>
+                                        )}
+                                        <div className="min-w-0">
+                                            <span className="block font-medium truncate max-w-[200px]" title={sf.name}>{sf.name}</span>
+                                            <span className="text-[10px] text-green-600 font-bold flex items-center gap-0.5 mt-0.5">
+                                                <span className="material-symbols-outlined text-[10px]">check_circle</span> Siap Diupload
+                                            </span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-400 italic flex items-center gap-1 pt-1">
+                                        <span className="material-symbols-outlined text-sm text-gray-300">cloud_off</span> Belum ada file diunggah
+                                    </p>
+                                )}
+                            </div>
+                            
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                <input
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files[0];
+                                        if (file) onSlotChange(slot.idx, file);
+                                    }}
+                                />
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    ref={cameraInputRef}
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files[0];
+                                        if (file) onSlotChange(slot.idx, file);
+                                    }}
+                                />
 
-                            {sf ? (
-                                <button
-                                    type="button"
-                                    onClick={() => onSlotRemove(slot.idx)}
-                                    className="px-3 py-1.5 bg-white border border-red-200 text-red-500 hover:bg-red-50 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
-                                >
-                                    <span className="material-symbols-outlined text-sm">delete</span> Hapus
-                                </button>
-                              ) : (
-                                  <>
-                                      <button
-                                          type="button"
-                                          onClick={() => fileInputRef.current?.click()}
-                                          className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
-                                      >
-                                          <span className="material-symbols-outlined text-sm">upload_file</span> Pilih File
-                                      </button>
-                                      <button
-                                          type="button"
-                                          onClick={() => cameraInputRef.current?.click()}
-                                          className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
-                                      >
-                                          <span className="material-symbols-outlined text-sm">photo_camera</span> Foto
-                                      </button>
-                                  </>
-                              )}
+                                {sf ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => onSlotRemove(slot.idx)}
+                                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 hover:border-red-300 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">delete</span> Hapus
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                                        >
+                                            <span className="material-symbols-outlined text-sm">upload_file</span> Pilih File
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => cameraInputRef.current?.click()}
+                                            className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                                        >
+                                            <span className="material-symbols-outlined text-sm">photo_camera</span> Foto
+                                        </button>
+                                    </>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                );
-            })}
+                    );
+                })}
+            </div>
         </div>
     );
 }
