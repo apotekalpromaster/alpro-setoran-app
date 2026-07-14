@@ -135,7 +135,7 @@ function AppRoutes() {
       <Route
         path="/pengaturan"
         element={
-          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance']}>
+          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance', 'AreaManager']}>
             <PengaturanPage />
           </ProtectedRoute>
         }
@@ -143,7 +143,7 @@ function AppRoutes() {
       <Route
         path="/bantuan"
         element={
-          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance']}>
+          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance', 'AreaManager']}>
             <BantuanPage />
           </ProtectedRoute>
         }
