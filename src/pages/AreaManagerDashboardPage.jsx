@@ -143,9 +143,9 @@ export default function AreaManagerDashboardPage() {
         return dates;
     }, []);
 
-    // Analyze each outlet's missing sales dates
+    // Analyze each outlet's missing sales dates (filtered by search term as well)
     const outletTunggakanList = useMemo(() => {
-        return outlets.map(o => {
+        const list = outlets.map(o => {
             const outletReports = reports.filter(r => r.user_id === o.id);
             const missing = [];
             targetDates.forEach(date => {
@@ -163,7 +163,12 @@ export default function AreaManagerDashboardPage() {
                 missingDates: missing
             };
         }).filter(o => o.missingDates.length > 0);
-    }, [outlets, reports, targetDates]);
+
+        // Client-side search for Tunggakan list
+        const cleanSearch = searchTerm.trim().toLowerCase();
+        if (!cleanSearch) return list;
+        return list.filter(o => o.username.toLowerCase().includes(cleanSearch));
+    }, [outlets, reports, targetDates, searchTerm]);
 
     // Overall stats calculations
     const stats = useMemo(() => {
@@ -171,7 +176,23 @@ export default function AreaManagerDashboardPage() {
         const submittedTodayCount = outlets.filter(o => 
             reports.some(r => r.user_id === o.id && r.tanggal_setor === today)
         ).length;
-        const totalTunggakan = outletTunggakanList.reduce((sum, o) => sum + o.missingDates.length, 0);
+        
+        // Non-filtered tunggakan list for absolute statistics
+        const absoluteTunggakanList = outlets.map(o => {
+            const outletReports = reports.filter(r => r.user_id === o.id);
+            const missing = [];
+            targetDates.forEach(date => {
+                const hasReport = outletReports.some(r => 
+                    r.tanggal_jual === date && 
+                    ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                );
+                if (!hasReport) {
+                    missing.push(date);
+                }
+            });
+            return missing.length;
+        });
+        const totalTunggakan = absoluteTunggakanList.reduce((sum, count) => sum + count, 0);
         const totalDiscrepancies = reports.filter(r => Math.abs(r.selisih) > DISCREPANCY_THRESHOLD).length;
 
         return {
@@ -180,12 +201,13 @@ export default function AreaManagerDashboardPage() {
             totalTunggakan,
             totalDiscrepancies
         };
-    }, [outlets, reports, outletTunggakanList, today]);
+    }, [outlets, reports, targetDates, today]);
 
     // Client-side filter for report table (search, multi-select jenis, & toggle)
     const filteredReports = useMemo(() => {
+        const cleanSearch = searchTerm.trim().toLowerCase();
         return reports.filter(r => {
-            const matchName = !searchTerm || r.username.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchName = !cleanSearch || r.username.toLowerCase().includes(cleanSearch);
             const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD;
             const matchJenis = selectedJenis.length === 0 || selectedJenis.includes(r.jenis_pelaporan);
             return matchName && matchSelisih && matchJenis;
