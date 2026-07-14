@@ -261,17 +261,24 @@ export default function RingkasanPage() {
                     )}
 
                     {/* Bukti Foto */}
-                    {formData.buktiFiles?.length > 0 && (
+                    {formData.buktiFiles?.filter(Boolean).length > 0 && (
                         <section>
                             <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
                                 <span className="material-symbols-outlined text-blue-500">attach_file</span> Bukti Lampiran
                             </h3>
-                            <div className="grid grid-cols-3 gap-3">
-                                {formData.buktiFiles.map((f, i) => (
-                                    <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                                        <img src={f.preview} alt={f.name} className="w-full h-full object-cover" />
-                                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1">
-                                            <p className="text-white text-[10px] truncate">Bukti #{i + 1}</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {formData.buktiFiles.filter(Boolean).map((f, i) => (
+                                    <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-gray-50 flex items-center justify-center">
+                                        {f.preview ? (
+                                            <img src={f.preview} alt={f.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 p-2">
+                                                <span className="material-symbols-outlined text-3xl">description</span>
+                                                <span className="text-[10px] mt-1 font-semibold truncate max-w-full text-center" title={f.name}>{f.name}</span>
+                                            </div>
+                                        )}
+                                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5">
+                                            <p className="text-white text-[10px] font-bold truncate">Bukti #{i + 1}</p>
                                         </div>
                                     </div>
                                 ))}
