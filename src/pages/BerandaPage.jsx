@@ -12,6 +12,7 @@ export default function BerandaPage() {
     const [loading, setLoading] = useState(true);
     const [hariBelumLapor, setHariBelumLapor] = useState(0);
     const [lastReportDate, setLastReportDate] = useState(null);
+    const [tunggakanDates, setTunggakanDates] = useState([]);
 
     useEffect(() => {
         if (!profile?.id) return;
@@ -109,7 +110,13 @@ export default function BerandaPage() {
                                 <h3 className="text-sm font-bold text-red-800 uppercase">Pemberitahuan Penting</h3>
                                 <div className="mt-1 text-sm text-red-700">
                                     <ul className="list-disc pl-5 space-y-1">
-                                        <li>Anda belum melakukan setoran untuk <strong>{hariBelumLapor} hari penjualan (sales)</strong> dalam 7 hari kerja terakhir.</li>
+                                        <li>Anda belum melakukan setoran untuk <strong>{hariBelumLapor} hari penjualan (sales)</strong> dalam 7 hari terakhir.</li>
+                                        <li>
+                                            Tanggal penjualan (sales) yang belum dilaporkan: {' '}
+                                            <span className="font-extrabold text-red-950 underline decoration-red-400">
+                                                {tunggakanDates.map(d => d.formatted).join(', ')}
+                                            </span>
+                                        </li>
                                         <li>Harap segera lengkapi laporan yang tertunda.</li>
                                     </ul>
                                 </div>
