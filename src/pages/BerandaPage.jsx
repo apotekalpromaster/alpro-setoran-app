@@ -46,13 +46,22 @@ export default function BerandaPage() {
                     setLastReportDate(null);
                 }
 
-                // 2. Calculate missing sales dates in the last 7 days (including Sunday, excluding today)
+                // 2. Calculate missing sales dates (from profile.tanggal_aktif or 2026-04-01 up to yesterday)
+                const startStr = profile?.tanggal_aktif || '2026-04-01';
+                const start = new Date(startStr);
+                start.setHours(0, 0, 0, 0);
+
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                yesterday.setHours(0, 0, 0, 0);
+
                 const targetDates = [];
-                for (let i = 1; i <= 7; i++) {
-                    const d = new Date();
-                    d.setDate(d.getDate() - i);
-                    targetDates.push(d.toLocaleDateString('sv-SE'));
+                let currentLoop = new Date(start);
+                while (currentLoop <= yesterday) {
+                    targetDates.push(currentLoop.toLocaleDateString('sv-SE'));
+                    currentLoop.setDate(currentLoop.getDate() + 1);
                 }
+                targetDates.reverse();
 
                 const missingDates = [];
                 targetDates.forEach(date => {

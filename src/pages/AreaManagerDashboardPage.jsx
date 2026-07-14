@@ -68,7 +68,7 @@ export default function AreaManagerDashboardPage() {
             // 1. Fetch profiles of outlets in this AM's area
             const { data: outletData, error: oErr } = await supabase
                 .from('profiles')
-                .select('id, username, kode_toko, email, frekuensi_setoran')
+                .select('id, username, kode_toko, email, frekuensi_setoran, tanggal_aktif')
                 .eq('area_manager', profile.username)
                 .eq('role', 'User')
                 .order('username');
@@ -130,23 +130,33 @@ export default function AreaManagerDashboardPage() {
         }
     };
 
-    // Calculate dates of missing reports in the last 7 days (including Sunday, excluding today)
-    const targetDates = useMemo(() => {
+    // Calculate dates of missing reports (from tanggal_aktif up to yesterday)
+    const getOutletTargetDates = (o) => {
+        const startStr = o.tanggal_aktif || '2026-04-01';
+        const start = new Date(startStr);
+        start.setHours(0, 0, 0, 0);
+
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(0, 0, 0, 0);
+
         const dates = [];
-        for (let i = 1; i <= 7; i++) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            dates.push(d.toLocaleDateString('sv-SE'));
+        let currentLoop = new Date(start);
+        while (currentLoop <= yesterday) {
+            dates.push(currentLoop.toLocaleDateString('sv-SE'));
+            currentLoop.setDate(currentLoop.getDate() + 1);
         }
+        dates.reverse();
         return dates;
-    }, []);
+    };
 
     // Analyze each outlet's missing sales dates (filtered by search term as well)
     const outletTunggakanList = useMemo(() => {
         const list = outlets.map(o => {
             const outletReports = reports.filter(r => r.user_id === o.id);
             const missing = [];
-            targetDates.forEach(date => {
+            const dates = getOutletTargetDates(o);
+            dates.forEach(date => {
                 const hasReport = outletReports.some(r => 
                     r.tanggal_jual === date && 
                     ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
@@ -166,7 +176,7 @@ export default function AreaManagerDashboardPage() {
         const cleanSearch = searchTerm.trim().toLowerCase();
         if (!cleanSearch) return list;
         return list.filter(o => o.username.toLowerCase().includes(cleanSearch));
-    }, [outlets, reports, targetDates, searchTerm]);
+    }, [outlets, reports, searchTerm]);
 
     // Overall stats calculations
     const stats = useMemo(() => {
@@ -179,7 +189,8 @@ export default function AreaManagerDashboardPage() {
         const absoluteTunggakanList = outlets.map(o => {
             const outletReports = reports.filter(r => r.user_id === o.id);
             const missing = [];
-            targetDates.forEach(date => {
+            const dates = getOutletTargetDates(o);
+            dates.forEach(date => {
                 const hasReport = outletReports.some(r => 
                     r.tanggal_jual === date && 
                     ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
@@ -199,7 +210,7 @@ export default function AreaManagerDashboardPage() {
             totalTunggakan,
             totalDiscrepancies
         };
-    }, [outlets, reports, targetDates, today]);
+    }, [outlets, reports, today]);
 
     // Client-side filter for report table (search, multi-select jenis, & toggle)
     const filteredReports = useMemo(() => {
