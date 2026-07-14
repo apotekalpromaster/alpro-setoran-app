@@ -150,8 +150,16 @@ export default function AreaManagerDashboardPage() {
         setCopiedId(id);
         setTimeout(() => setCopiedId(null), 3000);
 
-        // Open WhatsApp Web search
-        window.open('https://web.whatsapp.com/', '_blank');
+        const encoded = encodeURIComponent(message);
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+            // Mobile: use deep link to open WhatsApp native app directly
+            window.open('whatsapp://send?text=' + encoded, '_blank');
+        } else {
+            // Desktop: use direct WhatsApp Web link to open share contact picker directly
+            window.open('https://web.whatsapp.com/send?text=' + encoded, '_blank');
+        }
     };
 
     const selisihChip = (selisih) => {
