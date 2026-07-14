@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
 
 /**
- * LaporanPendingPage — Gap Analysis
+ * LaporanPendingPage â€” Gap Analysis
  *
  * Algorithm:
  * 1. Fetch all active User profiles (with email, frekuensi_setoran)
  * 2. Fetch all laporan tanggal_setor in the selected date range
  * 3. For each business day in the range:
  *    - If a user hasn't submitted any laporan on that day AND
- *    - Their frekuensi_setoran requires a report that day → mark as PENDING
+ *    - Their frekuensi_setoran requires a report that day â†’ mark as PENDING
  * 4. Display list of (user, pending dates) pairs for follow-up
  */
 
@@ -29,7 +29,7 @@ function getDateRange(period) {
     if (period === 'yesterday') { start.setDate(today.getDate() - 1); today.setDate(today.getDate() - 1); }
     else if (period === 'last_7') start.setDate(today.getDate() - 6);
     else if (period === 'last_30') start.setDate(today.getDate() - 29);
-    const fmt = (d) => d.toISOString().split('T')[0];
+    const fmt = (d) => d.toLocaleDateString('sv-SE');
     return { start: fmt(start), end: fmt(today) };
 }
 
@@ -39,7 +39,7 @@ function getBusinessDaysBetween(start, end) {
     const last = new Date(end);
     while (cur <= last) {
         const dow = cur.getDay(); // 0=Sun, 1=Mon...6=Sat
-        if (dow !== 0 && dow !== 6) days.push(cur.toISOString().split('T')[0]);
+        if (dow !== 0 && dow !== 6) days.push(cur.toLocaleDateString('sv-SE'));
         cur.setDate(cur.getDate() + 1);
     }
     return days;
@@ -87,13 +87,28 @@ export default function LaporanPendingPage() {
                 .eq('role', 'User');
             if (uErr) throw uErr;
 
-            // 2. All reports in range
-            const { data: laporanRaw, error: lErr } = await supabase
-                .from('laporan')
-                .select('user_id, tanggal_setor')
-                .gte('tanggal_setor', start)
-                .lte('tanggal_setor', end);
-            if (lErr) throw lErr;
+                        // 2. All reports in range (with sequential fetching to prevent truncation)
+            let laporanRaw = [];
+            let from = 0;
+            const limit = 1000;
+            let hasMore = true;
+
+            while (hasMore) {
+                const { data: pageData, error: lErr } = await supabase
+                    .from('laporan')
+                    .select('user_id, tanggal_setor')
+                    .gte('tanggal_setor', start)
+                    .lte('tanggal_setor', end)
+                    .range(from, from + limit - 1);
+                if (lErr) throw lErr;
+
+                laporanRaw = [...laporanRaw, ...pageData];
+                if (pageData.length < limit) {
+                    hasMore = false;
+                } else {
+                    from += limit;
+                }
+            }
 
             // 3. Build a Set<userId_date> of submitted dates
             const submitted = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_setor}`));
@@ -139,9 +154,9 @@ export default function LaporanPendingPage() {
                 body: { pending: pendingData },
             });
             if (err) throw err;
-            setEmailResult(`✅ Selesai! Sukses: ${data?.success ?? '?'}, Gagal: ${data?.failed ?? '?'}`);
+            setEmailResult(`âœ… Selesai! Sukses: ${data?.success ?? '?'}, Gagal: ${data?.failed ?? '?'}`);
         } catch (e) {
-            setEmailResult(`❌ Gagal: ${e.message}`);
+            setEmailResult(`âŒ Gagal: ${e.message}`);
         } finally {
             setSendingEmail(false);
         }
@@ -227,7 +242,7 @@ export default function LaporanPendingPage() {
                                 <div className="bg-red-50 border-b border-red-100 px-6 py-3 flex items-center gap-3">
                                     <span className="material-symbols-outlined text-red-500">warning</span>
                                     <p className="text-sm font-bold text-red-700">
-                                        {pendingData.length} toko belum melapor — {pendingData.reduce((s, p) => s + p.tanggalBolong.length, 0)} total hari bolong
+                                        {pendingData.length} toko belum melapor â€” {pendingData.reduce((s, p) => s + p.tanggalBolong.length, 0)} total hari bolong
                                     </p>
                                 </div>
                                 <div className="overflow-x-auto custom-scrollbar">
@@ -276,3 +291,5 @@ export default function LaporanPendingPage() {
         </AdminLayout>
     );
 }
+
+

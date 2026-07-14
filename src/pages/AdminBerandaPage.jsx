@@ -44,7 +44,8 @@ export default function AdminBerandaPage() {
         totalApotek: 0
     });
 
-    const [chartData, setChartData] = useState(null);
+        const [chartData, setChartData] = useState(null);
+    const [fraudAnomalies, setFraudAnomalies] = useState([]);
 
     useEffect(() => {
         fetchDashboardData();
@@ -138,13 +139,20 @@ export default function AdminBerandaPage() {
             const uangBelumDisetor = Math.max(0, sumSales - sumPotongan - sumSetoran);
             const belumLapor = (totalApotek || 0) - uniqueReporters.size;
 
-            setMetrics({
+                        setMetrics({
                 totalSales: sumSales,
                 totalSetoran: sumSetoran,
                 uangBelumDisetor,
                 belumLapor: Math.max(0, belumLapor),
                 totalApotek: totalApotek || 0
             });
+
+            // Fetch fraud anomalies
+            const { data: anomalies, error: aErr } = await supabase
+                .rpc('detect_missing_primary_sales');
+            if (!aErr) {
+                setFraudAnomalies(anomalies || []);
+            }
 
             // 5. Build Chart Data
             const sortedDates = Object.keys(dailyData).sort();
@@ -259,6 +267,27 @@ export default function AdminBerandaPage() {
                     <span className="material-symbols-outlined text-red-500">error</span>
                     <span><strong>Gagal memuat data:</strong> {error}</span>
                     <button onClick={fetchDashboardData} className="ml-auto text-xs font-bold underline hover:text-red-900">Coba Lagi</button>
+                </div>
+            )}
+
+                        {/* Anomali Fraud Warning Banner */}
+            {fraudAnomalies.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-6 space-y-3">
+                    <div className="flex items-center gap-3 text-red-700">
+                        <span className="material-symbols-outlined text-red-500 text-2xl">warning</span>
+                        <h4 className="font-bold text-sm">Peringatan: Terdeteksi Anomali Penjualan Tanpa Setoran Utama</h4>
+                    </div>
+                    <p className="text-xs text-red-600">
+                        Sistem mendeteksi toko-toko berikut melaporkan setoran jenis pecahan/lain tetapi belum mengunggah laporan setoran utama (Setoran Harian/3x Seminggu/Potongan) pada tanggal penjualan berikut:
+                    </p>
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                        {fraudAnomalies.map((anom, idx) => (
+                            <span key={idx} className="inline-flex items-center bg-red-100/70 text-red-800 text-xs px-2.5 py-1 rounded-lg border border-red-200 font-semibold shadow-xs">
+                                <span className="material-symbols-outlined text-xs mr-1">storefront</span>
+                                {anom.username} ({new Date(anom.tanggal_jual).toLocaleDateString('id-ID', {day: '2-digit', month: 'short'})})
+                            </span>
+                        ))}
+                    </div>
                 </div>
             )}
 

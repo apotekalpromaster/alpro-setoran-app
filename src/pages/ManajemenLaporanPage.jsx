@@ -110,7 +110,7 @@ export default function ManajemenLaporanPage() {
         });
     }, [rows, searchTerm, kcpFilter, showHighSelisih]);
 
-    // CSV export
+        // CSV export
     const downloadCSV = () => {
         if (!filtered.length) return;
         const header = 'Nama Apotek,Tgl Jual,Tgl Setor,Jenis,Metode,Deposit Card,KCP,Nominal Jual,Potongan,Nominal Setor,Selisih\n';
@@ -129,7 +129,19 @@ export default function ManajemenLaporanPage() {
                 r.selisih,
             ].join(',')
         ).join('\n');
-        const blob = new Blob([header + body], { type: 'text/csv;charset=utf-8;' });
+        
+        let footer = '';
+        if (hitLimit) {
+            footer += `\n\n# WARNING: Data dalam berkas CSV ini terpotong (maksimal ${MAX_ROWS} baris).\n# Silakan gunakan filter rentang tanggal yang lebih sempit untuk mengunduh laporan lengkap.\n`;
+        } else {
+            footer += `\n\n# Info: Ekspor data lengkap (${filtered.length} baris).\n`;
+        }
+        
+        const timestamp = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+        footer += `# Tanggal Ekspor: ${timestamp} WIB\n`;
+        footer += `# Filter - Nama: ${searchTerm || 'Semua'}, KCP: ${kcpFilter || 'Semua'}, Selisih: ${showHighSelisih ? '> 50rb' : 'Semua'}\n`;
+
+        const blob = new Blob([header + body + footer], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -195,8 +207,8 @@ export default function ManajemenLaporanPage() {
                         </div>
 
                         {/* Right toolbar */}
-                        <div className="flex items-center gap-4 justify-end">
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                <div className="flex items-center gap-2 justify-end flex-wrap">
+                            <label className="flex items-center gap-2 cursor-pointer select-none mr-2">
                                 <div
                                     onClick={() => setShowHighSelisih((p) => !p)}
                                     className={`relative w-10 h-6 rounded-full transition-colors ${showHighSelisih ? 'bg-orange-500' : 'bg-gray-200'}`}
@@ -205,7 +217,16 @@ export default function ManajemenLaporanPage() {
                                 </div>
                                 <span className="text-sm font-medium text-gray-700">Selisih &gt; 50rb</span>
                             </label>
-                            <button onClick={downloadCSV} disabled={!filtered.length} className="flex items-center gap-2 h-10 px-5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm">
+                            
+                            <button onClick={() => navigate('/finance/rekonsiliasi-pos')} className="flex items-center gap-2 h-10 px-4 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+                                <span className="material-symbols-outlined text-sm">compare</span> Rekonsiliasi POS
+                            </button>
+                            
+                            <button onClick={() => navigate('/finance/koreksi-approval')} className="flex items-center gap-2 h-10 px-4 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-sm">
+                                <span className="material-symbols-outlined text-sm">edit_note</span> Persetujuan Koreksi
+                            </button>
+
+                            <button onClick={downloadCSV} disabled={!filtered.length} className="flex items-center gap-2 h-10 px-4 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm">
                                 <span className="material-symbols-outlined text-sm">download</span> CSV
                             </button>
                         </div>
