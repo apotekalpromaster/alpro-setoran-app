@@ -216,13 +216,17 @@ export default function AreaManagerDashboardPage() {
 
     // Grand Totals for report table
     const tableTotals = useMemo(() => {
+        let totalSales = 0;
+        let totalPotongan = 0;
         let totalSetor = 0;
         let totalSelisih = 0;
         filteredReports.forEach((r) => {
+            totalSales += Number(r.nominal_jual || 0);
+            totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
             totalSelisih += Number(r.selisih || 0);
         });
-        return { totalSetor, totalSelisih };
+        return { totalSales, totalPotongan, totalSetor, totalSelisih };
     }, [filteredReports]);
 
     const handleCopyReminder = (outletName, missingDates, id) => {
@@ -492,6 +496,8 @@ export default function AreaManagerDashboardPage() {
                                                     <th className="px-5 py-4">Tgl Jual</th>
                                                     <th className="px-5 py-4">Jenis Pelaporan</th>
                                                     <th className="px-5 py-4">Metode</th>
+                                                    <th className="px-5 py-4 text-right">Nominal Sales</th>
+                                                    <th className="px-5 py-4 text-right">Potongan</th>
                                                     <th className="px-5 py-4 text-right">Nominal Setor</th>
                                                     <th className="px-5 py-4 text-center">Selisih</th>
                                                     <th className="px-5 py-4 text-center sticky right-0 bg-gray-50 shadow-sm border-l border-gray-200">Aksi</th>
@@ -506,6 +512,8 @@ export default function AreaManagerDashboardPage() {
                                                         </td>
                                                         <td className="px-5 py-4 text-xs font-semibold text-gray-500">{row.jenis_pelaporan}</td>
                                                         <td className="px-5 py-4 text-gray-500 text-xs">{row.metode_setoran}</td>
+                                                        <td className="px-5 py-4 text-right text-gray-900">{formatRupiah(row.nominal_jual || 0)}</td>
+                                                        <td className="px-5 py-4 text-right text-gray-500">{formatRupiah(row.potongan || 0)}</td>
                                                         <td className="px-5 py-4 text-right font-bold text-gray-900">{formatRupiah(row.nominal_setoran || 0)}</td>
                                                         <td className="px-5 py-4 text-center">{selisihChip(row.selisih)}</td>
                                                         <td className="px-5 py-4 text-center sticky right-0 bg-white group-hover:bg-gray-50/80 border-l border-gray-200">
@@ -524,6 +532,12 @@ export default function AreaManagerDashboardPage() {
                                                 <tr>
                                                     <td colSpan="4" className="px-5 py-4 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
                                                         Grand Total
+                                                    </td>
+                                                    <td className="px-5 py-4 text-right font-extrabold text-gray-900 font-mono">
+                                                        {formatRupiah(tableTotals.totalSales)}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-right font-extrabold text-gray-600 font-mono">
+                                                        {formatRupiah(tableTotals.totalPotongan)}
                                                     </td>
                                                     <td className="px-5 py-4 text-right font-extrabold text-gray-900 font-mono">
                                                         {formatRupiah(tableTotals.totalSetor)}
