@@ -115,7 +115,7 @@ serve(async (req: Request) => {
     }
 
     const fromEmail = 'apotekalpro.master@gmail.com';
-    const targetEmail = 'areamanager@apotekalpro.id, operation@apotekalpro.id, finance@apotekalpro.id';
+    const targetEmail = 'areamanager@apotekalpro.id, operation@apotekalpro.id, finance@apotekalpro.id, operation.excellence@apotekalpro.id';
 
     const periodStr = `${lastMonday.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })} - ${lastSunday.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`;
     const subject = `[AUDIT] Laporan Selisih Setoran Mingguan (>50k) - Periode ${periodStr}`;
