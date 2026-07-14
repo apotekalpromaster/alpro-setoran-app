@@ -20,6 +20,13 @@ export default function UserLayout({ children, title, activeRoute }) {
     const { profile, signOut } = useAuth();
     const navigate = useNavigate();
 
+    const isAM = profile?.role === 'AreaManager';
+    const items = isAM ? [
+        { label: 'Dashboard AM', icon: 'dashboard', path: '/areamanager/dashboard' },
+        { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
+        { label: 'Petunjuk Penggunaan', icon: 'menu_book', path: '/bantuan' },
+    ] : NAV_ITEMS;
+
     // sidebarOpen: null = desktop collapsed, false = mobile closed, true = either open
     const [collapsed, setCollapsed] = useState(false); // desktop collapse
     const [mobileOpen, setMobileOpen] = useState(false); // mobile drawer
@@ -67,7 +74,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                         </div>
                         <div className="min-w-0">
                             <p className="text-xs font-bold text-gray-800 truncate">{profile?.username || 'User'}</p>
-                            <p className="text-xs text-gray-500">{profile?.frekuensi_setoran || 'SETIAP HARI'}</p>
+                            <p className="text-xs text-gray-500">{profile?.role === 'AreaManager' ? 'Area Manager' : (profile?.frekuensi_setoran || 'SETIAP HARI')}</p>
                         </div>
                     </div>
                 )}
@@ -81,7 +88,7 @@ export default function UserLayout({ children, title, activeRoute }) {
 
                 {/* Nav items */}
                 <nav className="flex-1 overflow-y-auto p-2 space-y-1 mt-3">
-                    {NAV_ITEMS.map((item) => {
+                    {items.map((item) => {
                         const isActive = activeRoute === item.path;
                         return (
                             <button
