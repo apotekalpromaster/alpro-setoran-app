@@ -162,6 +162,17 @@ export default function AreaManagerDashboardPage() {
         });
     }, [reports, searchTerm, showHighSelisih]);
 
+    // Grand Totals for report table
+    const tableTotals = useMemo(() => {
+        let totalSetor = 0;
+        let totalSelisih = 0;
+        filteredReports.forEach((r) => {
+            totalSetor += Number(r.nominal_setoran || 0);
+            totalSelisih += Number(r.selisih || 0);
+        });
+        return { totalSetor, totalSelisih };
+    }, [filteredReports]);
+
     const handleCopyReminder = (outletName, missingDates, id) => {
         const dateStr = missingDates.map(d => d.formatted).join(', ');
         const message = `Halo tim Apotek Alpro ${outletName}, mohon bantuannya untuk mengunggah laporan setoran harian yang belum di-submit untuk tanggal: ${dateStr}. Terima kasih! - ${profile?.username || 'Area Manager'}`;
@@ -421,6 +432,20 @@ export default function AreaManagerDashboardPage() {
                                                     </tr>
                                                 ))}
                                             </tbody>
+                                            <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200 text-gray-900 sticky bottom-0">
+                                                <tr>
+                                                    <td colSpan="4" className="px-5 py-4 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
+                                                        Grand Total
+                                                    </td>
+                                                    <td className="px-5 py-4 text-right font-extrabold text-gray-900 font-mono">
+                                                        {formatRupiah(tableTotals.totalSetor)}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-center font-extrabold font-mono">
+                                                        {selisihChip(tableTotals.totalSelisih)}
+                                                    </td>
+                                                    <td className="px-5 py-4 sticky right-0 bg-gray-50 border-l border-gray-200"></td>
+                                                </tr>
+                                            </tfoot>
                                         </table>
                                     </div>
                                 )}
