@@ -108,6 +108,17 @@ export default function ManajemenLaporanPage() {
         });
     }, [rows, searchTerm, kcpFilter, showHighSelisih, jenisFilter]);
 
+    // Grand Totals
+    const totals = useMemo(() => {
+        let totalSetor = 0;
+        let totalSelisih = 0;
+        filtered.forEach((r) => {
+            totalSetor += Number(r.nominal_setoran || 0);
+            totalSelisih += Number(r.selisih || 0);
+        });
+        return { totalSetor, totalSelisih };
+    }, [filtered]);
+
     // CSV export
     const downloadCSV = () => {
         if (!filtered.length) return;
@@ -387,6 +398,20 @@ export default function ManajemenLaporanPage() {
                                             </tr>
                                         ))}
                                     </tbody>
+                                    <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200 text-gray-900 sticky bottom-0">
+                                        <tr>
+                                            <td colSpan="6" className="px-5 py-4 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
+                                                Grand Total
+                                            </td>
+                                            <td className="px-5 py-4 text-right font-extrabold text-gray-900 font-mono">
+                                                {formatRupiah(totals.totalSetor)}
+                                            </td>
+                                            <td className="px-5 py-4 text-center font-extrabold font-mono">
+                                                {selisihChip(totals.totalSelisih)}
+                                            </td>
+                                            <td className="px-5 py-4 sticky right-0 bg-gray-50 border-l border-gray-200"></td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         )}
