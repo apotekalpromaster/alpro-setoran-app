@@ -61,28 +61,28 @@ export default function DetailSetoranPage() {
             ? { text: `${formatRupiah(Math.abs(selisih))} (Lebih)`, color: 'text-blue-600' }
             : { text: 'Lunas (Rp 0)', color: 'text-green-600' };
 
-    // --- File upload staging ---
-    const [stagedFiles, setStagedFiles] = useState(formData.buktiFiles || []);
-
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        if (stagedFiles.length >= 3) {
-            setGlobalError('Maksimal 3 bukti lampiran.');
-            return;
+    // --- File upload staging (5 structured slots) ---
+    const [stagedFiles, setStagedFiles] = useState(() => {
+        if (Array.isArray(formData.buktiFiles) && formData.buktiFiles.length === 5) {
+            return formData.buktiFiles;
         }
-        setGlobalError('');
+        const base = Array.isArray(formData.buktiFiles) ? formData.buktiFiles : [];
+        return [...base, ...Array(5 - base.length).fill(null)].slice(0, 5);
+    });
+
+    const handleFileSlotChange = (slotIdx, file) => {
+        if (!file) return;
+        const updated = [...stagedFiles];
         const isImage = file.type.startsWith('image/');
         const preview = isImage ? URL.createObjectURL(file) : null;
-        const newFiles = [...stagedFiles, { file, name: file.name, preview, isImage }];
-        setStagedFiles(newFiles);
-        updateField({ buktiFiles: newFiles });
-        e.target.value = '';
+        updated[slotIdx] = { file, name: file.name, preview, isImage };
+        setStagedFiles(updated);
+        updateField({ buktiFiles: updated });
     };
 
-    const handleRemoveFile = (idx) => {
-        const updated = stagedFiles.filter((_, i) => i !== idx);
+    const handleRemoveSlotFile = (slotIdx) => {
+        const updated = [...stagedFiles];
+        updated[slotIdx] = null;
         setStagedFiles(updated);
         updateField({ buktiFiles: updated });
     };
@@ -185,7 +185,7 @@ export default function DetailSetoranPage() {
                                 </>
                             )}
                             <TextareaField label="Penjelasan" value={formData.penjelasan} onChange={(v) => updateField({ penjelasan: v.toUpperCase() })} placeholder="Kronologi kejadian..." />
-                            <UploadSection stagedFiles={stagedFiles} onAdd={handleFileChange} onRemove={handleRemoveFile} label="Bukti Dokumentasi" />
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} />
                         </>
                     )}
 
@@ -194,7 +194,7 @@ export default function DetailSetoranPage() {
                         <>
                             <CurrencyField label="Nominal Setoran" value={formData.nominalSetoran} onChange={(v) => updateField({ nominalSetoran: v })} />
                             <TextareaField label="Penjelasan" value={formData.penjelasan} onChange={(v) => updateField({ penjelasan: v.toUpperCase() })} placeholder="Jelaskan sumber uang lebih" />
-                            <UploadSection stagedFiles={stagedFiles} onAdd={handleFileChange} onRemove={handleRemoveFile} label="Bukti Setoran" />
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} />
                         </>
                     )}
 
@@ -315,82 +315,97 @@ function TextareaField({ label, value, onChange, placeholder }) {
     );
 }
 
-function UploadSection({ label, stagedFiles, onAdd, onRemove }) {
-    const galleryRef = useRef(null);
-    const cameraRef = useRef(null);
+function UploadSection({ stagedFiles, onSlotChange, onSlotRemove }) {
+    const slots = [
+        { idx: 0, label: "Bukti 1 (Kutipan Harian Toko)", required: true },
+        { idx: 1, label: "Bukti 2 (Settlement EDC)", required: true },
+        { idx: 2, label: "Bukti 3 (Bukti Setoran Teller/ATM)", required: true },
+        { idx: 3, label: "Bukti 4", required: false },
+        { idx: 4, label: "Bukti 5", required: false }
+    ];
 
     return (
-        <div>
-            <label className="block text-sm font-medium text-gray-500 mb-2">{label}</label>
+        <div className="space-y-4">
+            <label className="block text-sm font-bold text-gray-500 mb-2">Upload Bukti Setoran (Maksimal 5 file)</label>
+            
+            {slots.map((slot) => {
+                const sf = stagedFiles[slot.idx];
+                const fileInputRef = useRef(null);
+                const cameraInputRef = useRef(null);
 
-            {stagedFiles.length > 0 && (
-                <div className="space-y-2 mb-3">
-                    {stagedFiles.map((f, idx) => (
-                        <div key={idx} className="flex items-center gap-3 bg-green-50 border border-green-100 p-3 rounded-lg overflow-hidden">
-                            {f.isImage && f.preview ? (
-                                <img src={f.preview} alt="preview" className="h-12 w-12 object-cover rounded border border-gray-200 flex-shrink-0" />
-                            ) : (
-                                <div className="h-12 w-12 flex items-center justify-center bg-white text-gray-500 rounded border border-gray-200 flex-shrink-0 drop-shadow-sm">
-                                    <span className="material-symbols-outlined text-2xl">description</span>
+                return (
+                    <div key={slot.idx} className="p-4 border border-gray-200 rounded-xl bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block">
+                                {slot.label} {slot.required && <span className="text-red-500 font-bold">*Wajib</span>}
+                            </span>
+                            {sf ? (
+                                <div className="flex items-center gap-2 text-xs font-semibold text-gray-800">
+                                    {sf.isImage && sf.preview ? (
+                                        <img src={sf.preview} alt="preview" className="h-10 w-10 object-cover rounded border" />
+                                    ) : (
+                                        <span className="material-symbols-outlined text-gray-400 text-2xl">description</span>
+                                    )}
+                                    <span className="truncate max-w-[200px]" title={sf.name}>{sf.name}</span>
                                 </div>
+                            ) : (
+                                <span className="text-xs text-gray-400 italic">Belum ada file diunggah</span>
                             )}
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-gray-800 truncate">{f.name}</p>
-                                <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-                                    <span className="material-symbols-outlined text-xs">check_circle</span> Siap diupload
-                                </p>
-                            </div>
-                            <button type="button" onClick={() => onRemove(idx)} className="text-red-500 hover:text-red-700">
-                                <span className="material-symbols-outlined">delete</span>
-                            </button>
                         </div>
-                    ))}
-                </div>
-            )}
+                        
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                ref={fileInputRef}
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (file) onSlotChange(slot.idx, file);
+                                }}
+                            />
+                            <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                ref={cameraInputRef}
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (file) onSlotChange(slot.idx, file);
+                                }}
+                            />
 
-            {/* Hidden inputs */}
-            <input
-                ref={galleryRef}
-                type="file"
-                accept="image/*,application/pdf"
-                style={{ display: 'none' }}
-                onChange={onAdd}
-            />
-            <input
-                ref={cameraRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                style={{ display: 'none' }}
-                onChange={onAdd}
-            />
-
-            {stagedFiles.length < 3 && (
-                <div className="upload-box p-5 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 text-center hover:border-primary-400 hover:bg-orange-50 transition-colors">
-                    <div className="flex justify-center text-gray-400 mb-3">
-                        <span className="material-symbols-outlined text-4xl">cloud_upload</span>
+                            {sf ? (
+                                <button
+                                    type="button"
+                                    onClick={() => onSlotRemove(slot.idx)}
+                                    className="px-3 py-1.5 bg-white border border-red-200 text-red-500 hover:bg-red-50 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                                >
+                                    <span className="material-symbols-outlined text-sm">delete</span> Hapus
+                                </button>
+                              ) : (
+                                  <>
+                                      <button
+                                          type="button"
+                                          onClick={() => fileInputRef.current?.click()}
+                                          className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                                      >
+                                          <span className="material-symbols-outlined text-sm">upload_file</span> Pilih File
+                                      </button>
+                                      <button
+                                          type="button"
+                                          onClick={() => cameraInputRef.current?.click()}
+                                          className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                                      >
+                                          <span className="material-symbols-outlined text-sm">photo_camera</span> Foto
+                                      </button>
+                                  </>
+                              )}
+                        </div>
                     </div>
-                    <p className="text-xs text-gray-400 mb-3">Pilih sumber file — maks. 3 file</p>
-                    <div className="flex justify-center gap-3 flex-wrap">
-                        <button
-                            type="button"
-                            onClick={() => galleryRef.current?.click()}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold rounded-lg shadow-sm hover:bg-primary-50 hover:border-primary-400 hover:text-primary-600 transition-all active:scale-95"
-                        >
-                            <span className="material-symbols-outlined text-base">photo_library</span>
-                            Pilih File
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => cameraRef.current?.click()}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold rounded-lg shadow-sm hover:bg-primary-50 hover:border-primary-400 hover:text-primary-600 transition-all active:scale-95"
-                        >
-                            <span className="material-symbols-outlined text-base">photo_camera</span>
-                            Ambil Foto
-                        </button>
-                    </div>
-                </div>
-            )}
+                );
+            })}
         </div>
     );
 }

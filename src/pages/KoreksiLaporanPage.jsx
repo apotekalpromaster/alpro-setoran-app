@@ -35,7 +35,7 @@ export default function KoreksiLaporanPage() {
     const [newTanggalJual, setNewTanggalJual] = useState('');
     const [newTanggalSetor, setNewTanggalSetor] = useState('');
     const [newJenisPelaporan, setNewJenisPelaporan] = useState('');
-    const [stagedFiles, setStagedFiles] = useState([]);
+    const [stagedFiles, setStagedFiles] = useState([null, null, null, null, null]);
     const [uploadStatus, setUploadStatus] = useState('');
     const [explanation, setExplanation] = useState('');
     
@@ -136,23 +136,19 @@ export default function KoreksiLaporanPage() {
         }
     };
 
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
+    const handleFileSlotChange = (slotIdx, file) => {
         if (!file) return;
-
-        if (stagedFiles.length >= 3) {
-            setError('Maksimal 3 bukti lampiran.');
-            return;
-        }
-        setError('');
+        const updated = [...stagedFiles];
         const isImage = file.type.startsWith('image/');
         const preview = isImage ? URL.createObjectURL(file) : null;
-        setStagedFiles(prev => [...prev, { file, name: file.name, preview, isImage }]);
-        e.target.value = '';
+        updated[slotIdx] = { file, name: file.name, preview, isImage };
+        setStagedFiles(updated);
     };
 
-    const handleRemoveFile = (idx) => {
-        setStagedFiles(prev => prev.filter((_, i) => i !== idx));
+    const handleRemoveSlotFile = (slotIdx) => {
+        const updated = [...stagedFiles];
+        updated[slotIdx] = null;
+        setStagedFiles(updated);
     };
 
     const handleSubmit = async (e) => {
@@ -182,14 +178,19 @@ export default function KoreksiLaporanPage() {
         try {
             // 1. Upload staged files if any
             let newBuktiUrls = null;
-            if (stagedFiles.length > 0) {
+            if (stagedFiles.filter(Boolean).length > 0) {
                 newBuktiUrls = [];
+                const filesToUpload = stagedFiles.filter(Boolean);
+                let uploadCount = 1;
                 for (let i = 0; i < stagedFiles.length; i++) {
-                    const { file } = stagedFiles[i];
-                    setUploadStatus(`Mengunggah bukti baru (${i + 1}/${stagedFiles.length})...`);
-                    const url = await uploadToDrive(file);
-                    if (!url) throw new Error(`Gagal mengunggah file ${file.name}`);
-                    newBuktiUrls.push(url);
+                    const item = stagedFiles[i];
+                    if (item && item.file) {
+                        setUploadStatus(`Mengunggah bukti baru (${uploadCount}/${filesToUpload.length})...`);
+                        const url = await uploadToDrive(item.file);
+                        if (!url) throw new Error(`Gagal mengunggah file ${item.file.name}`);
+                        newBuktiUrls.push(url);
+                        uploadCount++;
+                    }
                 }
             }
 
@@ -378,62 +379,72 @@ export default function KoreksiLaporanPage() {
                                         </div>
                                     </div>
 
-                                    {/* UPLOAD LAMPIRAN BARU */}
-                                    <div className="pt-4 border-t border-gray-100 space-y-3">
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-500 mb-1">Ubah/Ganti Bukti Setoran Baru (Opsional)</label>
-                                            <p className="text-[11px] text-gray-400 mb-2">Unggah bukti transfer/setoran baru untuk mengganti lampiran yang salah sebelumnya (Maksimal 3 file, format gambar/PDF).</p>
-                                            
-                                            <div className="flex items-center gap-3">
-                                                <input
-                                                    type="file"
-                                                    onChange={handleFileChange}
-                                                    accept="image/*,application/pdf"
-                                                    className="hidden"
-                                                    id="bukti-koreksi-upload"
-                                                    disabled={stagedFiles.length >= 3}
-                                                />
-                                                <label
-                                                    htmlFor="bukti-koreksi-upload"
-                                                    className={`px-4 py-2 border rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm ${
-                                                        stagedFiles.length >= 3
-                                                            ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                                    }`}
-                                                >
-                                                    <span className="material-symbols-outlined text-base">upload_file</span>
-                                                    Pilih File Bukti Baru
-                                                </label>
-                                                <span className="text-[11px] text-gray-500">{stagedFiles.length} file dipilih</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Staged file list */}
-                                        {stagedFiles.length > 0 && (
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                                                {stagedFiles.map((sf, idx) => (
-                                                    <div key={idx} className="relative p-2 bg-white rounded border border-gray-200 flex items-center justify-between text-xs gap-2">
-                                                        <div className="flex items-center gap-1.5 min-w-0">
-                                                            {sf.isImage ? (
-                                                                <img src={sf.preview} className="h-8 w-8 object-cover rounded flex-shrink-0" />
-                                                            ) : (
-                                                                <span className="material-symbols-outlined text-gray-400 text-xl flex-shrink-0">description</span>
-                                                            )}
-                                                            <span className="truncate font-medium text-gray-700">{sf.name}</span>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemoveFile(idx)}
-                                                            className="text-red-500 hover:text-red-700 flex-shrink-0 flex items-center"
-                                                        >
-                                                            <span className="material-symbols-outlined text-base">delete</span>
-                                                        </button>
+                                    {/* UPLOAD LAMPIRAN BARU (5 optional slots for replacement) */}
+                                    <div className="pt-4 border-t border-gray-100 space-y-4">
+                                        <label className="block text-sm font-bold text-gray-500 mb-1">Ubah/Ganti Bukti Setoran Baru (Opsional)</label>
+                                        <p className="text-[11px] text-gray-400 mb-2">Unggah bukti transfer/setoran baru pada slot yang ingin diubah/diganti (Maksimal 5 file, format gambar/PDF).</p>
+                                        
+                                        {[
+                                            { idx: 0, label: "Ganti Bukti 1 (Kutipan Harian Toko)" },
+                                            { idx: 1, label: "Ganti Bukti 2 (Settlement EDC)" },
+                                            { idx: 2, label: "Ganti Bukti 3 (Bukti Setoran Teller/ATM)" },
+                                            { idx: 3, label: "Ganti Bukti 4 (Opsional)" },
+                                            { idx: 4, label: "Ganti Bukti 5 (Opsional)" }
+                                        ].map((slot) => {
+                                            const sf = stagedFiles[slot.idx];
+                                            return (
+                                                <div key={slot.idx} className="p-3 border border-gray-200 rounded-xl bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                                    <div className="space-y-1">
+                                                        <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block">
+                                                            {slot.label}
+                                                        </span>
+                                                        {sf ? (
+                                                            <div className="flex items-center gap-1.5 font-semibold text-gray-800">
+                                                                {sf.isImage && sf.preview ? (
+                                                                    <img src={sf.preview} alt="preview" className="h-8 w-8 object-cover rounded border" />
+                                                                ) : (
+                                                                    <span className="material-symbols-outlined text-gray-400 text-lg">description</span>
+                                                                )}
+                                                                <span className="truncate max-w-[150px]" title={sf.name}>{sf.name}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[11px] text-gray-400 italic">Tidak ada perubahan</span>
+                                                        )}
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                                    
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*,application/pdf"
+                                                            id={"koreksi-slot-file-input-" + slot.idx}
+                                                            className="hidden"
+                                                            onChange={(e) => {
+                                                                const file = e.target.files[0];
+                                                                if (file) handleFileSlotChange(slot.idx, file);
+                                                            }}
+                                                        />
+                                                        {sf ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveSlotFile(slot.idx)}
+                                                                className="px-2.5 py-1.5 bg-white border border-red-200 text-red-500 hover:bg-red-50 rounded-lg font-bold flex items-center gap-1 shadow-sm transition-all"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">delete</span> Hapus
+                                                            </button>
+                                                        ) : (
+                                                            <label
+                                                                htmlFor={"koreksi-slot-file-input-" + slot.idx}
+                                                                className="px-2.5 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">upload_file</span> Pilih File
+                                                            </label>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-
+                                    
                                     <div>
                                         <label className="block text-xs font-bold text-gray-500 mb-1">Penjelasan Alasan Koreksi (Wajib)</label>
                                         <textarea
