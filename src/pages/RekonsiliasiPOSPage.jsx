@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
+import * as XLSX from 'xlsx';
 
 export default function RekonsiliasiPOSPage() {
     const { profile } = useAuth();
@@ -26,6 +27,7 @@ export default function RekonsiliasiPOSPage() {
     
     const [parsedData, setParsedData] = useState([]);
     const [fileName, setFileName] = useState('');
+    const [profilesForLookup, setProfilesForLookup] = useState([]);
 
     useEffect(() => {
         fetchBranches();
@@ -36,11 +38,12 @@ export default function RekonsiliasiPOSPage() {
         try {
             const { data, error: err } = await supabase
                 .from('profiles')
-                .select('username')
+                .select('username, kode_toko')
                 .eq('role', 'User')
                 .order('username');
             if (err) throw err;
             setBranchesList(data.map(p => p.username) || []);
+            setProfilesForLookup(data || []);
         } catch (e) {
             console.error('Gagal memuat cabang:', e.message);
         }
@@ -151,7 +154,7 @@ export default function RekonsiliasiPOSPage() {
         return { total, cocok, selisih, kurangLaporan, kurangPOS };
     }, [reconData]);
 
-    const handleFileChange = (e) => {
+const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
         setFileName(file.name);
@@ -161,68 +164,101 @@ export default function RekonsiliasiPOSPage() {
         const reader = new FileReader();
         reader.onload = (event) => {
             try {
-                const text = event.target.result;
-                const lines = text.split(/\r?\n/);
-                if (lines.length === 0) throw new Error('Berkas kosong');
-
-                const headerLine = lines[0];
-                const separator = headerLine.includes(';') ? ';' : (headerLine.includes('\t') ? '\t' : ',');
-                const headers = headerLine.split(separator).map(h => h.trim().toLowerCase().replace(/^[\"']|[\"']$/g, ''));
-
-                const branchIdx = headers.findIndex(h => h.includes('cabang') || h.includes('branch') || h.includes('outlet') || h.includes('kode'));
-                const dateIdx = headers.findIndex(h => h.includes('tanggal') || h.includes('date') || h.includes('jual'));
-                const salesIdx = headers.findIndex(h => h.includes('sales') || h.includes('pos') || h.includes('nominal') || h.includes('omset'));
-
-                if (branchIdx === -1 || dateIdx === -1 || salesIdx === -1) {
-                    throw new Error('Format kolom tidak dikenali. Gunakan kolom: Kode Cabang, Tanggal, Sales POS');
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                
+                if (workbook.SheetNames.length === 0) {
+                    throw new Error('Berkas tidak memiliki sheet data.');
                 }
-
+                
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                
+                const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+                
+                if (rawRows.length < 13) {
+                    throw new Error('Berkas tidak memiliki baris data yang cukup (header di baris 13).');
+                }
+                
+                // Header is on row 13 (index 12)
+                const headers = rawRows[12].map(h => (h || '').toString().trim());
+                
+                // Create lookup map mapping both kode_toko and username to username
+                const storeMap = {};
+                profilesForLookup.forEach(p => {
+                    if (p.kode_toko) {
+                        storeMap[p.kode_toko.toString().trim().toLowerCase()] = p.username;
+                    }
+                    if (p.username) {
+                        storeMap[p.username.toString().trim().toLowerCase()] = p.username;
+                    }
+                });
+                
                 const rows = [];
-                for (let i = 1; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    if (!line) continue;
-                    const cols = line.split(separator).map(c => c.trim().replace(/^[\"']|[\"']$/g, ''));
-                    if (cols.length < headers.length) continue;
-
-                    const rawBranch = cols[branchIdx];
-                    const rawDate = cols[dateIdx];
-                    const rawSales = cols[salesIdx];
-
+                
+                // Data starts on row 14 (index 13)
+                for (let i = 13; i < rawRows.length; i++) {
+                    const row = rawRows[i];
+                    if (!row || row.length === 0) continue;
+                    
+                    const rawDateVal = (row[0] || '').toString().trim();
+                    const rawStoreVal = (row[1] || '').toString().trim();
+                    const rawSalesVal = (row[2] || '').toString().trim();
+                    
+                    // Filter: "hilangkan baris pada kolom A yang memiliki kata Total ataupun Grand Total"
+                    const lowerDate = rawDateVal.toLowerCase();
+                    if (lowerDate.includes('total') || lowerDate.includes('grand total') || !rawDateVal) {
+                        continue;
+                    }
+                    
+                    // Lookup B (Store) to profiles
+                    const cleanStoreKey = rawStoreVal.toLowerCase();
+                    const matchedUsername = storeMap[cleanStoreKey];
+                    
+                    if (!matchedUsername) {
+                        continue;
+                    }
+                    
+                    // Format Date to YYYY-MM-DD
                     let formattedDate = '';
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-                        formattedDate = rawDate;
+                    if (/^\d+(\.\d+)?$/.test(rawDateVal)) {
+                        const excelDateNum = parseFloat(rawDateVal);
+                        const d = new Date((excelDateNum - 25569) * 86400 * 1000);
+                        if (!isNaN(d.getTime())) {
+                            formattedDate = d.toLocaleDateString('sv-SE');
+                        }
                     } else {
-                        const d = new Date(rawDate);
+                        const d = new Date(rawDateVal);
                         if (!isNaN(d.getTime())) {
                             formattedDate = d.toLocaleDateString('sv-SE');
                         }
                     }
-
-                    const cleanSales = parseInt(rawSales.replace(/[^0-9-]/g, ''), 10);
-
-                    if (rawBranch && formattedDate && !isNaN(cleanSales)) {
+                    
+                    const cleanSales = parseInt(rawSalesVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
+                    
+                    if (matchedUsername && formattedDate) {
                         rows.push({
-                            kode_cabang: rawBranch,
+                            kode_cabang: matchedUsername,
                             tanggal_jual: formattedDate,
                             sales_pos: cleanSales
                         });
                     }
                 }
-
+                
                 if (rows.length === 0) {
-                    throw new Error('Tidak ada baris data valid yang berhasil dibaca.');
+                    throw new Error('Tidak ada baris data valid yang berhasil dibaca. Pastikan nama cabang terdaftar di profiles (lookup kode_toko).');
                 }
-
+                
                 setParsedData(rows);
             } catch (err) {
                 setError(err.message);
                 setParsedData([]);
             }
         };
-        reader.readAsText(file);
+        reader.readAsArrayBuffer(file);
     };
 
-    const handleSavePOS = async () => {
+        const handleSavePOS = async () => {
         if (parsedData.length === 0) return;
         setLoading(true);
         setError('');
@@ -292,7 +328,7 @@ export default function RekonsiliasiPOSPage() {
                                 : 'border-transparent text-gray-500 hover:text-gray-700'
                         }`}
                     >
-                        Upload CSV POS
+                        Upload Excel POS
                     </button>
                 </div>
 
@@ -456,7 +492,7 @@ export default function RekonsiliasiPOSPage() {
                             <span className="material-symbols-outlined text-5xl text-primary-500">cloud_upload</span>
                             <h3 className="text-lg font-bold text-gray-800">Unggah Data Penjualan POS</h3>
                             <p className="text-xs text-gray-500 max-w-md mx-auto">
-                                Unggah berkas CSV dari sistem POS untuk dibandingkan secara otomatis dengan pelaporan setoran manual apotek.
+                                Unggah berkas Excel (.xlsx) dari sistem POS untuk dibandingkan secara otomatis dengan pelaporan setoran manual apotek.
                             </p>
                         </div>
 
@@ -477,13 +513,13 @@ export default function RekonsiliasiPOSPage() {
                         <div className="border-2 border-dashed border-gray-300 hover:border-primary-400 transition-colors rounded-xl p-8 text-center relative cursor-pointer group">
                             <input
                                 type="file"
-                                accept=".csv"
+                                accept=".xlsx, .xls"
                                 onChange={handleFileChange}
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             />
                             <div className="space-y-1">
                                 <span className="text-sm font-bold text-gray-700 group-hover:text-primary-600 block">
-                                    {fileName ? fileName : 'Pilih Berkas CSV'}
+                                    {fileName ? fileName : 'Pilih Berkas Excel POS (.xlsx)'}
                                 </span>
                                 <span className="text-xs text-gray-400 block">
                                     {fileName ? 'Klik atau seret file lain untuk mengganti' : 'Seret berkas ke sini atau klik untuk mencari'}
@@ -492,11 +528,12 @@ export default function RekonsiliasiPOSPage() {
                         </div>
 
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-xs text-gray-600 space-y-2">
-                            <span className="font-bold text-gray-700 block">⚠️ Ketentuan Format CSV:</span>
+                            <span className="font-bold text-gray-700 block">💡 Ketentuan Format Excel:</span>
                             <ul className="list-disc pl-5 space-y-1">
-                                <li>Pemisah kolom otomatis dideteksi (Koma `,`, Titik Koma `;`, atau Tab).</li>
-                                <li>Wajib memiliki baris header berisi: <strong>Kode Cabang</strong> (username apotek), <strong>Tanggal Jual</strong> (sales date), dan <strong>Sales POS</strong> (nominal penjualan).</li>
-                                <li>Contoh baris data: <code className="bg-gray-200 px-1 py-0.5 rounded font-mono">bandung-01, 2026-06-25, 4500000</code>.</li>
+                                <li>Menerima berkas spreadsheet Excel (*.xlsx, *.xls).</li>
+                                <li>Baris header wajib berada pada <strong>baris 13</strong>, yang mendefinisikan kolom: <strong>Date</strong> (Kolom A), <strong>Store</strong> (Kolom B), dan <strong>Cash Amount Total</strong> (Kolom C).</li>
+                                <li>Kolom B (Store) otomatis dicocokkan dengan <strong>Kode Toko</strong> pada profil apotek untuk mendapatkan kode cabang yang sesuai.</li>
+                                <li>Baris total/grand total pada Kolom A otomatis disaring dan diabaikan.</li>
                             </ul>
                         </div>
 
