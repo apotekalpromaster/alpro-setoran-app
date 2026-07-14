@@ -239,7 +239,7 @@ export default function DetailSetoranPage() {
                                 <InputField label="Nomor Referensi Bank" value={formData.nomorMesinAtm} onChange={(v) => updateField({ nomorMesinAtm: v.toUpperCase() })} placeholder="Masukkan nomor referensi" />
                             )}
 
-                            <UploadSection stagedFiles={stagedFiles} onAdd={handleFileChange} onRemove={handleRemoveFile} label="Bukti Setoran" />
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} />
                         </>
                     )}
 
