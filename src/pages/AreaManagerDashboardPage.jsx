@@ -6,12 +6,24 @@ import { formatRupiah } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
 
 const DISCREPANCY_THRESHOLD = 50000;
+const PAGE_SIZE = 500;
 
 // Global cache variables to prevent loading spinner flickers when navigating back to this tab
 let cachedOutlets = [];
 let cachedReports = [];
 let cachedStartDate = '';
 let cachedEndDate = '';
+
+const JELAS_TYPES = [
+    { id: 'Setoran Harian', label: 'Setoran Harian' },
+    { id: 'Setoran 3x Seminggu', label: 'Setoran 3x Seminggu' },
+    { id: 'Setoran Sales Dengan Potongan Penjualan', label: 'Setoran Potongan' },
+    { id: 'Setoran Uang Pecahan Kecil', label: 'Uang Pecahan' },
+    { id: 'Setoran Uang Lebih', label: 'Uang Lebih' },
+    { id: 'Pengembalian Petty Cash', label: 'Petty Cash' },
+    { id: 'Deposit Card Terblokir (Salah Input PIN 3x)', label: 'Card Terblokir' },
+    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Card Tertelan' }
+];
 
 export default function AreaManagerDashboardPage() {
     const { profile } = useAuth();
@@ -39,7 +51,7 @@ export default function AreaManagerDashboardPage() {
     const [reportsStartDate, setReportsStartDate] = useState(defaultStart());
     const [reportsEndDate, setReportsEndDate] = useState(defaultEnd());
     const [showHighSelisih, setShowHighSelisih] = useState(false);
-    const [jenisFilter, setJenisFilter] = useState('');
+    const [selectedJenis, setSelectedJenis] = useState([]);
 
     // Fetch data whenever profile or selected date range changes
     useEffect(() => {
@@ -73,17 +85,34 @@ export default function AreaManagerDashboardPage() {
 
             const outletIds = outletList.map(o => o.id);
 
-            // 2. Fetch reports for these outlets within chosen date range (based on tanggal_jual)
-            const { data: reportData, error: rErr } = await supabase
-                .from('laporan')
-                .select('*')
-                .in('user_id', outletIds)
-                .gte('tanggal_jual', start)
-                .lte('tanggal_jual', end)
-                .order('tanggal_jual', { ascending: false });
+            // 2. Fetch reports for these outlets within chosen date range (paginated loop to prevent 1000 rows cap limit)
+            let allData = [];
+            let from = 0;
+            let done = false;
 
-            if (rErr) throw rErr;
-            const mappedReports = (reportData || []).map(row => ({
+            while (!done) {
+                const to = from + PAGE_SIZE - 1;
+                const { data, error: rErr } = await supabase
+                    .from('laporan')
+                    .select('*')
+                    .in('user_id', outletIds)
+                    .gte('tanggal_jual', start)
+                    .lte('tanggal_jual', end)
+                    .order('tanggal_jual', { ascending: false })
+                    .range(from, to);
+
+                if (rErr) throw rErr;
+                const batch = data || [];
+                allData = allData.concat(batch);
+
+                if (batch.length < PAGE_SIZE || allData.length >= 5000) {
+                    done = true;
+                } else {
+                    from += PAGE_SIZE;
+                }
+            }
+
+            const mappedReports = allData.map(row => ({
                 ...row,
                 selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
                 username: outletList.find(o => o.id === row.user_id)?.username || '-'
@@ -153,15 +182,15 @@ export default function AreaManagerDashboardPage() {
         };
     }, [outlets, reports, outletTunggakanList, today]);
 
-    // Client-side filter for report table (search, jenis, & toggle)
+    // Client-side filter for report table (search, multi-select jenis, & toggle)
     const filteredReports = useMemo(() => {
         return reports.filter(r => {
             const matchName = !searchTerm || r.username.toLowerCase().includes(searchTerm.toLowerCase());
             const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD;
-            const matchJenis = !jenisFilter || r.jenis_pelaporan === jenisFilter;
+            const matchJenis = selectedJenis.length === 0 || selectedJenis.includes(r.jenis_pelaporan);
             return matchName && matchSelisih && matchJenis;
         });
-    }, [reports, searchTerm, showHighSelisih, jenisFilter]);
+    }, [reports, searchTerm, showHighSelisih, selectedJenis]);
 
     // Grand Totals for report table
     const tableTotals = useMemo(() => {
@@ -200,11 +229,19 @@ export default function AreaManagerDashboardPage() {
     const handleResetFilters = () => {
         setSearchTerm('');
         setShowHighSelisih(false);
-        setJenisFilter('');
+        setSelectedJenis([]);
         const d = new Date();
         d.setDate(d.getDate() - 7);
         setReportsStartDate(d.toLocaleDateString('sv-SE'));
         setReportsEndDate(today);
+    };
+
+    const handleToggleJenis = (typeId) => {
+        if (selectedJenis.includes(typeId)) {
+            setSelectedJenis(selectedJenis.filter(x => x !== typeId));
+        } else {
+            setSelectedJenis([...selectedJenis, typeId]);
+        }
     };
 
     return (
@@ -336,9 +373,10 @@ export default function AreaManagerDashboardPage() {
                                 </h3>
                             </div>
 
-                            {/* FILTER ROW */}
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-3">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
+                            {/* FILTER CONTAINER */}
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
+                                {/* Row 1: Search and Date Range */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Cari Cabang</label>
                                         <input 
@@ -348,24 +386,6 @@ export default function AreaManagerDashboardPage() {
                                             placeholder="Nama apotek..." 
                                             className="form-input w-full py-1.5 px-3 text-xs" 
                                         />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Jenis Pelaporan</label>
-                                        <select
-                                            value={jenisFilter}
-                                            onChange={(e) => setJenisFilter(e.target.value)}
-                                            className="form-input w-full py-1.5 px-3 text-xs bg-gray-50 cursor-pointer"
-                                        >
-                                            <option value="">Semua Jenis</option>
-                                            <option value="Setoran Harian">Setoran Harian</option>
-                                            <option value="Setoran 3x Seminggu">Setoran 3x Seminggu</option>
-                                            <option value="Setoran Sales Dengan Potongan Penjualan">Setoran Potongan</option>
-                                            <option value="Setoran Uang Pecahan Kecil">Setoran Pecahan Kecil</option>
-                                            <option value="Setoran Uang Lebih">Setoran Uang Lebih</option>
-                                            <option value="Pengembalian Petty Cash">Pengembalian Petty Cash</option>
-                                            <option value="Deposit Card Terblokir (Salah Input PIN 3x)">Deposit Card Terblokir</option>
-                                            <option value="Deposit Card Tertelan Mesin ATM">Deposit Card Tertelan ATM</option>
-                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Dari Tgl Jual</label>
@@ -396,14 +416,37 @@ export default function AreaManagerDashboardPage() {
                                             <span className="text-xs font-bold text-gray-700">Selisih &gt; 50rb</span>
                                         </label>
                                         
-                                        {(searchTerm || showHighSelisih || jenisFilter || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
+                                        {(searchTerm || showHighSelisih || selectedJenis.length > 0 || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
                                             <button 
                                                 onClick={handleResetFilters}
-                                                className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
+                                                className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1 font-mono"
                                             >
                                                 <span className="material-symbols-outlined text-sm">clear_all</span> Reset
                                             </button>
                                         )}
+                                    </div>
+                                </div>
+
+                                {/* Row 2: Multi-select Jenis Pelaporan Chips */}
+                                <div className="pt-3 border-t border-gray-100 space-y-2">
+                                    <label className="block text-xs font-semibold text-gray-500">Filter Jenis Pelaporan (Bisa pilih lebih dari 1)</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {JELAS_TYPES.map((type) => {
+                                            const isSelected = selectedJenis.includes(type.id);
+                                            return (
+                                                <button
+                                                    key={type.id}
+                                                    onClick={() => handleToggleJenis(type.id)}
+                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all border ${
+                                                        isSelected
+                                                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-xs'
+                                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    {type.label}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>
