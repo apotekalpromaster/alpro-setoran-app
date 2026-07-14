@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import BerandaPage from './pages/BerandaPage';
 import AdminBerandaPage from './pages/AdminBerandaPage';
+import AreaManagerDashboardPage from './pages/AreaManagerDashboardPage';
 
 // Wizard
 import SetoranPage from './pages/SetoranPage';
@@ -45,7 +46,7 @@ function AppRoutes() {
         path="/"
         element={
           user
-            ? <Navigate to={isAdmin ? '/admin' : '/beranda'} replace />
+            ? <Navigate to={isAdmin ? '/admin' : (profile?.role === 'AreaManager' ? '/areamanager/dashboard' : '/beranda')} replace />
             : <LoginPage />
         }
       />
@@ -98,8 +99,18 @@ function AppRoutes() {
       <Route
         path="/riwayat/:id"
         element={
-          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance']}>
+          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance', 'AreaManager']}>
             <DetailRiwayatPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ===== AREA MANAGER ROUTES ===== */}
+      <Route
+        path="/areamanager/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['AreaManager']}>
+            <AreaManagerDashboardPage />
           </ProtectedRoute>
         }
       />
