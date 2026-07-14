@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useFormWizard } from '../context/FormWizardContext';
 import { parseRupiah, formatRupiah, validateSetoranData, NON_FINANCIAL_TYPES } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
+import { supabase } from '../services/supabaseClient';
 
 const STEP_INFO = ['Detail Laporan', 'Detail Setoran', 'Ringkasan & Kirim'];
 
@@ -24,6 +25,7 @@ export default function DetailSetoranPage() {
 
     // Build list of sales dates whose nominal needs to be entered
     const allSalesDates = [formData.tanggalPenjualan, ...(formData.tanggalPenjualanTambahan || [])].filter(Boolean);
+    const serializedSalesDates = allSalesDates.join(',');
 
     // Initialize nominalPenjualan array to match dates length
     useEffect(() => {
