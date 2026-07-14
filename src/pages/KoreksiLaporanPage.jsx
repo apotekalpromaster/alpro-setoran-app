@@ -136,6 +136,25 @@ export default function KoreksiLaporanPage() {
         }
     };
 
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (stagedFiles.length >= 3) {
+            setError('Maksimal 3 bukti lampiran.');
+            return;
+        }
+        setError('');
+        const isImage = file.type.startsWith('image/');
+        const preview = isImage ? URL.createObjectURL(file) : null;
+        setStagedFiles(prev => [...prev, { file, name: file.name, preview, isImage }]);
+        e.target.value = '';
+    };
+
+    const handleRemoveFile = (idx) => {
+        setStagedFiles(prev => prev.filter((_, i) => i !== idx));
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!selectedReport) {
@@ -147,9 +166,9 @@ export default function KoreksiLaporanPage() {
             return;
         }
 
-        const jualVal = parseInt(newJual.replace(/[^0-9-]/g, ''), 10);
-        const setoranVal = parseInt(newSetoran.replace(/[^0-9-]/g, ''), 10);
-        const potonganVal = parseInt(newPotongan.replace(/[^0-9-]/g, ''), 10);
+        const jualVal = parseInt(newJual.toString().replace(/[^0-9-]/g, ''), 10);
+        const setoranVal = parseInt(newSetoran.toString().replace(/[^0-9-]/g, ''), 10);
+        const potonganVal = parseInt(newPotongan.toString().replace(/[^0-9-]/g, ''), 10);
 
         if (isNaN(jualVal) || isNaN(setoranVal) || isNaN(potonganVal)) {
             setError('Nominal harus berupa angka valid.');
@@ -161,6 +180,19 @@ export default function KoreksiLaporanPage() {
         setSuccessMsg('');
 
         try {
+            // 1. Upload staged files if any
+            let newBuktiUrls = null;
+            if (stagedFiles.length > 0) {
+                newBuktiUrls = [];
+                for (let i = 0; i < stagedFiles.length; i++) {
+                    const { file } = stagedFiles[i];
+                    setUploadStatus(`Mengunggah bukti baru (${i + 1}/${stagedFiles.length})...`);
+                    const url = await uploadToDrive(file);
+                    if (!url) throw new Error(`Gagal mengunggah file ${file.name}`);
+                    newBuktiUrls.push(url);
+                }
+            }
+
             const { error: insertError } = await supabase
                 .from('koreksi_requests')
                 .insert({
@@ -169,6 +201,10 @@ export default function KoreksiLaporanPage() {
                     nominal_jual_baru: jualVal,
                     nominal_setoran_baru: setoranVal,
                     potongan_baru: potonganVal,
+                    tanggal_jual_baru: newTanggalJual || null,
+                    tanggal_setor_baru: newTanggalSetor || null,
+                    jenis_pelaporan_baru: newJenisPelaporan || null,
+                    bukti_urls_baru: newBuktiUrls,
                     penjelasan_koreksi: explanation.trim(),
                     status: 'Pending'
                 });
@@ -184,6 +220,7 @@ export default function KoreksiLaporanPage() {
             setError('Gagal mengirim koreksi: ' + err.message);
         } finally {
             setLoading(false);
+            setUploadStatus('');
         }
     };
 
