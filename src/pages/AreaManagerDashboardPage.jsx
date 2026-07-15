@@ -69,16 +69,18 @@ export default function AreaManagerDashboardPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [reportsStartDate, setReportsStartDate] = useState(defaultStart());
     const [reportsEndDate, setReportsEndDate] = useState(defaultEnd());
+    const [tempStartDate, setTempStartDate] = useState(defaultStart());
+    const [tempEndDate, setTempEndDate] = useState(defaultEnd());
     const [showHighSelisih, setShowHighSelisih] = useState(false);
     const [selectedJenis, setSelectedJenis] = useState([]);
 
-    // Fetch data whenever profile or selected date range changes
+    // Fetch data on initial load when profile is ready
     useEffect(() => {
         if (profile?.username) {
             const hasCache = cachedOutlets.length > 0;
             fetchData(reportsStartDate, reportsEndDate, hasCache);
         }
-    }, [profile, reportsStartDate, reportsEndDate]);
+    }, [profile]);
 
     const fetchData = async (start, end, silent = false) => {
         if (!silent) setLoading(true);
@@ -367,8 +369,19 @@ export default function AreaManagerDashboardPage() {
         setSelectedJenis([]);
         const d = new Date();
         d.setDate(d.getDate() - 7);
-        setReportsStartDate(d.toLocaleDateString('sv-SE'));
-        setReportsEndDate(today);
+        const resetStart = d.toLocaleDateString('sv-SE');
+        const resetEnd = today;
+        setReportsStartDate(resetStart);
+        setReportsEndDate(resetEnd);
+        setTempStartDate(resetStart);
+        setTempEndDate(resetEnd);
+        fetchData(resetStart, resetEnd, false);
+    };
+
+    const handleApplyFilter = () => {
+        setReportsStartDate(tempStartDate);
+        setReportsEndDate(tempEndDate);
+        fetchData(tempStartDate, tempEndDate, false);
     };
 
     const handleToggleJenis = (typeId) => {
@@ -510,24 +523,27 @@ export default function AreaManagerDashboardPage() {
 
                             {/* FILTER CONTAINER */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
-                                {/* Row 1: Search and Date Range */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                                {/* Row 1: Search and Date Range (4 columns grid) */}
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Cari Cabang</label>
-                                        <input 
-                                            type="text" 
+                                        <select 
                                             value={searchTerm} 
                                             onChange={(e) => setSearchTerm(e.target.value)} 
-                                            placeholder="Nama apotek..." 
-                                            className="form-input w-full py-1.5 px-3 text-xs" 
-                                        />
+                                            className="form-input w-full py-1.5 px-3 bg-gray-50 text-xs cursor-pointer font-bold text-gray-800"
+                                        >
+                                            <option value="">Semua Cabang</option>
+                                            {outlets.map(o => (
+                                                <option key={o.id} value={o.username}>{o.username} ({o.kode_toko || '-'})</option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Dari Tgl Jual</label>
                                         <input 
                                             type="date" 
-                                            value={reportsStartDate} 
-                                            onChange={(e) => setReportsStartDate(e.target.value)} 
+                                            value={tempStartDate} 
+                                            onChange={(e) => setTempStartDate(e.target.value)} 
                                             className="form-input w-full py-1.5 px-3 text-xs" 
                                         />
                                     </div>
@@ -535,30 +551,18 @@ export default function AreaManagerDashboardPage() {
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Sampai Tgl Jual</label>
                                         <input 
                                             type="date" 
-                                            value={reportsEndDate} 
-                                            onChange={(e) => setReportsEndDate(e.target.value)} 
+                                            value={tempEndDate} 
+                                            onChange={(e) => setTempEndDate(e.target.value)} 
                                             className="form-input w-full py-1.5 px-3 text-xs" 
                                         />
                                     </div>
-                                    <div className="flex items-center justify-between pb-1">
-                                        <label className="flex items-center gap-2 cursor-pointer select-none">
-                                            <div
-                                                onClick={() => setShowHighSelisih((p) => !p)}
-                                                className={`relative w-9 h-5 rounded-full transition-colors ${showHighSelisih ? 'bg-orange-500' : 'bg-gray-200'}`}
-                                            >
-                                                <div className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full shadow-xs transition-transform ${showHighSelisih ? 'translate-x-4' : ''}`} />
-                                            </div>
-                                            <span className="text-xs font-bold text-gray-700">Selisih &gt; 50rb</span>
-                                        </label>
-                                        
-                                        {(searchTerm || showHighSelisih || selectedJenis.length > 0 || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
-                                            <button 
-                                                onClick={handleResetFilters}
-                                                className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1 font-mono"
-                                            >
-                                                <span className="material-symbols-outlined text-sm">clear_all</span> Reset
-                                            </button>
-                                        )}
+                                    <div>
+                                        <button 
+                                            onClick={handleApplyFilter} 
+                                            className="w-full btn-primary h-9 px-4 text-xs flex items-center justify-center gap-1.5 font-bold"
+                                        >
+                                            <span className="material-symbols-outlined text-sm">filter_list</span> Terapkan Filter
+                                        </button>
                                     </div>
                                 </div>
 
@@ -582,6 +586,40 @@ export default function AreaManagerDashboardPage() {
                                                 </button>
                                             );
                                         })}
+                                    </div>
+                                </div>
+
+                                {/* Row 3: Action Buttons & Toggle (Premium Layout) */}
+                                <div className="flex flex-col sm:flex-row items-center justify-between pt-3 border-t border-gray-100 gap-4">
+                                    {/* Left side: Selisih toggle */}
+                                    <div className="w-full sm:w-auto">
+                                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                                            <div
+                                                onClick={() => setShowHighSelisih((p) => !p)}
+                                                className={`relative w-9 h-5 rounded-full transition-colors ${showHighSelisih ? 'bg-orange-500' : 'bg-gray-200'}`}
+                                            >
+                                                <div className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full shadow-xs transition-transform ${showHighSelisih ? 'translate-x-4' : ''}`} />
+                                            </div>
+                                            <span className="text-xs font-bold text-gray-700">Selisih &gt; 50rb</span>
+                                        </label>
+                                    </div>
+
+                                    {/* Right side: Action buttons */}
+                                    <div className="flex gap-2 w-full sm:w-auto">
+                                        {(searchTerm || showHighSelisih || selectedJenis.length > 0 || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
+                                            <button 
+                                                onClick={handleResetFilters}
+                                                className="flex-1 sm:flex-initial flex items-center justify-center gap-1 h-9 px-4 border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-red-500 rounded-lg transition-colors"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">clear_all</span> Reset
+                                            </button>
+                                        )}
+                                        <button 
+                                            onClick={() => fetchData(reportsStartDate, reportsEndDate, false)} 
+                                            className="flex-1 sm:flex-initial bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-9 px-5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                                        >
+                                            <span className="material-symbols-outlined text-sm">filter_list</span> Terapkan Filter
+                                        </button>
                                     </div>
                                 </div>
                             </div>
