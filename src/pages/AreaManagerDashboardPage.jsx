@@ -11,6 +11,7 @@ const PAGE_SIZE = 500;
 // Global cache variables to prevent loading spinner flickers when navigating back to this tab
 let cachedOutlets = [];
 let cachedReports = [];
+let cachedTunggakanReports = [];
 let cachedStartDate = '';
 let cachedEndDate = '';
 
@@ -42,6 +43,7 @@ export default function AreaManagerDashboardPage() {
     // States initialized from cache if available
     const [outlets, setOutlets] = useState(cachedOutlets);
     const [reports, setReports] = useState(cachedReports);
+    const [tunggakanReports, setTunggakanReports] = useState(cachedTunggakanReports);
     const [loading, setLoading] = useState(cachedOutlets.length === 0);
     const [error, setError] = useState('');
     const [copiedId, setCopiedId] = useState(null);
@@ -123,6 +125,44 @@ export default function AreaManagerDashboardPage() {
             cachedStartDate = start;
             cachedEndDate = end;
 
+            // 3. Fetch tunggakan report metadata (all reports from minTanggalAktif up to yesterday)
+            if (cachedTunggakanReports.length === 0 || !silent) {
+                const minTanggalAktif = outletList.reduce((min, o) => {
+                    if (!o.tanggal_aktif) return min;
+                    return o.tanggal_aktif < min ? o.tanggal_aktif : min;
+                }, today);
+
+                const yesterdayStr = new Date(new Date().setDate(new Date().getDate() - 1)).toLocaleDateString('sv-SE');
+
+                let tunggakanData = [];
+                let tFrom = 0;
+                let tDone = false;
+
+                while (!tDone) {
+                    const tTo = tFrom + PAGE_SIZE - 1;
+                    const { data: tBatch, error: tErr } = await supabase
+                        .from('laporan')
+                        .select('user_id, tanggal_jual, jenis_pelaporan')
+                        .in('user_id', outletIds)
+                        .gte('tanggal_jual', minTanggalAktif)
+                        .lte('tanggal_jual', yesterdayStr)
+                        .range(tFrom, tTo);
+
+                    if (tErr) throw tErr;
+                    const batch = tBatch || [];
+                    tunggakanData = tunggakanData.concat(batch);
+
+                    if (batch.length < PAGE_SIZE) {
+                        tDone = true;
+                    } else {
+                        tFrom += PAGE_SIZE;
+                    }
+                }
+
+                setTunggakanReports(tunggakanData);
+                cachedTunggakanReports = tunggakanData;
+            }
+
         } catch (e) {
             setError(e.message || 'Gagal memuat data dashboard.');
         } finally {
@@ -153,7 +193,7 @@ export default function AreaManagerDashboardPage() {
     // Analyze each outlet's missing sales dates (filtered by search term as well)
     const outletTunggakanList = useMemo(() => {
         const list = outlets.map(o => {
-            const outletReports = reports.filter(r => r.user_id === o.id);
+            const outletReports = tunggakanReports.filter(r => r.user_id === o.id);
             const missing = [];
             const dates = getOutletTargetDates(o);
             dates.forEach(date => {
@@ -176,7 +216,7 @@ export default function AreaManagerDashboardPage() {
         const cleanSearch = searchTerm.trim().toLowerCase();
         if (!cleanSearch) return list;
         return list.filter(o => o.username.toLowerCase().includes(cleanSearch));
-    }, [outlets, reports, searchTerm]);
+    }, [outlets, tunggakanReports, searchTerm]);
 
     // Overall stats calculations
     const stats = useMemo(() => {
@@ -187,7 +227,7 @@ export default function AreaManagerDashboardPage() {
         
         // Non-filtered tunggakan list for absolute statistics
         const absoluteTunggakanList = outlets.map(o => {
-            const outletReports = reports.filter(r => r.user_id === o.id);
+            const outletReports = tunggakanReports.filter(r => r.user_id === o.id);
             const missing = [];
             const dates = getOutletTargetDates(o);
             dates.forEach(date => {
@@ -368,7 +408,7 @@ export default function AreaManagerDashboardPage() {
                                 <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto custom-scrollbar">
                                     {outletTunggakanList.map((o) => (
                                         <div key={o.id} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50/50 transition-colors">
-                                            <div className="space-y-1.5">
+                                            <div className="space-y-1.5 flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-bold text-gray-900 text-sm">{o.username}</span>
                                                     <span className="text-[10px] text-gray-400 font-mono">({o.kode_toko || '-'})</span>
@@ -384,7 +424,7 @@ export default function AreaManagerDashboardPage() {
                                             </div>
                                             <button 
                                                 onClick={() => handleCopyReminder(o.username, o.missingDates, o.id)}
-                                                className={`w-full sm:w-auto h-8 px-4 flex items-center justify-center gap-1.5 text-xs font-bold rounded-lg border transition-all shadow-xs ${
+                                                className={`w-full sm:w-auto h-8 px-4 flex items-center justify-center gap-1.5 text-xs font-bold rounded-lg border transition-all shadow-xs whitespace-nowrap flex-shrink-0 ${
                                                     copiedId === o.id 
                                                         ? 'bg-green-50 border-green-200 text-green-700'
                                                         : 'bg-primary-600 border-primary-700 text-white hover:bg-primary-700'
