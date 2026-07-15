@@ -109,12 +109,14 @@ export default function AreaManagerDashboardPage() {
             const outletCodes = outletList.map(o => o.kode_toko).filter(Boolean);
             const searchKeys = [...new Set([...outletUsernames, ...outletCodes])];
 
-            // Fetch POS sales data for lookup
+            // Fetch POS sales data for lookup (filtered by date range to prevent Supabase 1000-rows truncation limit)
             if (searchKeys.length > 0 && (Object.keys(cachedPosSalesMap).length === 0 || !silent)) {
                 const { data: posData, error: posErr } = await supabase
                     .from('pos_sales_data')
                     .select('kode_cabang, tanggal_jual, sales_pos')
-                    .in('kode_cabang', searchKeys);
+                    .in('kode_cabang', searchKeys)
+                    .gte('tanggal_jual', start)
+                    .lte('tanggal_jual', end);
 
                 if (!posErr && posData) {
                     const map = {};
