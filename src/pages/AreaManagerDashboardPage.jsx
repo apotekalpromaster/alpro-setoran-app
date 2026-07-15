@@ -349,7 +349,7 @@ export default function AreaManagerDashboardPage() {
                                         <span className="material-symbols-outlined text-amber-500">warning</span>
                                         Daftar Tunggakan Pelaporan Harian (Wilayah Anda)
                                     </h3>
-                                    <p className="text-[10px] text-gray-400 mt-0.5">Dihitung berdasarkan tanggal penjualan (sales) yang belum dilaporkan/disetor dalam 7 hari terakhir.</p>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">Dihitung berdasarkan tanggal penjualan (sales) yang belum dilaporkan/disetor sejak tanggal aktif masing-masing outlet.</p>
                                 </div>
                                 <span className="text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
                                     {outletTunggakanList.length} Cabang Menunggak
@@ -584,3 +584,4 @@ function StatCard({ icon, color, title, value, desc }) {
         </div>
     );
 }
+
