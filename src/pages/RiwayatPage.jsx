@@ -148,35 +148,28 @@ export default function RiwayatPage() {
         let totalPotongan = 0;
         let totalSetor = 0;
         let totalPosSales = 0;
-        let totalSelisih1 = 0;
-        let totalSelisih2 = 0;
-        let hasAnyPosForTotals = false;
-        let hasAnyPosForTotals2 = false;
+        let totalSalesForPos = 0;
 
         filteredReports.forEach((r) => {
             totalSales += Number(r.nominal_jual || 0);
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
 
-            // POS value for the date (exists regardless of type)
-            const posValAll = posSalesMap[r.tanggal_jual];
-
-            // Selisih 1 (only valid types)
             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            const posVal1 = isValidTypeForPOS ? posValAll : undefined;
+            const posVal = isValidTypeForPOS ? posSalesMap[r.tanggal_jual] : undefined;
 
-            if (posVal1 !== undefined && posVal1 !== null) {
-                totalPosSales += Number(posVal1);
-                totalSelisih1 += Number(r.nominal_jual || 0) - Number(posVal1);
-                hasAnyPosForTotals = true;
-            }
-
-            // Selisih 2 (all report types!)
-            if (posValAll !== undefined && posValAll !== null) {
-                totalSelisih2 += (Number(r.potongan || 0) + Number(r.nominal_setoran || 0)) - Number(posValAll);
-                hasAnyPosForTotals2 = true;
+            if (posVal !== undefined && posVal !== null) {
+                totalPosSales += Number(posVal);
+                totalSalesForPos += Number(r.nominal_jual || 0);
             }
         });
+
+        // Compare grand total values directly to prevent double-counting of POS sales across multiple report types
+        const totalSelisih1 = totalSalesForPos - totalPosSales;
+        const totalSelisih2 = (totalPotongan + totalSetor) - totalPosSales;
+        const hasAnyPosForTotals = totalPosSales > 0;
+        const hasAnyPosForTotals2 = totalPosSales > 0;
+
         return { totalSales, totalPotongan, totalSetor, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals, hasAnyPosForTotals2 };
     }, [filteredReports, posSalesMap]);
 
