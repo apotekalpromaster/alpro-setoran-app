@@ -306,22 +306,33 @@ export default function RiwayatPage() {
                             <p className="text-sm text-gray-400">Tidak ada laporan sesuai filter yang dipilih.</p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1030px]">
-                                <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 sticky top-0 z-10">
+                        <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg shadow-inner bg-white">
+                            <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1200px] border-collapse">
+                                <colgroup>
+                                    <col style={{ width: '100px' }} />
+                                    <col style={{ width: '180px' }} />
+                                    <col style={{ width: '160px' }} />
+                                    <col style={{ width: '130px' }} />
+                                    <col style={{ width: '120px' }} />
+                                    <col style={{ width: '220px' }} />
+                                    <col style={{ width: '120px' }} />
+                                    <col style={{ width: '110px' }} />
+                                    <col style={{ width: '60px' }} />
+                                </colgroup>
+                                <thead className="text-xs font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-20 border-b border-gray-200">
                                     <tr>
-                                        <th className="px-3 py-3.5 whitespace-nowrap" style={{ width: '100px', minWidth: '100px', maxWidth: '100px' }}>Tgl Sales</th>
-                                        <th className="px-3 py-3.5 whitespace-nowrap" style={{ width: '160px', minWidth: '160px', maxWidth: '160px' }}>Jenis Laporan</th>
-                                        <th className="px-3 py-3.5 whitespace-nowrap" style={{ width: '160px', minWidth: '160px', maxWidth: '160px' }}>Metode</th>
-                                        <th className="px-3 py-3.5 text-right whitespace-nowrap bg-blue-50 text-blue-700 font-bold" style={{ width: '130px', minWidth: '130px', maxWidth: '130px' }}>Data Sales (Xilnex)</th>
-                                        <th className="px-3 py-3.5 text-right whitespace-nowrap" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>Nominal Sales</th>
-                                        <th className="px-3 py-3.5 text-right whitespace-nowrap" style={{ width: '180px', minWidth: '180px', maxWidth: '180px' }}>Potongan Penjualan (Petty Cash)</th>
-                                        <th className="px-3 py-3.5 text-right whitespace-nowrap" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>Nominal Setor</th>
-                                        <th className="px-3 py-3.5 text-center whitespace-nowrap" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>Selisih</th>
-                                        <th className="px-3 py-3.5 text-center whitespace-nowrap" style={{ width: '70px', minWidth: '70px', maxWidth: '70px' }}>Aksi</th>
+                                        <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Tgl Sales</th>
+                                        <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Jenis Laporan</th>
+                                        <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Metode</th>
+                                        <th className="px-3 py-3 text-right bg-blue-50 text-blue-700 font-bold sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Data Sales (Xilnex)</th>
+                                        <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Nominal Sales</th>
+                                        <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Potongan Penjualan (Petty Cash)</th>
+                                        <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Nominal Setor</th>
+                                        <th className="px-3 py-3 text-center bg-gray-50 sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Selisih</th>
+                                        <th className="px-3 py-3 text-center bg-gray-50 sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Aksi</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-100 text-gray-700">
+                                <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
                                     {paginatedReports.map((item, idx) => {
                                         const badge = getBadge(item.jenis_pelaporan);
                                         const isAnomali = badge.cls === 'badge-danger';
@@ -331,10 +342,10 @@ export default function RiwayatPage() {
                                                 key={item.id}
                                                 className={'hover:bg-gray-50/50 transition-colors group ' + (isAnomali ? 'bg-red-50/30' : '')}
                                             >
-                                                <td className="px-3 py-3 font-bold text-gray-900 text-xs truncate" style={{ width: '100px', minWidth: '100px', maxWidth: '100px' }}>
+                                                <td className="px-3 py-3 font-bold text-gray-900 text-xs truncate">
                                                     {formatDisplayDate(item.tanggal_jual)}
                                                 </td>
-                                                <td className="px-3 py-3 text-xs" style={{ width: '160px', minWidth: '160px', maxWidth: '160px' }}>
+                                                <td className="px-3 py-3 text-xs">
                                                     <div className="truncate">
                                                         <p className="font-semibold text-gray-800 text-[12px] truncate" title={item.jenis_pelaporan}>{item.jenis_pelaporan}</p>
                                                         <span className={'inline-block text-[9px] font-bold px-2 py-0.25 rounded-full mt-0.5 ' + badge.cls}>
@@ -342,25 +353,25 @@ export default function RiwayatPage() {
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-3 text-xs text-gray-500 truncate" style={{ width: '160px', minWidth: '160px', maxWidth: '160px' }} title={item.metode_setoran}>
+                                                <td className="px-3 py-3 text-xs text-gray-500 truncate" title={item.metode_setoran}>
                                                     {item.metode_setoran}
                                                 </td>
-                                                <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold" style={{ width: '130px', minWidth: '130px', maxWidth: '130px' }}>
+                                                <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
                                                     {posVal !== undefined ? formatRupiah(posVal) : <span className="text-gray-300">-</span>}
                                                 </td>
-                                                <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
+                                                <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">
                                                     {formatRupiah(item.nominal_jual || 0)}
                                                 </td>
-                                                <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs" style={{ width: '180px', minWidth: '180px', maxWidth: '180px' }}>
+                                                <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">
                                                     {formatRupiah(item.potongan || 0)}
                                                 </td>
-                                                <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
+                                                <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">
                                                     {formatRupiah(item.nominal_setoran || 0)}
                                                 </td>
-                                                <td className="px-3 py-3 text-center font-mono text-xs" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
+                                                <td className="px-3 py-3 text-center font-mono text-xs">
                                                     {selisihChip(item.selisih)}
                                                 </td>
-                                                <td className="px-3 py-3 text-center" style={{ width: '70px', minWidth: '70px', maxWidth: '70px' }}>
+                                                <td className="px-3 py-3 text-center">
                                                     <button
                                                         onClick={() => navigate('/riwayat/' + item.id)}
                                                         className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
@@ -372,27 +383,27 @@ export default function RiwayatPage() {
                                         );
                                     })}
                                 </tbody>
-                                <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300 text-gray-900 text-xs">
+                                <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300 text-gray-900 text-xs sticky bottom-0 z-20">
                                     <tr>
-                                        <td colSpan="3" className="px-3 py-3 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]" style={{ width: '420px', minWidth: '420px', maxWidth: '420px' }}>
+                                        <td colSpan="3" className="px-3 py-3 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
                                             Grand Total
                                         </td>
-                                        <td className="px-3 py-3 text-right font-extrabold text-blue-800 font-mono bg-blue-100" style={{ width: '130px', minWidth: '130px', maxWidth: '130px' }}>
+                                        <td className="px-3 py-3 text-right font-extrabold text-blue-800 font-mono bg-blue-100">
                                             {formatRupiah(tableTotals.totalPosSales)}
                                         </td>
-                                        <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
+                                        <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
                                             {formatRupiah(tableTotals.totalSales)}
                                         </td>
-                                        <td className="px-3 py-3 text-right font-extrabold text-gray-600 font-mono bg-gray-100" style={{ width: '180px', minWidth: '180px', maxWidth: '180px' }}>
+                                        <td className="px-3 py-3 text-right font-extrabold text-gray-600 font-mono bg-gray-100">
                                             {formatRupiah(tableTotals.totalPotongan)}
                                         </td>
-                                        <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
+                                        <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
                                             {formatRupiah(tableTotals.totalSetor)}
                                         </td>
-                                        <td className="px-3 py-3 text-center font-extrabold font-mono bg-gray-100" style={{ width: '110px', minWidth: '110px', maxWidth: '110px' }}>
+                                        <td className="px-3 py-3 text-center font-extrabold font-mono bg-gray-100">
                                             {selisihChip(tableTotals.totalSelisih)}
                                         </td>
-                                        <td className="px-3 py-3 bg-gray-100" style={{ width: '70px', minWidth: '70px', maxWidth: '70px' }}></td>
+                                        <td className="px-3 py-3 bg-gray-100"></td>
                                     </tr>
                                 </tfoot>
                             </table>
