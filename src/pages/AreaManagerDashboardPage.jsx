@@ -27,6 +27,21 @@ const JELAS_TYPES = [
     { id: 'Deposit Card Tertelan Mesin ATM', label: 'Card Tertelan' }
 ];
 
+const BADGE_CONFIG = {
+    'Setoran Harian': { label: 'Harian', cls: 'badge-success' },
+    'Setoran 3x Seminggu': { label: '3x Seminggu', cls: 'badge-success' },
+    'Setoran Sales Dengan Potongan Penjualan': { label: 'Setoran Potongan', cls: 'badge-success' },
+    'Setoran Uang Pecahan Kecil': { label: 'Pecahan Kecil', cls: 'badge-warning' },
+    'Setoran Uang Lebih': { label: 'Uang Lebih', cls: 'badge-warning' },
+    'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'badge-warning' },
+    'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'badge-danger' },
+    'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'badge-danger' }
+};
+
+function getBadge(jenis) {
+    return BADGE_CONFIG[jenis] || { label: jenis, cls: 'badge-normal' };
+}
+
 export default function AreaManagerDashboardPage() {
     const { profile } = useAuth();
     const navigate = useNavigate();
