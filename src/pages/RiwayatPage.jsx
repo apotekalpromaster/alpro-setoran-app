@@ -387,7 +387,7 @@ export default function RiwayatPage() {
                                                     {item.metode_setoran}
                                                 </td>
                                                 <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
-                                                    {posVal !== undefined ? formatRupiah(posVal) : <span className="text-gray-300">-</span>}
+                                                    {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
                                                 </td>
                                                 <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">
                                                     {formatRupiah(item.nominal_jual || 0)}
@@ -473,4 +473,5 @@ export default function RiwayatPage() {
         </UserLayout>
     );
 }
+
 
