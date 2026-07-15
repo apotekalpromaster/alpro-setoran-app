@@ -147,20 +147,27 @@ export default function RiwayatPage() {
         let totalSales = 0;
         let totalPotongan = 0;
         let totalSetor = 0;
-        let totalSelisih = 0;
         let totalPosSales = 0;
+        let totalSelisih1 = 0;
+        let totalSelisih2 = 0;
+        let hasAnyPosForTotals = false;
+
         filteredReports.forEach((r) => {
             totalSales += Number(r.nominal_jual || 0);
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
-            totalSelisih += Number(r.selisih || 0);
 
-            const posVal = posSalesMap[r.tanggal_jual];
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            const posVal = isValidTypeForPOS ? posSalesMap[r.tanggal_jual] : undefined;
+
             if (posVal !== undefined && posVal !== null) {
                 totalPosSales += Number(posVal);
+                totalSelisih1 += Number(r.nominal_jual || 0) - Number(posVal);
+                totalSelisih2 += (Number(r.potongan || 0) + Number(r.nominal_setoran || 0)) - Number(posVal);
+                hasAnyPosForTotals = true;
             }
         });
-        return { totalSales, totalPotongan, totalSetor, totalSelisih, totalPosSales };
+        return { totalSales, totalPotongan, totalSetor, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals };
     }, [filteredReports, posSalesMap]);
 
     const totalPages = Math.ceil(filteredReports.length / ITEMS_PER_PAGE);
@@ -339,7 +346,9 @@ export default function RiwayatPage() {
                                     {paginatedReports.map((item, idx) => {
                                         const badge = getBadge(item.jenis_pelaporan);
                                         const isAnomali = badge.cls === 'badge-danger';
-                                        const posVal = posSalesMap[item.tanggal_jual];
+                                        
+                                        const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(item.jenis_pelaporan);
+                                        const posVal = isValidTypeForPOS ? posSalesMap[item.tanggal_jual] : undefined;
 
                                         const hasPOS = posVal !== undefined && posVal !== null;
                                         const s1 = hasPOS ? (item.nominal_jual || 0) - posVal : null;
