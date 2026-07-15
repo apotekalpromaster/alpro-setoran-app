@@ -7,11 +7,14 @@ import AutocompleteInput from '../components/AutocompleteInput';
 
 const DISCREPANCY_THRESHOLD = 50000;
 const PAGE_SIZE = 500;
-const MAX_ROWS = 5000;
+const MAX_ROWS = 100000;
 
 export default function ManajemenLaporanPage() {
     const navigate = useNavigate();
     const today = new Date().toLocaleDateString('sv-SE');
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 100;
 
     // Filters
     const [startDate, setStartDate] = useState(today);
@@ -36,6 +39,7 @@ export default function ManajemenLaporanPage() {
         setError('');
         setFetchTriggered(true);
         setHitLimit(false);
+        setCurrentPage(1);
 
         try {
             let allData = [];
@@ -141,6 +145,14 @@ export default function ManajemenLaporanPage() {
             return matchSelisih;
         });
     }, [rows, showHighSelisih]);
+
+    const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+    const paginatedRows = useMemo(() => {
+        return filtered.slice(
+            (currentPage - 1) * ITEMS_PER_PAGE,
+            currentPage * ITEMS_PER_PAGE
+        );
+    }, [filtered, currentPage]);
 
     // Grand Totals
     const totals = useMemo(() => {
@@ -427,7 +439,8 @@ export default function ManajemenLaporanPage() {
                                 <p className="text-xs text-gray-400 mt-1">Coba sesuaikan filter pencarian atau periode tanggal Anda.</p>
                             </div>
                         ) : (
-                            <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
+                            <>
+                                <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
                                 <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1850px] border-collapse">
                                     <colgroup>
                                         <col style={{ width: '180px' }} />
@@ -466,7 +479,7 @@ export default function ManajemenLaporanPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
-                                        {filtered.map((row) => {
+                                        {paginatedRows.map((row) => {
                                             const posValAll = row.posVal;
                                             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(row.jenis_pelaporan);
                                             const posVal1 = isValidTypeForPOS ? posValAll : undefined;
@@ -550,6 +563,31 @@ export default function ManajemenLaporanPage() {
                                     </tfoot>
                                 </table>
                             </div>
+                                {/* Pagination */}
+                                {totalPages > 1 && (
+                                    <div className="mt-0 flex justify-between items-center bg-gray-50 p-3 rounded-b-xl border-t border-gray-200">
+                                        <span className="text-xs text-gray-500 font-medium">
+                                            Menampilkan Halaman <strong className="text-gray-700">{currentPage}</strong> dari <strong className="text-gray-700">{totalPages}</strong> ({filtered.length} baris)
+                                        </span>
+                                        <div className="flex gap-1">
+                                            <button
+                                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                                disabled={currentPage === 1}
+                                                className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                Sebelumnya
+                                            </button>
+                                            <button
+                                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                                disabled={currentPage === totalPages}
+                                                className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                Berikutnya
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 )}
