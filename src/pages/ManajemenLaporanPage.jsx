@@ -168,12 +168,14 @@ export default function ManajemenLaporanPage() {
         let totalSalesForPos = 0;
 
         filtered.forEach((r) => {
-            totalSales += Number(r.nominal_jual || 0);
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            if (isValidTypeForPOS) {
+                totalSales += Number(r.nominal_jual || 0);
+            }
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
 
             const posValAll = r.posVal;
-            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
             const posVal = isValidTypeForPOS ? posValAll : undefined;
 
             if (posVal !== undefined && posVal !== null) {

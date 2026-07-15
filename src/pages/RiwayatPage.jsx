@@ -151,11 +151,12 @@ export default function RiwayatPage() {
         let totalSalesForPos = 0;
 
         filteredReports.forEach((r) => {
-            totalSales += Number(r.nominal_jual || 0);
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            if (isValidTypeForPOS) {
+                totalSales += Number(r.nominal_jual || 0);
+            }
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
-
-            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
             const posVal = isValidTypeForPOS ? posSalesMap[r.tanggal_jual] : undefined;
 
             if (posVal !== undefined && posVal !== null) {

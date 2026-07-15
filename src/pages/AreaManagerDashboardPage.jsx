@@ -317,11 +317,12 @@ export default function AreaManagerDashboardPage() {
         let totalSalesForPos = 0;
 
         filteredReports.forEach((r) => {
-            totalSales += Number(r.nominal_jual || 0);
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            if (isValidTypeForPOS) {
+                totalSales += Number(r.nominal_jual || 0);
+            }
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
-
-            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
             const codeKey = `${r.kode_toko}_${r.tanggal_jual}`;
             const nameKey = `${r.username}_${r.tanggal_jual}`;
             const posVal = isValidTypeForPOS ? (posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey]) : undefined;
