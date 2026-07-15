@@ -165,7 +165,7 @@ export default function RiwayatPage() {
         });
 
         // Compare grand total values directly to prevent double-counting of POS sales across multiple report types
-        const totalSelisih1 = totalSalesForPos - totalPosSales;
+        const totalSelisih1 = totalSales - totalPosSales;
         const totalSelisih2 = (totalPotongan + totalSetor) - totalPosSales;
         const hasAnyPosForTotals = totalPosSales > 0;
         const hasAnyPosForTotals2 = totalPosSales > 0;
@@ -365,18 +365,18 @@ export default function RiwayatPage() {
                                                 key={item.id}
                                                 className={'hover:bg-gray-50/50 transition-colors group ' + (isAnomali ? 'bg-red-50/30' : '')}
                                             >
-                                                <td className="px-3 py-3 font-bold text-gray-900 text-xs truncate">
+                                                <td className="px-3 py-3 font-bold text-gray-900 text-xs">
                                                     {formatDisplayDate(item.tanggal_jual)}
                                                 </td>
                                                 <td className="px-3 py-3 text-xs">
-                                                    <div className="truncate">
-                                                        <p className="font-semibold text-gray-800 text-[12px] truncate" title={item.jenis_pelaporan}>{item.jenis_pelaporan}</p>
+                                                    <div>
+                                                        <p className="font-semibold text-gray-800 text-[12px] break-words" title={item.jenis_pelaporan}>{item.jenis_pelaporan}</p>
                                                         <span className={'inline-block text-[9px] font-bold px-2 py-0.25 rounded-full mt-0.5 ' + badge.cls}>
                                                             {badge.label}
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-3 text-xs text-gray-500 truncate" title={item.metode_setoran}>
+                                                <td className="px-3 py-3 text-xs text-gray-500 break-words" title={item.metode_setoran}>
                                                     {item.metode_setoran}
                                                 </td>
                                                 <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">

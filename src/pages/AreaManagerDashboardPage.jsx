@@ -322,7 +322,7 @@ export default function AreaManagerDashboardPage() {
         });
 
         // Compare grand total values directly to prevent double-counting of POS sales across multiple report types
-        const totalSelisih1 = totalSalesForPos - totalPosSales;
+        const totalSelisih1 = totalSales - totalPosSales;
         const totalSelisih2 = (totalPotongan + totalSetor) - totalPosSales;
         const hasAnyPosForTotals = totalPosSales > 0;
         const hasAnyPosForTotals2 = totalPosSales > 0;
@@ -591,18 +591,18 @@ export default function AreaManagerDashboardPage() {
                                     </div>
                                 ) : (
                                     <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
-                                        <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1300px] border-collapse">
+                                        <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1400px] border-collapse">
                                             <colgroup>
-                                                <col style={{ width: '130px' }} />
+                                                <col style={{ width: '180px' }} />
                                                 <col style={{ width: '90px' }} />
-                                                <col style={{ width: '130px' }} />
-                                                <col style={{ width: '130px' }} />
+                                                <col style={{ width: '135px' }} />
+                                                <col style={{ width: '135px' }} />
                                                 <col style={{ width: '110px' }} />
                                                 <col style={{ width: '110px' }} />
                                                 <col style={{ width: '140px' }} />
                                                 <col style={{ width: '110px' }} />
-                                                <col style={{ width: '170px' }} />
-                                                <col style={{ width: '170px' }} />
+                                                <col style={{ width: '160px' }} />
+                                                <col style={{ width: '160px' }} />
                                                 <col style={{ width: '60px' }} />
                                             </colgroup>
                                             <thead className="text-xs font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-20 border-b border-gray-200">
@@ -638,19 +638,19 @@ export default function AreaManagerDashboardPage() {
 
                                                     return (
                                                         <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (isAnomali ? 'bg-red-50/30' : '')}>
-                                                            <td className="px-3 py-3 font-bold text-gray-900 text-xs truncate" title={row.username}>{row.username}</td>
-                                                            <td className="px-3 py-3 font-bold text-gray-900 text-xs truncate">
+                                                            <td className="px-3 py-3 font-bold text-gray-900 text-xs break-words" title={row.username}>{row.username}</td>
+                                                            <td className="px-3 py-3 font-bold text-gray-900 text-xs">
                                                                 {new Date(row.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                             </td>
                                                             <td className="px-3 py-3 text-xs">
-                                                                <div className="truncate">
-                                                                    <p className="font-semibold text-gray-800 text-[12px] truncate" title={row.jenis_pelaporan}>{row.jenis_pelaporan}</p>
+                                                                <div>
+                                                                    <p className="font-semibold text-gray-800 text-[12px] break-words" title={row.jenis_pelaporan}>{row.jenis_pelaporan}</p>
                                                                     <span className={'inline-block text-[9px] font-bold px-2 py-0.25 rounded-full mt-0.5 ' + badge.cls}>
                                                                         {badge.label}
                                                                     </span>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-3 py-3 text-xs text-gray-500 truncate" title={row.metode_setoran}>{row.metode_setoran}</td>
+                                                            <td className="px-3 py-3 text-xs text-gray-500 break-words" title={row.metode_setoran}>{row.metode_setoran}</td>
                                                             <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
                                                                 {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
                                                             </td>
