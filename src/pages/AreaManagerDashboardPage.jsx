@@ -320,7 +320,7 @@ export default function AreaManagerDashboardPage() {
             totalSetor += Number(r.nominal_setoran || 0);
 
             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            const codeKey = `${r.kode_toko}_\ ${r.tanggal_jual}`.replace('\\ ', '');
+            const codeKey = `${r.kode_toko}_${r.tanggal_jual}`;
             const nameKey = `${r.username}_${r.tanggal_jual}`;
             const posVal = isValidTypeForPOS ? (posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey]) : undefined;
 
@@ -523,8 +523,8 @@ export default function AreaManagerDashboardPage() {
 
                             {/* FILTER CONTAINER */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
-                                {/* Row 1: Search and Date Range (4 columns grid) */}
-                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+                                {/* Row 1: Search and Date Range (3 columns grid) */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Cari Cabang</label>
                                         <select 
@@ -555,14 +555,6 @@ export default function AreaManagerDashboardPage() {
                                             onChange={(e) => setTempEndDate(e.target.value)} 
                                             className="form-input w-full py-1.5 px-3 text-xs" 
                                         />
-                                    </div>
-                                    <div>
-                                        <button 
-                                            onClick={handleApplyFilter} 
-                                            className="w-full btn-primary h-9 px-4 text-xs flex items-center justify-center gap-1.5 font-bold"
-                                        >
-                                            <span className="material-symbols-outlined text-sm">filter_list</span> Terapkan Filter
-                                        </button>
                                     </div>
                                 </div>
 
@@ -615,7 +607,7 @@ export default function AreaManagerDashboardPage() {
                                             </button>
                                         )}
                                         <button 
-                                            onClick={() => fetchData(reportsStartDate, reportsEndDate, false)} 
+                                            onClick={handleApplyFilter} 
                                             className="flex-1 sm:flex-initial bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-9 px-5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                                         >
                                             <span className="material-symbols-outlined text-sm">filter_list</span> Terapkan Filter
