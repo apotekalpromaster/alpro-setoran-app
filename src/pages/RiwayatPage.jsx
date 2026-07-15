@@ -151,23 +151,33 @@ export default function RiwayatPage() {
         let totalSelisih1 = 0;
         let totalSelisih2 = 0;
         let hasAnyPosForTotals = false;
+        let hasAnyPosForTotals2 = false;
 
         filteredReports.forEach((r) => {
             totalSales += Number(r.nominal_jual || 0);
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
 
-            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            const posVal = isValidTypeForPOS ? posSalesMap[r.tanggal_jual] : undefined;
+            // POS value for the date (exists regardless of type)
+            const posValAll = posSalesMap[r.tanggal_jual];
 
-            if (posVal !== undefined && posVal !== null) {
-                totalPosSales += Number(posVal);
-                totalSelisih1 += Number(r.nominal_jual || 0) - Number(posVal);
-                totalSelisih2 += (Number(r.potongan || 0) + Number(r.nominal_setoran || 0)) - Number(posVal);
+            // Selisih 1 (only valid types)
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            const posVal1 = isValidTypeForPOS ? posValAll : undefined;
+
+            if (posVal1 !== undefined && posVal1 !== null) {
+                totalPosSales += Number(posVal1);
+                totalSelisih1 += Number(r.nominal_jual || 0) - Number(posVal1);
                 hasAnyPosForTotals = true;
             }
+
+            // Selisih 2 (all report types!)
+            if (posValAll !== undefined && posValAll !== null) {
+                totalSelisih2 += (Number(r.potongan || 0) + Number(r.nominal_setoran || 0)) - Number(posValAll);
+                hasAnyPosForTotals2 = true;
+            }
         });
-        return { totalSales, totalPotongan, totalSetor, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals };
+        return { totalSales, totalPotongan, totalSetor, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals, hasAnyPosForTotals2 };
     }, [filteredReports, posSalesMap]);
 
     const totalPages = Math.ceil(filteredReports.length / ITEMS_PER_PAGE);
@@ -348,11 +358,14 @@ export default function RiwayatPage() {
                                         const isAnomali = badge.cls === 'badge-danger';
                                         
                                         const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(item.jenis_pelaporan);
-                                        const posVal = isValidTypeForPOS ? posSalesMap[item.tanggal_jual] : undefined;
+                                        const posValAll = posSalesMap[item.tanggal_jual];
+                                        const posVal1 = isValidTypeForPOS ? posValAll : undefined;
 
-                                        const hasPOS = posVal !== undefined && posVal !== null;
-                                        const s1 = hasPOS ? (item.nominal_jual || 0) - posVal : null;
-                                        const s2 = hasPOS ? ((item.potongan || 0) + (item.nominal_setoran || 0)) - posVal : null;
+                                        const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
+                                        const hasPOSAll = posValAll !== undefined && posValAll !== null;
+
+                                        const s1 = hasPOS1 ? (item.nominal_jual || 0) - posVal1 : null;
+                                        const s2 = hasPOSAll ? ((item.potongan || 0) + (item.nominal_setoran || 0)) - posValAll : null;
 
                                         return (
                                             <tr
@@ -424,7 +437,7 @@ export default function RiwayatPage() {
                                             {tableTotals.hasAnyPosForTotals ? selisihChipNew(tableTotals.totalSelisih1) : <span className="text-gray-300">-</span>}
                                         </td>
                                         <td className="px-3 py-3 text-center font-extrabold font-mono bg-orange-100">
-                                            {tableTotals.hasAnyPosForTotals ? selisihChipNew(tableTotals.totalSelisih2) : <span className="text-gray-300">-</span>}
+                                            {tableTotals.hasAnyPosForTotals2 ? selisihChipNew(tableTotals.totalSelisih2) : <span className="text-gray-300">-</span>}
                                         </td>
                                         <td className="px-3 py-3 bg-gray-100"></td>
                                     </tr>
