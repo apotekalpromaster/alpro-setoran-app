@@ -63,7 +63,7 @@ export default function ManajemenLaporanPage() {
                         nomor_deposit_card,
                         kcp_terdekat,
                         user_id,
-                        profiles!laporan_user_id_fkey!inner ( username, email )
+                        profiles!laporan_user_id_fkey!inner ( username, email, kode_toko )
                     `)
                     .gte('tanggal_setor', startDate)
                     .lte('tanggal_setor', endDate);
@@ -100,15 +100,17 @@ export default function ManajemenLaporanPage() {
             }
 
             // Fetch POS sales data for lookup
+            const outletCodes = [...new Set(allData.map(r => r.profiles?.kode_toko).filter(Boolean))];
             const outletUsernames = [...new Set(allData.map(r => r.profiles?.username).filter(Boolean))];
             const dates = [...new Set(allData.map(r => r.tanggal_jual).filter(Boolean))];
 
             let posSalesMap = {};
-            if (outletUsernames.length > 0 && dates.length > 0) {
+            if ((outletCodes.length > 0 || outletUsernames.length > 0) && dates.length > 0) {
+                const searchKeys = [...new Set([...outletCodes, ...outletUsernames])];
                 const { data: posData, error: posErr } = await supabase
                     .from('pos_sales_data')
                     .select('kode_cabang, tanggal_jual, sales_pos')
-                    .in('kode_cabang', outletUsernames)
+                    .in('kode_cabang', searchKeys)
                     .in('tanggal_jual', dates);
 
                 if (!posErr && posData) {
@@ -121,11 +123,14 @@ export default function ManajemenLaporanPage() {
             setRows(
                 allData.map((row) => {
                     const uName = row.profiles?.username || '-';
-                    const posValKey = `${uName}_${row.tanggal_jual}`;
-                    const posVal = posSalesMap[posValKey];
+                    const kToko = row.profiles?.kode_toko || '-';
+                    const codeKey = `${kToko}_${row.tanggal_jual}`;
+                    const nameKey = `${uName}_${row.tanggal_jual}`;
+                    const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
                     return {
                         ...row,
                         username: uName,
+                        kode_toko: kToko,
                         email: row.profiles?.email || '',
                         posVal,
                     };

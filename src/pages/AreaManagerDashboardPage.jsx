@@ -104,13 +104,15 @@ export default function AreaManagerDashboardPage() {
 
             const outletIds = outletList.map(o => o.id);
             const outletUsernames = outletList.map(o => o.username);
+            const outletCodes = outletList.map(o => o.kode_toko).filter(Boolean);
+            const searchKeys = [...new Set([...outletUsernames, ...outletCodes])];
 
             // Fetch POS sales data for lookup
-            if (outletUsernames.length > 0 && (Object.keys(cachedPosSalesMap).length === 0 || !silent)) {
+            if (searchKeys.length > 0 && (Object.keys(cachedPosSalesMap).length === 0 || !silent)) {
                 const { data: posData, error: posErr } = await supabase
                     .from('pos_sales_data')
                     .select('kode_cabang, tanggal_jual, sales_pos')
-                    .in('kode_cabang', outletUsernames);
+                    .in('kode_cabang', searchKeys);
 
                 if (!posErr && posData) {
                     const map = {};
@@ -311,9 +313,10 @@ export default function AreaManagerDashboardPage() {
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
 
-            const posValKey = `${r.username}_${r.tanggal_jual}`;
             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            const posVal = isValidTypeForPOS ? posSalesMap[posValKey] : undefined;
+            const codeKey = `${r.kode_toko}_\ ${r.tanggal_jual}`.replace('\\ ', '');
+            const nameKey = `${r.username}_${r.tanggal_jual}`;
+            const posVal = isValidTypeForPOS ? (posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey]) : undefined;
 
             if (posVal !== undefined && posVal !== null) {
                 totalPosSales += Number(posVal);
@@ -625,9 +628,10 @@ export default function AreaManagerDashboardPage() {
                                                     const badge = getBadge(row.jenis_pelaporan);
                                                     const isAnomali = badge.cls === 'badge-danger';
 
-                                                    const posValKey = `${row.username}_${row.tanggal_jual}`;
                                                     const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(row.jenis_pelaporan);
-                                                    const posValAll = posSalesMap[posValKey];
+                                                    const codeKey = `${row.kode_toko}_${row.tanggal_jual}`;
+                                                    const nameKey = `${row.username}_${row.tanggal_jual}`;
+                                                    const posValAll = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
                                                     const posVal1 = isValidTypeForPOS ? posValAll : undefined;
 
                                                     const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
