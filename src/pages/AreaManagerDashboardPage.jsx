@@ -151,11 +151,15 @@ export default function AreaManagerDashboardPage() {
                 }
             }
 
-            const mappedReports = allData.map(row => ({
-                ...row,
-                selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
-                username: outletList.find(o => o.id === row.user_id)?.username || '-'
-            }));
+            const mappedReports = allData.map(row => {
+                const o = outletList.find(item => item.id === row.user_id) || {};
+                return {
+                    ...row,
+                    selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
+                    username: o.username || '-',
+                    kode_toko: o.kode_toko || '-'
+                };
+            });
             
             setReports(mappedReports);
             cachedReports = mappedReports;
