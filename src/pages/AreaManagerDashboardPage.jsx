@@ -128,9 +128,9 @@ export default function AreaManagerDashboardPage() {
             // 3. Fetch tunggakan report metadata (all reports from minTanggalAktif up to yesterday)
             if (cachedTunggakanReports.length === 0 || !silent) {
                 const minTanggalAktif = outletList.reduce((min, o) => {
-                    if (!o.tanggal_aktif) return min;
-                    return o.tanggal_aktif < min ? o.tanggal_aktif : min;
-                }, today);
+                    const act = o.tanggal_aktif || '2026-04-01';
+                    return act < min ? act : min;
+                }, '2026-04-01');
 
                 const yesterdayStr = new Date(new Date().setDate(new Date().getDate() - 1)).toLocaleDateString('sv-SE');
 
