@@ -44,7 +44,7 @@ export default function ManajemenLaporanPage() {
 
             while (!done) {
                 const to = from + PAGE_SIZE - 1;
-                const { data, error: err } = await supabase
+                let query = supabase
                     .from('laporan')
                     .select(`
                         id,
@@ -59,10 +59,22 @@ export default function ManajemenLaporanPage() {
                         nomor_deposit_card,
                         kcp_terdekat,
                         user_id,
-                        profiles!laporan_user_id_fkey ( username, email )
+                        profiles!laporan_user_id_fkey!inner ( username, email )
                     `)
                     .gte('tanggal_setor', startDate)
-                    .lte('tanggal_setor', endDate)
+                    .lte('tanggal_setor', endDate);
+
+                if (searchTerm) {
+                    query = query.ilike('profiles.username', `%${searchTerm}%`);
+                }
+                if (jenisFilter) {
+                    query = query.eq('jenis_pelaporan', jenisFilter);
+                }
+                if (kcpFilter) {
+                    query = query.ilike('kcp_terdekat', `%${kcpFilter}%`);
+                }
+
+                const { data, error: err } = await query
                     .order('tanggal_setor', { ascending: false })
                     .range(from, to);
 
@@ -83,13 +95,37 @@ export default function ManajemenLaporanPage() {
                 }
             }
 
+            // Fetch POS sales data for lookup
+            const outletUsernames = [...new Set(allData.map(r => r.profiles?.username).filter(Boolean))];
+            const dates = [...new Set(allData.map(r => r.tanggal_jual).filter(Boolean))];
+
+            let posSalesMap = {};
+            if (outletUsernames.length > 0 && dates.length > 0) {
+                const { data: posData, error: posErr } = await supabase
+                    .from('pos_sales_data')
+                    .select('kode_cabang, tanggal_jual, sales_pos')
+                    .in('kode_cabang', outletUsernames)
+                    .in('tanggal_jual', dates);
+
+                if (!posErr && posData) {
+                    posData.forEach(item => {
+                        posSalesMap[`${item.kode_cabang}_${item.tanggal_jual}`] = item.sales_pos;
+                    });
+                }
+            }
+
             setRows(
-                allData.map((row) => ({
-                    ...row,
-                    selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
-                    username: row.profiles?.username || '-',
-                    email: row.profiles?.email || '',
-                }))
+                allData.map((row) => {
+                    const uName = row.profiles?.username || '-';
+                    const posValKey = `${uName}_${row.tanggal_jual}`;
+                    const posVal = posSalesMap[posValKey];
+                    return {
+                        ...row,
+                        username: uName,
+                        email: row.profiles?.email || '',
+                        posVal,
+                    };
+                })
             );
         } catch (e) {
             setError(e.message || 'Gagal memuat data.');
@@ -101,45 +137,75 @@ export default function ManajemenLaporanPage() {
     // Client-side filter
     const filtered = useMemo(() => {
         return rows.filter((r) => {
-            const matchName = !searchTerm || r.username.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchKcp = !kcpFilter || (r.kcp_terdekat || '').toLowerCase().includes(kcpFilter.toLowerCase());
-            const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD;
-            const matchJenis = !jenisFilter || r.jenis_pelaporan === jenisFilter;
-            return matchName && matchKcp && matchSelisih && matchJenis;
+            const matchSelisih = !showHighSelisih || Math.abs((r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0)) > DISCREPANCY_THRESHOLD;
+            return matchSelisih;
         });
-    }, [rows, searchTerm, kcpFilter, showHighSelisih, jenisFilter]);
+    }, [rows, showHighSelisih]);
 
     // Grand Totals
     const totals = useMemo(() => {
+        let totalSales = 0;
+        let totalPotongan = 0;
         let totalSetor = 0;
-        let totalSelisih = 0;
+        let totalPosSales = 0;
+        let totalSalesForPos = 0;
+
         filtered.forEach((r) => {
+            totalSales += Number(r.nominal_jual || 0);
+            totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
-            totalSelisih += Number(r.selisih || 0);
+
+            const posValAll = r.posVal;
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            const posVal = isValidTypeForPOS ? posValAll : undefined;
+
+            if (posVal !== undefined && posVal !== null) {
+                totalPosSales += Number(posVal);
+                totalSalesForPos += Number(r.nominal_jual || 0);
+            }
         });
-        return { totalSetor, totalSelisih };
+
+        // Compare grand total values directly to prevent double-counting of POS sales across multiple report types
+        const totalSelisih1 = totalSales - totalPosSales;
+        const totalSelisih2 = (totalPotongan + totalSetor) - totalPosSales;
+        const hasAnyPosForTotals = totalPosSales > 0;
+        const hasAnyPosForTotals2 = totalPosSales > 0;
+
+        return { totalSales, totalPotongan, totalSetor, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals, hasAnyPosForTotals2 };
     }, [filtered]);
 
     // CSV export
     const downloadCSV = () => {
         if (!filtered.length) return;
-        const header = 'Nama Apotek,Tgl Jual,Tgl Setor,Waktu Kirim,Jenis,Metode,Deposit Card,KCP,Nominal Jual,Potongan,Nominal Setor,Selisih\n';
-        const body = filtered.map((r) =>
-            [
+        const header = 'Nama Apotek,Tgl Setor,Tgl Jual,Waktu Kirim,Jenis,Metode,Deposit Card,KCP,Data Sales (Xilnex),Nominal Sales,Potongan,Nominal Setor,Selisih 1 (VS Nominal),Selisih 2 (VS Setor)\n';
+        const body = filtered.map((r) => {
+            const posValAll = r.posVal;
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            const posVal1 = isValidTypeForPOS ? posValAll : undefined;
+
+            const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
+            const hasPOSAll = posValAll !== undefined && posValAll !== null;
+
+            const s1 = hasPOS1 ? (r.nominal_jual || 0) - posVal1 : '';
+            const s2 = hasPOSAll ? ((r.potongan || 0) + (r.nominal_setoran || 0)) - posValAll : '';
+
+            return [
                 `"${r.username}"`,
-                r.tanggal_jual,
                 r.tanggal_setor,
+                r.tanggal_jual,
                 r.timestamp ? new Date(r.timestamp).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '-',
                 `"${r.jenis_pelaporan}"`,
                 `"${r.metode_setoran}"`,
                 `"${r.nomor_deposit_card || ''}"`,
                 `"${r.kcp_terdekat || ''}"`,
+                posVal1 !== undefined ? posVal1 : '',
                 r.nominal_jual || 0,
                 r.potongan || 0,
                 r.nominal_setoran || 0,
-                r.selisih,
-            ].join(',')
-        ).join('\n');
+                s1,
+                s2
+            ].join(',');
+        }).join('\n');
         
         let footer = '';
         if (hitLimit) {
@@ -165,10 +231,11 @@ export default function ManajemenLaporanPage() {
         setSearchTerm(val);
     };
 
-    const selisihChip = (selisih) => {
-        if (selisih > 0) return <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold">-${formatRupiah(selisih)}</span>;
-        if (selisih < 0) return <span className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">+${formatRupiah(Math.abs(selisih))}</span>;
-        return <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-bold">Sesuai</span>;
+    const selisihChipNew = (val) => {
+        if (val === null || val === undefined) return <span className="text-gray-300">-</span>;
+        if (val < 0) return <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">-{formatRupiah(Math.abs(val))}</span>;
+        if (val > 0) return <span className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">+{formatRupiah(val)}</span>;
+        return <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">Sesuai</span>;
     };
 
     const renderJenisBadge = (jenis) => {
@@ -360,62 +427,125 @@ export default function ManajemenLaporanPage() {
                                 <p className="text-xs text-gray-400 mt-1">Coba sesuaikan filter pencarian atau periode tanggal Anda.</p>
                             </div>
                         ) : (
-                            <div className="overflow-x-auto custom-scrollbar">
-                                <table className="w-full text-left border-collapse whitespace-nowrap text-sm">
-                                    <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                            <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
+                                <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1850px] border-collapse">
+                                    <colgroup>
+                                        <col style={{ width: '180px' }} />
+                                        <col style={{ width: '95px' }} />
+                                        <col style={{ width: '95px' }} />
+                                        <col style={{ width: '110px' }} />
+                                        <col style={{ width: '135px' }} />
+                                        <col style={{ width: '135px' }} />
+                                        <col style={{ width: '100px' }} />
+                                        <col style={{ width: '80px' }} />
+                                        <col style={{ width: '110px' }} />
+                                        <col style={{ width: '110px' }} />
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '110px' }} />
+                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '60px' }} />
+                                    </colgroup>
+                                    <thead className="text-xs font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-20 border-b border-gray-200">
                                         <tr>
-                                            <th className="px-5 py-4">Nama Apotek</th>
-                                            <th className="px-5 py-4">Tgl Setor</th>
-                                            <th className="px-5 py-4">Waktu Kirim</th>
-                                            <th className="px-5 py-4">Jenis Pelaporan</th>
-                                            <th className="px-5 py-4">Metode</th>
-                                            <th className="px-5 py-4">Deposit Card</th>
-                                            <th className="px-5 py-4">KCP</th>
-                                            <th className="px-5 py-4 text-right">Nominal Setor</th>
-                                            <th className="px-5 py-4 text-center">Selisih</th>
-                                            <th className="px-5 py-4 text-center sticky right-0 bg-gray-50 shadow-sm border-l border-gray-200">Aksi</th>
+                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nama Apotek</th>
+                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Tgl Setor</th>
+                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Tgl Sales</th>
+                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Waktu Kirim</th>
+                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Jenis Laporan</th>
+                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Metode</th>
+                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Deposit Card</th>
+                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">KCP</th>
+                                            <th className="px-3 py-3 text-right bg-blue-50 text-blue-700 font-bold sticky top-0 z-20 border-b border-gray-200">Data Sales (Xilnex)</th>
+                                            <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nominal Sales</th>
+                                            <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Potongan Penjualan (Petty Cash)</th>
+                                            <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nominal Setor</th>
+                                            <th className="px-3 py-3 text-center bg-red-50 text-red-700 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Data Sales (Xilnex) VS Nominal Sales</th>
+                                            <th className="px-3 py-3 text-center bg-orange-50 text-orange-700 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Data Sales (Xilnex) VS Potongan + Nominal Setor</th>
+                                            <th className="px-3 py-3 text-center bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100 text-gray-700">
-                                        {filtered.map((row) => (
-                                            <tr key={row.id} className="hover:bg-gray-50/50 transition-colors group">
-                                                <td className="px-5 py-4 font-bold text-gray-900">{row.username}</td>
-                                                <td className="px-5 py-4 text-gray-600 text-xs">
-                                                    {new Date(row.tanggal_setor).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                                </td>
-                                                <td className="px-5 py-4 text-gray-500 text-xs font-mono">
-                                                    {row.timestamp ? new Date(row.timestamp).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' WIB' : '-'}
-                                                </td>
-                                                <td className="px-5 py-4">{renderJenisBadge(row.jenis_pelaporan)}</td>
-                                                <td className="px-5 py-4 text-gray-500 text-xs">{row.metode_setoran}</td>
-                                                <td className="px-5 py-4 text-gray-500 text-xs font-mono">{row.nomor_deposit_card || '-'}</td>
-                                                <td className="px-5 py-4 text-gray-500 text-xs">{row.kcp_terdekat || '-'}</td>
-                                                <td className="px-5 py-4 text-right font-bold text-gray-900">{formatRupiah(row.nominal_setoran || 0)}</td>
-                                                <td className="px-5 py-4 text-center">{selisihChip(row.selisih)}</td>
-                                                <td className="px-5 py-4 text-center sticky right-0 bg-white group-hover:bg-gray-50/80 border-l border-gray-200">
-                                                    <button
-                                                        title="Lihat Detail"
-                                                        onClick={() => navigate(`/riwayat/${row.id}`)}
-                                                        className="h-8 w-8 flex items-center justify-center rounded-full mx-auto text-primary-600 hover:bg-orange-50 transition-colors"
-                                                    >
-                                                        <span className="material-symbols-outlined text-lg">visibility</span>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                    <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
+                                        {filtered.map((row) => {
+                                            const posValAll = row.posVal;
+                                            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(row.jenis_pelaporan);
+                                            const posVal1 = isValidTypeForPOS ? posValAll : undefined;
+
+                                            const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
+                                            const hasPOSAll = posValAll !== undefined && posValAll !== null;
+
+                                            const s1 = hasPOS1 ? (row.nominal_jual || 0) - posVal1 : null;
+                                            const s2 = hasPOSAll ? ((row.potongan || 0) + (row.nominal_setoran || 0)) - posValAll : null;
+
+                                            return (
+                                                <tr key={row.id} className="hover:bg-gray-50/50 transition-colors group">
+                                                    <td className="px-3 py-3 font-bold text-gray-900 text-xs break-words" title={row.username}>{row.username}</td>
+                                                    <td className="px-3 py-3 text-gray-600 text-xs">
+                                                        {new Date(row.tanggal_setor).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-gray-600 text-xs">
+                                                        {row.tanggal_jual ? new Date(row.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-gray-500 text-xs font-mono">
+                                                        {row.timestamp ? new Date(row.timestamp).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' WIB' : '-'}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-xs">
+                                                        <div>
+                                                            <p className="font-semibold text-gray-800 text-[12px] break-words" title={row.jenis_pelaporan}>{row.jenis_pelaporan}</p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 py-3 text-xs text-gray-500 break-words" title={row.metode_setoran}>{row.metode_setoran}</td>
+                                                    <td className="px-3 py-3 text-gray-500 text-xs font-mono">{row.nomor_deposit_card || '-'}</td>
+                                                    <td className="px-3 py-3 text-gray-500 text-xs break-words">{row.kcp_terdekat || '-'}</td>
+                                                    <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
+                                                        {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">{formatRupiah(row.nominal_jual || 0)}</td>
+                                                    <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">{formatRupiah(row.potongan || 0)}</td>
+                                                    <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">{formatRupiah(row.nominal_setoran || 0)}</td>
+                                                    <td className="px-3 py-3 text-center font-mono text-xs bg-red-50/10">
+                                                        {selisihChipNew(s1)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-center font-mono text-xs bg-orange-50/10">
+                                                        {selisihChipNew(s2)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-center">
+                                                        <button
+                                                            title="Lihat Detail"
+                                                            onClick={() => navigate(`/riwayat/${row.id}`)}
+                                                            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">visibility</span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
-                                    <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200 text-gray-900 sticky bottom-0">
+                                    <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300 text-gray-900 text-xs sticky bottom-0 z-20">
                                         <tr>
-                                            <td colSpan="7" className="px-5 py-4 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
+                                            <td colSpan="8" className="px-3 py-3 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
                                                 Grand Total
                                             </td>
-                                            <td className="px-5 py-4 text-right font-extrabold text-gray-900 font-mono">
+                                            <td className="px-3 py-3 text-right font-extrabold text-blue-800 font-mono bg-blue-100">
+                                                {formatRupiah(totals.totalPosSales)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
+                                                {formatRupiah(totals.totalSales)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-gray-600 font-mono bg-gray-100">
+                                                {formatRupiah(totals.totalPotongan)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
                                                 {formatRupiah(totals.totalSetor)}
                                             </td>
-                                            <td className="px-5 py-4 text-center font-extrabold font-mono">
-                                                {selisihChip(totals.totalSelisih)}
+                                            <td className="px-3 py-3 text-center font-extrabold font-mono bg-red-100">
+                                                {totals.hasAnyPosForTotals ? selisihChipNew(totals.totalSelisih1) : <span className="text-gray-300">-</span>}
                                             </td>
-                                            <td className="px-5 py-4 sticky right-0 bg-gray-50 border-l border-gray-200"></td>
+                                            <td className="px-3 py-3 text-center font-extrabold font-mono bg-orange-100">
+                                                {totals.hasAnyPosForTotals2 ? selisihChipNew(totals.totalSelisih2) : <span className="text-gray-300">-</span>}
+                                            </td>
+                                            <td className="px-3 py-3 bg-gray-100"></td>
                                         </tr>
                                     </tfoot>
                                 </table>
