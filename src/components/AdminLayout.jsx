@@ -7,7 +7,6 @@ const NAV_ITEMS = [
     { label: 'Dashboard', icon: 'dashboard', path: '/admin' },
     { label: 'Manajemen Laporan', icon: 'table_view', path: '/admin/laporan' },
     { label: 'Rekonsiliasi POS', icon: 'compare', path: '/finance/rekonsiliasi-pos' },
-    { label: 'Persetujuan Koreksi', icon: 'edit_note', path: '/finance/koreksi-approval' },
     { label: 'Laporan Analitik', icon: 'bar_chart', path: '/admin/analitik' },
     { label: 'Laporan Pending', icon: 'pending_actions', path: '/admin/pending' },
     { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },

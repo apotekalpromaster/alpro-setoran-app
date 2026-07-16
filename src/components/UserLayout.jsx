@@ -23,6 +23,7 @@ export default function UserLayout({ children, title, activeRoute }) {
     const isAM = profile?.role === 'AreaManager';
     const items = isAM ? [
         { label: 'Dashboard AM', icon: 'dashboard', path: '/areamanager/dashboard' },
+        { label: 'Persetujuan Koreksi', icon: 'task_alt', path: '/areamanager/koreksi-approval' },
         { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
         { label: 'Petunjuk Penggunaan', icon: 'menu_book', path: '/bantuan' },
     ] : NAV_ITEMS;
