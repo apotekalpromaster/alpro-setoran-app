@@ -110,9 +110,21 @@ export default function RiwayatPage() {
             setLoading(false);
         }
     };
-    // Client-side filtering (applied on Apply click)
+    // 1. Cari tanggal duplikat untuk tipe pelaporan utama
+    const duplicateDates = useMemo(() => {
+        const counts = {};
+        reports.forEach(r => {
+            const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            if (isPrimary) {
+                counts[r.tanggal_jual] = (counts[r.tanggal_jual] || 0) + 1;
+            }
+        });
+        return Object.keys(counts).filter(d => counts[d] > 1);
+    }, [reports]);
+
+    // Client-side filtering (applied on Apply click) & Injeksi Tanggal Unreported
     const filteredReports = useMemo(() => {
-        return reports.map(r => ({
+        const actualFiltered = reports.map(r => ({
             ...r,
             selisih: (r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0)
         })).filter((item) => {
@@ -141,7 +153,58 @@ export default function RiwayatPage() {
 
             return matchSearch && matchMethode && matchDate && matchJenis;
         });
-    }, [reports, activeFilters]);
+
+        const showSales = activeFilters.jenis.length === 0 || activeFilters.jenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(j));
+        
+        let unreportedList = [];
+        if (showSales && profile?.tanggal_aktif) {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toLocaleDateString('sv-SE');
+
+            const filterStart = activeFilters.startDate || '2026-04-01';
+            const filterEnd = activeFilters.endDate || yesterdayStr;
+
+            const startStr = profile.tanggal_aktif > filterStart ? profile.tanggal_aktif : filterStart;
+            const endStr = yesterdayStr < filterEnd ? yesterdayStr : filterEnd;
+
+            if (startStr <= endStr) {
+                const start = new Date(startStr);
+                const end = new Date(endStr);
+                let cur = new Date(start);
+
+                while (cur <= end) {
+                    const dateStr = cur.toLocaleDateString('sv-SE');
+                    const hasPrimaryReport = reports.some(r => 
+                        r.tanggal_jual === dateStr &&
+                        ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                    );
+
+                    if (!hasPrimaryReport) {
+                        const cleanSearch = activeFilters.search.toLowerCase();
+                        const matchSearch = !cleanSearch || 'belum dilaporkan'.includes(cleanSearch);
+                        const matchMethode = !activeFilters.methode;
+
+                        if (matchSearch && matchMethode) {
+                            unreportedList.push({
+                                id: 'unreported_' + dateStr,
+                                tanggal_jual: dateStr,
+                                isUnreported: true,
+                                jenis_pelaporan: 'Belum Dilaporkan',
+                                metode_setoran: '-',
+                                nominal_jual: 0,
+                                potongan: 0,
+                                nominal_setoran: 0
+                            });
+                        }
+                    }
+                    cur.setDate(cur.getDate() + 1);
+                }
+            }
+        }
+
+        return [...actualFiltered, ...unreportedList].sort((a, b) => b.tanggal_jual.localeCompare(a.tanggal_jual));
+    }, [reports, activeFilters, profile]);
 
     // Grand Totals for the entire filtered set
     const tableTotals = useMemo(() => {
