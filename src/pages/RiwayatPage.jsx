@@ -122,10 +122,6 @@ export default function RiwayatPage() {
         return Object.keys(counts).filter(d => counts[d] > 1);
     }, [reports]);
 
-    const unreportedDates = useMemo(() => {
-        return filteredReports.filter(r => r.isUnreported).map(r => r.tanggal_jual);
-    }, [filteredReports]);
-
     // Client-side filtering (applied on Apply click) & Injeksi Tanggal Unreported
     const filteredReports = useMemo(() => {
         const actualFiltered = reports.map(r => ({
@@ -210,6 +206,10 @@ export default function RiwayatPage() {
 
         return [...actualFiltered, ...unreportedList].sort((a, b) => b.tanggal_jual.localeCompare(a.tanggal_jual));
     }, [reports, activeFilters, profile]);
+
+    const unreportedDates = useMemo(() => {
+        return filteredReports.filter(r => r.isUnreported).map(r => r.tanggal_jual);
+    }, [filteredReports]);
 
     // Grand Totals for the entire filtered set
     const tableTotals = useMemo(() => {
