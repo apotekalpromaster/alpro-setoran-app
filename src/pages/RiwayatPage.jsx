@@ -16,6 +16,7 @@ const BADGE_CONFIG = {
     'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'badge-purple' },
     'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'badge-danger' },
     'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'badge-danger' },
+    'Belum Dilaporkan': { label: 'Belum Lapor', cls: 'bg-amber-100 text-amber-800 border border-amber-200' },
 };
 
 const JELAS_TYPES = [
@@ -318,7 +319,19 @@ export default function RiwayatPage() {
                             <p className="text-sm text-gray-400">Tidak ada laporan sesuai filter yang dipilih.</p>
                         </div>
                     ) : (
-                        <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg shadow-inner bg-white">
+                        <>
+                            {duplicateDates.length > 0 && (
+                                <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg flex items-start gap-3 animate-fade-in shadow-xs">
+                                    <span className="material-symbols-outlined text-red-500 flex-shrink-0 mt-0.5">warning</span>
+                                    <div>
+                                        <p className="text-xs font-bold text-red-800 uppercase">Peringatan Duplikasi Tanggal Sales</p>
+                                        <p className="text-xs text-red-700 mt-1">
+                                            Terdapat pelaporan tanggal sales duplikat untuk tanggal <strong>{duplicateDates.map(d => formatDisplayDate(d)).join(', ')}</strong>. Harap periksa apakah ada kesalahan penginputan tanggal pada laporan Anda.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg shadow-inner bg-white">
                             <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1240px] border-collapse">
                                 <colgroup>
                                     <col style={{ width: '90px' }} />
@@ -364,7 +377,7 @@ export default function RiwayatPage() {
                                         return (
                                             <tr
                                                 key={item.id}
-                                                className={'hover:bg-gray-50/50 transition-colors group ' + (isAnomali ? 'bg-red-50/30' : '')}
+                                                className={'hover:bg-gray-50/50 transition-colors group ' + (item.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}
                                             >
                                                 <td className="px-3 py-3 font-bold text-gray-900 text-xs">
                                                     {formatDisplayDate(item.tanggal_jual)}
@@ -384,13 +397,13 @@ export default function RiwayatPage() {
                                                     {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
                                                 </td>
                                                 <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">
-                                                    {formatRupiah(item.nominal_jual || 0)}
+                                                    {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.nominal_jual || 0)}
                                                 </td>
                                                 <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">
-                                                    {formatRupiah(item.potongan || 0)}
+                                                    {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.potongan || 0)}
                                                 </td>
                                                 <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">
-                                                    {formatRupiah(item.nominal_setoran || 0)}
+                                                    {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.nominal_setoran || 0)}
                                                 </td>
                                                 <td className="px-3 py-3 text-center font-mono text-xs bg-red-50/10">
                                                     {selisihChipNew(s1)}
@@ -399,12 +412,21 @@ export default function RiwayatPage() {
                                                     {selisihChipNew(s2)}
                                                 </td>
                                                 <td className="px-3 py-3 text-center">
-                                                    <button
-                                                        onClick={() => navigate('/riwayat/' + item.id)}
-                                                        className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
-                                                    >
-                                                        <span className="material-symbols-outlined text-base">chevron_right</span>
-                                                    </button>
+                                                    {item.isUnreported ? (
+                                                        <button
+                                                            onClick={() => navigate('/setoran')}
+                                                            className="px-2.5 py-1 text-[10px] font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg shadow-sm transition-colors"
+                                                        >
+                                                            Lapor
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => navigate('/riwayat/' + item.id)}
+                                                            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">chevron_right</span>
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
@@ -438,6 +460,7 @@ export default function RiwayatPage() {
                                 </tfoot>
                             </table>
                         </div>
+                        </>
                     )}
 
                     {/* Pagination */}

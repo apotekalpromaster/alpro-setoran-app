@@ -99,43 +99,127 @@ export default function ManajemenLaporanPage() {
                 }
             }
 
-            // Fetch POS sales data for lookup
-            const outletCodes = [...new Set(allData.map(r => r.profiles?.kode_toko).filter(Boolean))];
-            const outletUsernames = [...new Set(allData.map(r => r.profiles?.username).filter(Boolean))];
-            const dates = [...new Set(allData.map(r => r.tanggal_jual).filter(Boolean))];
+            // Fetch all User profiles to identify active outlets and their activation dates
+            const { data: profileList, error: pErr } = await supabase
+                .from('profiles')
+                .select('id, username, kode_toko, tanggal_aktif')
+                .eq('role', 'User');
+
+            let activeProfiles = profileList || [];
+            if (searchTerm) {
+                activeProfiles = activeProfiles.filter(p => p.username.toLowerCase().includes(searchTerm.toLowerCase()));
+            }
+
+            // Generate dates between startDate and endDate (capped at yesterday)
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toLocaleDateString('sv-SE');
+
+            const filterStart = startDate || '2026-04-01';
+            const filterEnd = endDate || yesterdayStr;
+
+            const dateList = [];
+            let curDate = new Date(filterStart);
+            const endLimit = new Date(yesterdayStr < filterEnd ? yesterdayStr : filterEnd);
+            while (curDate <= endLimit) {
+                dateList.push(curDate.toLocaleDateString('sv-SE'));
+                curDate.setDate(curDate.getDate() + 1);
+            }
+
+            // Fetch POS sales data for all active profiles and all generated dates
+            const searchKeys = [...new Set([
+                ...activeProfiles.map(p => p.kode_toko).filter(Boolean),
+                ...activeProfiles.map(p => p.username).filter(Boolean),
+                ...allData.map(r => r.profiles?.kode_toko).filter(Boolean),
+                ...allData.map(r => r.profiles?.username).filter(Boolean)
+            ])];
+            
+            const allDates = [...new Set([
+                ...dateList,
+                ...allData.map(r => r.tanggal_jual).filter(Boolean)
+            ])];
 
             let posSalesMap = {};
-            if ((outletCodes.length > 0 || outletUsernames.length > 0) && dates.length > 0) {
-                const searchKeys = [...new Set([...outletCodes, ...outletUsernames])];
+            if (searchKeys.length > 0 && allDates.length > 0) {
                 const { data: posData, error: posErr } = await supabase
                     .from('pos_sales_data')
                     .select('kode_cabang, tanggal_jual, sales_pos')
                     .in('kode_cabang', searchKeys)
-                    .in('tanggal_jual', dates);
+                    .in('tanggal_jual', allDates);
 
                 if (!posErr && posData) {
                     posData.forEach(item => {
-                        posSalesMap[`${item.kode_cabang}_${item.tanggal_jual}`] = item.sales_pos;
+                        posSalesMap[item.kode_cabang + '_' + item.tanggal_jual] = item.sales_pos;
                     });
                 }
             }
 
-            setRows(
-                allData.map((row) => {
-                    const uName = row.profiles?.username || '-';
-                    const kToko = row.profiles?.kode_toko || '-';
-                    const codeKey = `${kToko}_${row.tanggal_jual}`;
-                    const nameKey = `${uName}_${row.tanggal_jual}`;
-                    const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
-                    return {
-                        ...row,
-                        username: uName,
-                        kode_toko: kToko,
-                        email: row.profiles?.email || '',
-                        posVal,
-                    };
-                })
-            );
+            // Map actual reports
+            const mappedReports = allData.map((row) => {
+                const uName = row.profiles?.username || '-';
+                const kToko = row.profiles?.kode_toko || '-';
+                const codeKey = kToko + '_' + row.tanggal_jual;
+                const nameKey = uName + '_' + row.tanggal_jual;
+                const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                return {
+                    ...row,
+                    username: uName,
+                    kode_toko: kToko,
+                    email: row.profiles?.email || '',
+                    posVal,
+                };
+            });
+
+            // Generate unreported placeholders
+            const showSales = !jenisFilter || ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(jenisFilter);
+            let unreportedList = [];
+
+            if (showSales && activeProfiles.length > 0 && dateList.length > 0) {
+                activeProfiles.forEach(p => {
+                    dateList.forEach(dateStr => {
+                        if (p.tanggal_aktif && dateStr < p.tanggal_aktif) return;
+
+                        // Check if database has report for this user and date
+                        const hasPrimaryReport = allData.some(r => 
+                            r.user_id === p.id && 
+                            r.tanggal_jual === dateStr &&
+                            ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                        );
+
+                        if (!hasPrimaryReport) {
+                            const codeKey = p.kode_toko + '_' + dateStr;
+                            const nameKey = p.username + '_' + dateStr;
+                            const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+
+                            unreportedList.push({
+                                id: 'unreported_' + p.id + '_' + dateStr,
+                                tanggal_jual: dateStr,
+                                tanggal_setor: '-',
+                                timestamp: null,
+                                jenis_pelaporan: 'Belum Dilaporkan',
+                                metode_setoran: '-',
+                                nominal_jual: 0,
+                                potongan: 0,
+                                nominal_setoran: 0,
+                                username: p.username,
+                                kode_toko: p.kode_toko,
+                                email: '',
+                                isUnreported: true,
+                                posVal,
+                            });
+                        }
+                    });
+                });
+            }
+
+            // Combine and set rows
+            const combinedRows = [...mappedReports, ...unreportedList].sort((a, b) => {
+                const dateCompare = b.tanggal_jual.localeCompare(a.tanggal_jual);
+                if (dateCompare !== 0) return dateCompare;
+                return a.username.localeCompare(b.username);
+            });
+
+            setRows(combinedRows);
         } catch (e) {
             setError(e.message || 'Gagal memuat data.');
         } finally {
@@ -143,10 +227,29 @@ export default function ManajemenLaporanPage() {
         }
     };
 
+    // 1. Cari tanggal duplikat untuk tipe pelaporan utama per outlet
+    const duplicateOutletDates = useMemo(() => {
+        const counts = {};
+        rows.forEach(r => {
+            const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            if (isPrimary && !r.isUnreported) {
+                const key = r.username + '_' + r.tanggal_jual;
+                counts[key] = (counts[key] || 0) + 1;
+            }
+        });
+        return Object.keys(counts).filter(k => counts[k] > 1).map(k => {
+            const idx = k.lastIndexOf('_');
+            const username = k.substring(0, idx);
+            const date = k.substring(idx + 1);
+            return { username, date };
+        });
+    }, [rows]);
+
     // Client-side filter
     const filtered = useMemo(() => {
         return rows.filter((r) => {
-            const matchSelisih = !showHighSelisih || Math.abs((r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0)) > DISCREPANCY_THRESHOLD;
+            const mockSelisih = r.isUnreported ? -(r.posVal || 0) : ((r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0));
+            const matchSelisih = !showHighSelisih || Math.abs(mockSelisih) > DISCREPANCY_THRESHOLD;
             return matchSelisih;
         });
     }, [rows, showHighSelisih]);
@@ -166,10 +269,11 @@ export default function ManajemenLaporanPage() {
         let totalSetor = 0;
         let totalPosSales = 0;
         let totalSalesForPos = 0;
+        const seenOutletDates = new Set();
 
         filtered.forEach((r) => {
-            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            if (isValidTypeForPOS) {
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(r.jenis_pelaporan);
+            if (isValidTypeForPOS && !r.isUnreported) {
                 totalSales += Number(r.nominal_jual || 0);
             }
             totalPotongan += Number(r.potongan || 0);
@@ -178,9 +282,11 @@ export default function ManajemenLaporanPage() {
             const posValAll = r.posVal;
             const posVal = isValidTypeForPOS ? posValAll : undefined;
 
-            if (posVal !== undefined && posVal !== null) {
+            const uniqKey = (r.kode_toko || r.username) + '_' + r.tanggal_jual;
+            if (posVal !== undefined && posVal !== null && !seenOutletDates.has(uniqKey)) {
                 totalPosSales += Number(posVal);
                 totalSalesForPos += Number(r.nominal_jual || 0);
+                seenOutletDates.add(uniqKey);
             }
         });
 
@@ -263,7 +369,8 @@ export default function ManajemenLaporanPage() {
         else if (jenis.includes('Potongan')) cls = 'bg-amber-50 text-amber-700 border border-amber-200';
         else if (jenis.includes('Pecahan')) cls = 'bg-purple-50 text-purple-700 border border-purple-200';
         else if (jenis.includes('Lebih')) cls = 'bg-indigo-50 text-indigo-700 border border-indigo-200';
-        return <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${cls}`}>{jenis}</span>;
+        else if (jenis.includes('Belum')) cls = 'bg-amber-100 text-amber-800 border border-amber-200';
+        return <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${cls}`}>{jenis === 'Belum Dilaporkan' ? 'Belum Lapor' : jenis}</span>;
     };
 
     return (
@@ -437,6 +544,23 @@ export default function ManajemenLaporanPage() {
                             </span>
                         </div>
 
+                        {duplicateOutletDates.length > 0 && (
+                            <div className="mx-6 mt-5 mb-1 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg flex items-start gap-3 animate-fade-in shadow-xs">
+                                <span className="material-symbols-outlined text-red-500 flex-shrink-0 mt-0.5">warning</span>
+                                <div>
+                                    <p className="text-xs font-bold text-red-800 uppercase">Peringatan Duplikasi Tanggal Sales Outlet</p>
+                                    <p className="text-xs text-red-700 mt-1">
+                                        Terdapat pelaporan tanggal sales duplikat untuk:
+                                    </p>
+                                    <ul className="list-disc list-inside text-xs text-red-700 mt-1 font-semibold">
+                                        {duplicateOutletDates.map((d, i) => (
+                                            <li key={i}>{d.username} pada tanggal {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</li>
+                                        ))}
+                                    </ul>
+                                    <p className="text-[10px] text-red-600 mt-1.5">Harap periksa apakah ada kesalahan penginputan tanggal pada laporan outlet bersangkutan.</p>
+                                </div>
+                            </div>
+                        )}
                         {filtered.length === 0 ? (
                             <div className="p-12 text-center">
                                 <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-gray-50 mb-3 border border-gray-100">
@@ -488,7 +612,7 @@ export default function ManajemenLaporanPage() {
                                     <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
                                         {paginatedRows.map((row) => {
                                             const posValAll = row.posVal;
-                                            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(row.jenis_pelaporan);
+                                            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(row.jenis_pelaporan);
                                             const posVal1 = isValidTypeForPOS ? posValAll : undefined;
 
                                             const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
@@ -498,10 +622,10 @@ export default function ManajemenLaporanPage() {
                                             const s2 = hasPOSAll ? ((row.potongan || 0) + (row.nominal_setoran || 0)) - posValAll : null;
 
                                             return (
-                                                <tr key={row.id} className="hover:bg-gray-50/50 transition-colors group">
+                                                <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (row.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : '')}>
                                                     <td className="px-3 py-3 font-bold text-gray-900 text-xs break-words" title={row.username}>{row.username}</td>
                                                     <td className="px-3 py-3 text-gray-600 text-xs">
-                                                        {new Date(row.tanggal_setor).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                        {row.isUnreported ? '-' : new Date(row.tanggal_setor).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                     </td>
                                                     <td className="px-3 py-3 text-gray-600 text-xs">
                                                         {row.tanggal_jual ? new Date(row.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
@@ -511,7 +635,7 @@ export default function ManajemenLaporanPage() {
                                                     </td>
                                                     <td className="px-3 py-3 text-xs">
                                                         <div>
-                                                            <p className="font-semibold text-gray-800 text-[12px] break-words" title={row.jenis_pelaporan}>{row.jenis_pelaporan}</p>
+                                                            {renderJenisBadge(row.jenis_pelaporan)}
                                                         </div>
                                                     </td>
                                                     <td className="px-3 py-3 text-xs text-gray-500 break-words" title={row.metode_setoran}>{row.metode_setoran}</td>
@@ -520,9 +644,9 @@ export default function ManajemenLaporanPage() {
                                                     <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
                                                         {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
                                                     </td>
-                                                    <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">{formatRupiah(row.nominal_jual || 0)}</td>
-                                                    <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">{formatRupiah(row.potongan || 0)}</td>
-                                                    <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">{formatRupiah(row.nominal_setoran || 0)}</td>
+                                                    <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_jual || 0)}</td>
+                                                    <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.potongan || 0)}</td>
+                                                    <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_setoran || 0)}</td>
                                                     <td className="px-3 py-3 text-center font-mono text-xs bg-red-50/10">
                                                         {selisihChipNew(s1)}
                                                     </td>
@@ -530,13 +654,17 @@ export default function ManajemenLaporanPage() {
                                                         {selisihChipNew(s2)}
                                                     </td>
                                                     <td className="px-3 py-3 text-center">
-                                                        <button
-                                                            title="Lihat Detail"
-                                                            onClick={() => navigate(`/riwayat/${row.id}`)}
-                                                            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
-                                                        >
-                                                            <span className="material-symbols-outlined text-base">visibility</span>
-                                                        </button>
+                                                        {row.isUnreported ? (
+                                                            <span className="text-gray-300">-</span>
+                                                        ) : (
+                                                            <button
+                                                                title="Lihat Detail"
+                                                                onClick={() => navigate(`/riwayat/${row.id}`)}
+                                                                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">visibility</span>
+                                                            </button>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );

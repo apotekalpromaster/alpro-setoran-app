@@ -35,7 +35,8 @@ const BADGE_CONFIG = {
     'Setoran Uang Lebih': { label: 'Uang Lebih', cls: 'badge-warning' },
     'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'badge-warning' },
     'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'badge-danger' },
-    'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'badge-danger' }
+    'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'badge-danger' },
+    'Belum Dilaporkan': { label: 'Belum Lapor', cls: 'bg-amber-100 text-amber-800 border border-amber-200' }
 };
 
 function getBadge(jenis) {
@@ -297,16 +298,103 @@ export default function AreaManagerDashboardPage() {
         };
     }, [outlets, reports, today]);
 
-    // Client-side filter for report table (search, multi-select jenis, & toggle)
+    // 1. Cari tanggal duplikat untuk tipe pelaporan utama per outlet
+    const duplicateOutletDates = useMemo(() => {
+        const counts = {};
+        reports.forEach(r => {
+            const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            if (isPrimary) {
+                const key = r.username + '_' + r.tanggal_jual;
+                counts[key] = (counts[key] || 0) + 1;
+            }
+        });
+        return Object.keys(counts).filter(k => counts[k] > 1).map(k => {
+            const idx = k.lastIndexOf('_');
+            const username = k.substring(0, idx);
+            const date = k.substring(idx + 1);
+            return { username, date };
+        });
+    }, [reports]);
+
+    // Client-side filter for report table & Injeksi Tanggal Unreported
     const filteredReports = useMemo(() => {
         const cleanSearch = searchTerm.trim().toLowerCase();
-        return reports.filter(r => {
+
+        const actualFiltered = reports.map(r => ({
+            ...r,
+            selisih: (r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0)
+        })).filter(r => {
             const matchName = !cleanSearch || r.username.toLowerCase().includes(cleanSearch);
             const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD;
             const matchJenis = selectedJenis.length === 0 || selectedJenis.includes(r.jenis_pelaporan);
             return matchName && matchSelisih && matchJenis;
         });
-    }, [reports, searchTerm, showHighSelisih, selectedJenis]);
+
+        const showSales = selectedJenis.length === 0 || selectedJenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(j));
+        
+        let unreportedList = [];
+        if (showSales && outlets.length > 0) {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toLocaleDateString('sv-SE');
+            const filterStart = reportsStartDate || '2026-04-01';
+            const filterEnd = reportsEndDate || yesterdayStr;
+
+            outlets.forEach(o => {
+                const matchName = !cleanSearch || o.username.toLowerCase().includes(cleanSearch);
+                if (!matchName) return;
+
+                const startStr = o.tanggal_aktif > filterStart ? o.tanggal_aktif : filterStart;
+                const endStr = yesterdayStr < filterEnd ? yesterdayStr : filterEnd;
+
+                if (startStr <= endStr) {
+                    const start = new Date(startStr);
+                    const end = new Date(endStr);
+                    let cur = new Date(start);
+
+                    while (cur <= end) {
+                        const dateStr = cur.toLocaleDateString('sv-SE');
+                        const hasPrimaryReport = reports.some(r => 
+                            r.user_id === o.id && 
+                            r.tanggal_jual === dateStr &&
+                            ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                        );
+
+                        if (!hasPrimaryReport) {
+                            const codeKey = o.kode_toko + '_' + dateStr;
+                            const nameKey = o.username + '_' + dateStr;
+                            const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                            const mockSelisih = -(posVal || 0);
+                            const matchSelisih = !showHighSelisih || Math.abs(mockSelisih) > DISCREPANCY_THRESHOLD;
+
+                            if (matchSelisih) {
+                                unreportedList.push({
+                                    id: 'unreported_' + o.id + '_' + dateStr,
+                                    tanggal_jual: dateStr,
+                                    username: o.username,
+                                    kode_toko: o.kode_toko,
+                                    isUnreported: true,
+                                    jenis_pelaporan: 'Belum Dilaporkan',
+                                    metode_setoran: '-',
+                                    nominal_jual: 0,
+                                    potongan: 0,
+                                    nominal_setoran: 0,
+                                    selisih: mockSelisih
+                                });
+                            }
+                        }
+                        cur.setDate(cur.getDate() + 1);
+                    }
+                }
+            });
+        }
+
+        return [...actualFiltered, ...unreportedList].sort((a, b) => {
+            const dateCompare = b.tanggal_jual.localeCompare(a.tanggal_jual);
+            if (dateCompare !== 0) return dateCompare;
+            return a.username.localeCompare(b.username);
+        });
+    }, [reports, outlets, posSalesMap, searchTerm, showHighSelisih, selectedJenis, reportsStartDate, reportsEndDate]);
 
     // Grand Totals for report table
     const tableTotals = useMemo(() => {
@@ -315,21 +403,24 @@ export default function AreaManagerDashboardPage() {
         let totalSetor = 0;
         let totalPosSales = 0;
         let totalSalesForPos = 0;
+        const seenOutletDates = new Set();
 
         filteredReports.forEach((r) => {
-            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            if (isValidTypeForPOS) {
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(r.jenis_pelaporan);
+            if (isValidTypeForPOS && !r.isUnreported) {
                 totalSales += Number(r.nominal_jual || 0);
             }
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
-            const codeKey = `${r.kode_toko}_${r.tanggal_jual}`;
-            const nameKey = `${r.username}_${r.tanggal_jual}`;
+            const codeKey = r.kode_toko + '_' + r.tanggal_jual;
+            const nameKey = r.username + '_' + r.tanggal_jual;
             const posVal = isValidTypeForPOS ? (posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey]) : undefined;
 
-            if (posVal !== undefined && posVal !== null) {
+            const uniqKey = (r.kode_toko || r.username) + '_' + r.tanggal_jual;
+            if (posVal !== undefined && posVal !== null && !seenOutletDates.has(uniqKey)) {
                 totalPosSales += Number(posVal);
                 totalSalesForPos += Number(r.nominal_jual || 0);
+                seenOutletDates.add(uniqKey);
             }
         });
 
@@ -621,6 +712,23 @@ export default function AreaManagerDashboardPage() {
 
                             {/* TABLE VIEW */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                {duplicateOutletDates.length > 0 && (
+                                    <div className="mx-6 mt-5 mb-1 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg flex items-start gap-3 animate-fade-in shadow-xs">
+                                        <span className="material-symbols-outlined text-red-500 flex-shrink-0 mt-0.5">warning</span>
+                                        <div>
+                                            <p className="text-xs font-bold text-red-800 uppercase">Peringatan Duplikasi Tanggal Sales Outlet</p>
+                                            <p className="text-xs text-red-700 mt-1">
+                                                Terdapat pelaporan tanggal sales duplikat untuk:
+                                            </p>
+                                            <ul className="list-disc list-inside text-xs text-red-700 mt-1 font-semibold">
+                                                {duplicateOutletDates.map((d, i) => (
+                                                    <li key={i}>{d.username} pada tanggal {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</li>
+                                                ))}
+                                            </ul>
+                                            <p className="text-[10px] text-red-600 mt-1.5">Harap periksa apakah ada kesalahan penginputan tanggal pada laporan outlet bersangkutan.</p>
+                                        </div>
+                                    </div>
+                                )}
                                 {filteredReports.length === 0 ? (
                                     <div className="p-12 text-center">
                                         <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 border border-gray-100 text-gray-400 mb-3">
@@ -665,7 +773,7 @@ export default function AreaManagerDashboardPage() {
                                                     const badge = getBadge(row.jenis_pelaporan);
                                                     const isAnomali = badge.cls === 'badge-danger';
 
-                                                    const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(row.jenis_pelaporan);
+                                                    const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(row.jenis_pelaporan);
                                                     const codeKey = `${row.kode_toko}_${row.tanggal_jual}`;
                                                     const nameKey = `${row.username}_${row.tanggal_jual}`;
                                                     const posValAll = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
@@ -678,7 +786,7 @@ export default function AreaManagerDashboardPage() {
                                                     const s2 = hasPOSAll ? ((row.potongan || 0) + (row.nominal_setoran || 0)) - posValAll : null;
 
                                                     return (
-                                                        <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (isAnomali ? 'bg-red-50/30' : '')}>
+                                                        <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (row.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}>
                                                             <td className="px-3 py-3 font-bold text-gray-900 text-xs break-words" title={row.username}>{row.username}</td>
                                                             <td className="px-3 py-3 font-bold text-gray-900 text-xs">
                                                                 {new Date(row.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -695,9 +803,9 @@ export default function AreaManagerDashboardPage() {
                                                             <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
                                                                 {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
                                                             </td>
-                                                            <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">{formatRupiah(row.nominal_jual || 0)}</td>
-                                                            <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">{formatRupiah(row.potongan || 0)}</td>
-                                                            <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">{formatRupiah(row.nominal_setoran || 0)}</td>
+                                                            <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_jual || 0)}</td>
+                                                            <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.potongan || 0)}</td>
+                                                            <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_setoran || 0)}</td>
                                                             <td className="px-3 py-3 text-center font-mono text-xs bg-red-50/10">
                                                                 {selisihChipNew(s1)}
                                                             </td>
@@ -705,13 +813,17 @@ export default function AreaManagerDashboardPage() {
                                                                 {selisihChipNew(s2)}
                                                             </td>
                                                             <td className="px-3 py-3 text-center">
-                                                                <button
-                                                                    title="Lihat Detail"
-                                                                    onClick={() => navigate("/riwayat/" + row.id)}
-                                                                    className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
-                                                                >
-                                                                    <span className="material-symbols-outlined text-base">visibility</span>
-                                                                </button>
+                                                                {row.isUnreported ? (
+                                                                    <span className="text-gray-300">-</span>
+                                                                ) : (
+                                                                    <button
+                                                                        title="Lihat Detail"
+                                                                        onClick={() => navigate("/riwayat/" + row.id)}
+                                                                        className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-base">visibility</span>
+                                                                    </button>
+                                                                )}
                                                             </td>
                                                         </tr>
                                                     );
