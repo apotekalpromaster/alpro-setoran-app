@@ -119,7 +119,7 @@ export default function BerandaPage() {
                                 <h3 className="text-sm font-bold text-red-800 uppercase">Pemberitahuan Penting</h3>
                                 <div className="mt-1 text-sm text-red-700">
                                     <ul className="list-disc pl-5 space-y-1">
-                                        <li>Anda belum melakukan setoran untuk <strong>{hariBelumLapor} hari penjualan (sales)</strong>.</li>
+                                        <li>Anda belum melakukan pelaporan setoran untuk <strong>{hariBelumLapor} hari penjualan (sales)</strong>.</li>
                                         <li>
                                             Tanggal penjualan (sales) yang belum dilaporkan: {' '}
                                             <span className="font-extrabold text-red-950 underline decoration-red-400">
