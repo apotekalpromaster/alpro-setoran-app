@@ -13,6 +13,7 @@ export default function BerandaPage() {
     const [hariBelumLapor, setHariBelumLapor] = useState(0);
     const [lastReportDate, setLastReportDate] = useState(null);
     const [tunggakanDates, setTunggakanDates] = useState([]);
+    const [duplikatDates, setDuplikatDates] = useState([]);
 
     useEffect(() => {
         if (!profile?.id) return;
@@ -78,6 +79,20 @@ export default function BerandaPage() {
                 setHariBelumLapor(missingDates.length);
                 setTunggakanDates(missingDates);
 
+                // Calculate duplicate dates for primary reports
+                const counts = {};
+                allReports.forEach(r => {
+                    const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+                    if (isPrimary && r.tanggal_jual) {
+                        counts[r.tanggal_jual] = (counts[r.tanggal_jual] || 0) + 1;
+                    }
+                });
+                const duplicates = Object.keys(counts).filter(d => counts[d] > 1).map(d => {
+                    const formatted = new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+                    return { date: d, formatted };
+                });
+                setDuplikatDates(duplicates);
+
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
             } finally {
@@ -111,7 +126,7 @@ export default function BerandaPage() {
                 </div>
 
                 {/* ALERT BANNERS */}
-                {!loading && hariBelumLapor > 0 && (
+                {!loading && (hariBelumLapor > 0 || duplikatDates.length > 0) && (
                     <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-sm animate-fade-in">
                         <div className="flex items-start">
                             <span className="material-symbols-outlined text-red-500 mr-3">error</span>
@@ -119,14 +134,29 @@ export default function BerandaPage() {
                                 <h3 className="text-sm font-bold text-red-800 uppercase">Pemberitahuan Penting</h3>
                                 <div className="mt-1 text-sm text-red-700">
                                     <ul className="list-disc pl-5 space-y-1">
-                                        <li>Anda belum melakukan pelaporan setoran untuk <strong>{hariBelumLapor} hari penjualan (sales)</strong>.</li>
-                                        <li>
-                                            Tanggal penjualan (sales) yang belum dilaporkan: {' '}
-                                            <span className="font-extrabold text-red-950 underline decoration-red-400">
-                                                {tunggakanDates.map(d => d.formatted).join(', ')}
-                                            </span>
-                                        </li>
-                                        <li>Harap segera lengkapi laporan yang tertunda.</li>
+                                        {hariBelumLapor > 0 && (
+                                            <>
+                                                <li>Anda belum melakukan pelaporan setoran untuk <strong>{hariBelumLapor} hari penjualan (sales)</strong>.</li>
+                                                <li>
+                                                    Tanggal penjualan (sales) yang belum dilaporkan: {' '}
+                                                    <span className="font-extrabold text-red-950 underline decoration-red-400">
+                                                        {tunggakanDates.map(d => d.formatted).join(', ')}
+                                                    </span>
+                                                </li>
+                                            </>
+                                        )}
+                                        {duplikatDates.length > 0 && (
+                                            <li>
+                                                Terdapat pelaporan tanggal sales duplikat untuk tanggal {' '}
+                                                <span className="font-extrabold text-red-950 underline decoration-red-400">
+                                                    {duplikatDates.map(d => d.formatted).join(', ')}
+                                                </span>
+                                                , harap periksa apakah ada kesalahan penginputan tanggal pada laporan Anda.
+                                            </li>
+                                        )}
+                                        {hariBelumLapor > 0 && (
+                                            <li>Harap segera lengkapi laporan yang tertunda.</li>
+                                        )}
                                     </ul>
                                 </div>
                             </div>
@@ -135,7 +165,7 @@ export default function BerandaPage() {
                 )}
 
                 {/* KPI CARDS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* KPI 1 : Hari Belum Lapor */}
                     <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                         <div>
@@ -151,7 +181,22 @@ export default function BerandaPage() {
                         </div>
                     </div>
 
-                    {/* KPI 2 : Laporan Terakhir */}
+                    {/* KPI 2 : Kasus Duplikasi Tanggal */}
+                    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            {loading ? (
+                                <div className="h-8 w-12 bg-gray-200 rounded animate-pulse mb-1"></div>
+                            ) : (
+                                <h3 className="text-3xl font-extrabold text-gray-800 leading-none">{duplikatDates.length}</h3>
+                            )}
+                            <p className="text-sm text-gray-500 mt-1 font-medium">Kasus Duplikasi Tanggal Sales</p>
+                        </div>
+                        <div className="h-12 w-12 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                            <span className="material-symbols-outlined text-red-500 text-2xl">warning</span>
+                        </div>
+                    </div>
+
+                    {/* KPI 3 : Laporan Terakhir */}
                     <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                         <div>
                             {loading ? (
