@@ -30,7 +30,6 @@ export default function SetoranPage() {
     };
 
     const showMultiTanggal =
-        formData.jenisPelaporan === 'Setoran 3x Seminggu' ||
         formData.jenisPelaporan === 'Setoran Uang Pecahan Kecil';
 
     const validate = () => {
