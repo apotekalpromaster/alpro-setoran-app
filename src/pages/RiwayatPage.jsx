@@ -122,6 +122,10 @@ export default function RiwayatPage() {
         return Object.keys(counts).filter(d => counts[d] > 1);
     }, [reports]);
 
+    const unreportedDates = useMemo(() => {
+        return filteredReports.filter(r => r.isUnreported).map(r => r.tanggal_jual);
+    }, [filteredReports]);
+
     // Client-side filtering (applied on Apply click) & Injeksi Tanggal Unreported
     const filteredReports = useMemo(() => {
         const actualFiltered = reports.map(r => ({
@@ -389,15 +393,30 @@ export default function RiwayatPage() {
                         </div>
                     ) : (
                         <>
-                            {duplicateDates.length > 0 && (
-                                <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg flex items-start gap-3 animate-fade-in shadow-xs">
-                                    <span className="material-symbols-outlined text-red-500 flex-shrink-0 mt-0.5">warning</span>
-                                    <div>
-                                        <p className="text-xs font-bold text-red-800 uppercase">Peringatan Duplikasi Tanggal Sales</p>
-                                        <p className="text-xs text-red-700 mt-1">
-                                            Terdapat pelaporan tanggal sales duplikat untuk tanggal <strong>{duplicateDates.map(d => formatDisplayDate(d)).join(', ')}</strong>. Harap periksa apakah ada kesalahan penginputan tanggal pada laporan Anda.
-                                        </p>
-                                    </div>
+                            {(duplicateDates.length > 0 || unreportedDates.length > 0) && (
+                                <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg flex flex-col gap-3 animate-fade-in shadow-xs">
+                                    {duplicateDates.length > 0 && (
+                                        <div className="flex items-start gap-3">
+                                            <span className="material-symbols-outlined text-red-500 flex-shrink-0 mt-0.5">warning</span>
+                                            <div>
+                                                <p className="text-xs font-bold text-red-800 uppercase">Peringatan Duplikasi Tanggal Sales</p>
+                                                <p className="text-xs text-red-700 mt-1">
+                                                    Terdapat pelaporan tanggal sales duplikat untuk tanggal <strong>{duplicateDates.map(d => formatDisplayDate(d)).join(', ')}</strong>. Harap periksa apakah ada kesalahan penginputan tanggal pada laporan Anda.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {unreportedDates.length > 0 && (
+                                        <div className="flex items-start gap-3 border-t border-red-100/50 pt-2 mt-1 first:border-0 first:pt-0 first:mt-0">
+                                            <span className="material-symbols-outlined text-orange-500 flex-shrink-0 mt-0.5">notification_important</span>
+                                            <div>
+                                                <p className="text-xs font-bold text-orange-800 uppercase">Tanggal Penjualan Belum Dilaporkan</p>
+                                                <p className="text-xs text-red-700 mt-1">
+                                                    Tanggal penjualan (sales) yang belum dilaporkan: <strong>{unreportedDates.map(d => formatDisplayDate(d)).join(', ')}</strong>. Harap segera melakukan pelaporan setoran untuk tanggal tersebut.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg shadow-inner bg-white">
