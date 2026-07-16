@@ -428,7 +428,7 @@ export default function RiwayatPage() {
                                         const badge = getBadge(item.jenis_pelaporan);
                                         const isAnomali = badge.cls === 'badge-danger';
                                         
-                                        const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(item.jenis_pelaporan);
+                                        const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(item.jenis_pelaporan);
                                         const posValAll = posSalesMap[item.tanggal_jual];
                                         const posVal1 = isValidTypeForPOS ? posValAll : undefined;
 
