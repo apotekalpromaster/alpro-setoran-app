@@ -157,7 +157,7 @@ export default function RiwayatPage() {
         const showSales = activeFilters.jenis.length === 0 || activeFilters.jenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(j));
         
         let unreportedList = [];
-        if (showSales && profile?.tanggal_aktif) {
+        if (showSales) {
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
             const yesterdayStr = yesterday.toLocaleDateString('sv-SE');
@@ -165,7 +165,8 @@ export default function RiwayatPage() {
             const filterStart = activeFilters.startDate || '2026-04-01';
             const filterEnd = activeFilters.endDate || yesterdayStr;
 
-            const startStr = profile.tanggal_aktif > filterStart ? profile.tanggal_aktif : filterStart;
+            const activeDate = profile?.tanggal_aktif || '2026-04-01';
+            const startStr = activeDate > filterStart ? activeDate : filterStart;
             const endStr = yesterdayStr < filterEnd ? yesterdayStr : filterEnd;
 
             if (startStr <= endStr) {

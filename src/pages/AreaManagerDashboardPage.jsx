@@ -344,7 +344,8 @@ export default function AreaManagerDashboardPage() {
                 const matchName = !cleanSearch || o.username.toLowerCase().includes(cleanSearch);
                 if (!matchName) return;
 
-                const startStr = o.tanggal_aktif > filterStart ? o.tanggal_aktif : filterStart;
+                const activeDate = o.tanggal_aktif || '2026-04-01';
+                const startStr = activeDate > filterStart ? activeDate : filterStart;
                 const endStr = yesterdayStr < filterEnd ? yesterdayStr : filterEnd;
 
                 if (startStr <= endStr) {

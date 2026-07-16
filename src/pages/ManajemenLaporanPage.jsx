@@ -176,8 +176,9 @@ export default function ManajemenLaporanPage() {
 
             if (showSales && activeProfiles.length > 0 && dateList.length > 0) {
                 activeProfiles.forEach(p => {
+                    const activeDate = p.tanggal_aktif || '2026-04-01';
                     dateList.forEach(dateStr => {
-                        if (p.tanggal_aktif && dateStr < p.tanggal_aktif) return;
+                        if (dateStr < activeDate) return;
 
                         // Check if database has report for this user and date
                         const hasPrimaryReport = allData.some(r => 
