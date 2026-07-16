@@ -215,18 +215,23 @@ export default function RiwayatPage() {
         let totalPosSales = 0;
         let totalSalesForPos = 0;
 
+        const seenDates = new Set();
+
         filteredReports.forEach((r) => {
-            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            if (isValidTypeForPOS) {
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(r.jenis_pelaporan);
+            
+            if (isValidTypeForPOS && !r.isUnreported) {
                 totalSales += Number(r.nominal_jual || 0);
             }
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
+
             const posVal = isValidTypeForPOS ? posSalesMap[r.tanggal_jual] : undefined;
 
-            if (posVal !== undefined && posVal !== null) {
+            if (posVal !== undefined && posVal !== null && !seenDates.has(r.tanggal_jual)) {
                 totalPosSales += Number(posVal);
                 totalSalesForPos += Number(r.nominal_jual || 0);
+                seenDates.add(r.tanggal_jual);
             }
         });
 
