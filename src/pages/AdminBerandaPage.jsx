@@ -48,6 +48,14 @@ export default function AdminBerandaPage() {
     const [chartData, setChartData] = useState(null);
     const [fraudAnomalies, setFraudAnomalies] = useState([]);
     const [anomalyCollapsed, setAnomalyCollapsed] = useState(false);
+    const [customStartDate, setCustomStartDate] = useState(() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        return d.toLocaleDateString('sv-SE');
+    });
+    const [customEndDate, setCustomEndDate] = useState(() => {
+        return new Date().toLocaleDateString('sv-SE');
+    });
 
     useEffect(() => {
         fetchDashboardData();
@@ -66,7 +74,7 @@ export default function AdminBerandaPage() {
             if (profileErr) throw profileErr;
 
             // 2. Determine Date Range
-            const todayDate = new Date();
+            let todayDate = new Date();
             let startDate = new Date();
 
             if (filterPeriod === 'today') {
@@ -80,6 +88,9 @@ export default function AdminBerandaPage() {
                 startDate.setDate(todayDate.getDate() - 29);
             } else if (filterPeriod === 'this_month') {
                 startDate = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+            } else if (filterPeriod === 'custom') {
+                startDate = new Date(customStartDate);
+                todayDate = new Date(customEndDate);
             }
 
             const startStr = startDate.toLocaleDateString('sv-SE');
@@ -352,7 +363,7 @@ export default function AdminBerandaPage() {
                     <select
                         value={filterPeriod}
                         onChange={(e) => setFilterPeriod(e.target.value)}
-                        className="form-input py-2 pl-3 pr-8 text-sm border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 cursor-pointer"
+                        className="form-input py-2 pl-3 pr-8 text-sm border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 cursor-pointer font-semibold text-gray-700"
                         disabled={loading}
                     >
                         <option value="today">Hari Ini</option>
@@ -360,7 +371,36 @@ export default function AdminBerandaPage() {
                         <option value="last_7">7 Hari Terakhir</option>
                         <option value="last_30">30 Hari Terakhir</option>
                         <option value="this_month">Bulan Ini</option>
+                        <option value="custom">Kustom Periode</option>
                     </select>
+
+                    {filterPeriod === 'custom' && (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <input
+                                type="date"
+                                value={customStartDate}
+                                onChange={(e) => setCustomStartDate(e.target.value)}
+                                className="form-input py-1.5 px-3 text-xs"
+                                disabled={loading}
+                            />
+                            <span className="text-gray-400 text-xs">s/d</span>
+                            <input
+                                type="date"
+                                value={customEndDate}
+                                onChange={(e) => setCustomEndDate(e.target.value)}
+                                className="form-input py-1.5 px-3 text-xs"
+                                disabled={loading}
+                            />
+                            <button
+                                type="button"
+                                onClick={fetchDashboardData}
+                                disabled={loading}
+                                className="bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                            >
+                                <span className="material-symbols-outlined text-sm">search</span> Terapkan
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
