@@ -27,8 +27,7 @@ serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 1. Tentukan Range Tanggal (Minggu Lalu: Senin s/d Minggu berbasis WIB)
-    // Offset WIB = +7 Jam
+    // Determine Date Range: Monday to Sunday of the previous week in WIB (UTC+7)
     const now = new Date();
     const wibTime = now.getTime() + (7 * 60 * 60 * 1000);
     const todayWib = new Date(wibTime);
@@ -46,8 +45,7 @@ serve(async (req: Request) => {
     const lastMondayStr = lastMonday.toISOString().split('T')[0];
     const lastSundayStr = lastSunday.toISOString().split('T')[0];
 
-    // 2. Fetch Data Laporan dalam rentang tanggal_jual minggu lalu
-    // Kita juga join ke profiles untuk mendapatkan nama cabang (username)
+    // Fetch reports of the last week (using tanggal_jual)
     const { data: laporan, error: lapErr } = await supabase
       .from('laporan')
       .select('tanggal_jual, nominal_jual, potongan, nominal_setoran, user_id, profiles(username)')
@@ -56,49 +54,74 @@ serve(async (req: Request) => {
 
     if (lapErr) throw lapErr;
 
-    // 3. Filter data dengan selisih > Threshold (50.000)
-    const highDiscrepancyList: Array<{
-      tanggal: string;
-      namaToko: string;
-      sales: string;
-      setor: string;
-      selisih: string;
-      selisihRaw: number;
-    }> = [];
+    // Fetch POS sales of the last week
+    const { data: posData, error: posErr } = await supabase
+      .from('pos_sales_data')
+      .select('kode_cabang, tanggal_jual, sales_pos')
+      .gte('tanggal_jual', lastMondayStr)
+      .lte('tanggal_jual', lastSundayStr);
 
-    if (laporan && laporan.length > 0) {
-      for (const row of laporan) {
-        const sales = Number(row.nominal_jual || 0);
-        const setor = Number(row.nominal_setoran || 0);
-        const potong = Number(row.potongan || 0);
-        const selisih = sales - potong - setor;
+    if (posErr) throw posErr;
 
-        if (Math.abs(selisih) > DISCREPANCY_THRESHOLD) {
-          const profile = row.profiles as any;
-          const namaToko = profile?.username || 'Cabang Tidak Diketahui';
-          
-          // Format tanggal ke format lokal
-          const dateObj = new Date(row.tanggal_jual);
-          const formattedDate = dateObj.toLocaleDateString('id-ID', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-          });
+    // Group by Apotek
+    const byUser: { [name: string]: {
+      namaApotek: string;
+      xilnexSales: number;
+      reportSales: number;
+      potongan: number;
+      nominalSetor: number;
+    }} = {};
 
-          highDiscrepancyList.push({
-            tanggal: formattedDate,
-            namaToko: namaToko,
-            sales: formatRupiah(sales),
-            setor: formatRupiah(setor),
-            selisih: (selisih > 0 ? '-' : '+') + formatRupiah(Math.abs(selisih)),
-            selisihRaw: selisih
-          });
-        }
+    const getEntry = (name: string) => {
+      if (!byUser[name]) {
+        byUser[name] = {
+          namaApotek: name,
+          xilnexSales: 0,
+          reportSales: 0,
+          potongan: 0,
+          nominalSetor: 0,
+        };
       }
+      return byUser[name];
+    };
+
+    // Map reports
+    if (laporan && laporan.length > 0) {
+      laporan.forEach((r: any) => {
+        const name = r.profiles?.username || 'Unknown';
+        const entry = getEntry(name);
+        entry.reportSales += Number(r.nominal_jual || 0);
+        entry.potongan += Number(r.potongan || 0);
+        entry.nominalSetor += Number(r.nominal_setoran || 0);
+      });
     }
 
-    // Sort berdasarkan nilai selisih terbesar secara absolut
-    highDiscrepancyList.sort((a, b) => Math.abs(b.selisihRaw) - Math.abs(a.selisihRaw));
+    // Map POS
+    if (posData && posData.length > 0) {
+      posData.forEach((p: any) => {
+        const name = p.kode_cabang || 'Unknown';
+        const entry = getEntry(name);
+        entry.xilnexSales += Number(p.sales_pos || 0);
+      });
+    }
+
+    // Filter for high discrepancies
+    const highDiscrepancyList: any[] = [];
+    Object.values(byUser).forEach(entry => {
+      const delta1 = entry.reportSales - entry.xilnexSales;
+      const delta2 = (entry.nominalSetor + entry.potongan) - entry.xilnexSales;
+
+      if (Math.abs(delta1) > DISCREPANCY_THRESHOLD || Math.abs(delta2) > DISCREPANCY_THRESHOLD) {
+        highDiscrepancyList.push({
+          ...entry,
+          delta1,
+          delta2
+        });
+      }
+    });
+
+    // Sort by largest absolute discrepancy
+    highDiscrepancyList.sort((a, b) => Math.max(Math.abs(b.delta1), Math.abs(b.delta2)) - Math.max(Math.abs(a.delta1), Math.abs(a.delta2)));
 
     if (highDiscrepancyList.length === 0) {
       return new Response(JSON.stringify({ message: 'Tidak ada laporan dengan selisih melebihi threshold.' }), {
@@ -106,7 +129,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // 4. Kredensial SMTP
     const smtpUser = Deno.env.get('GMAIL_SMTP_USER');
     const smtpPass = Deno.env.get('GMAIL_SMTP_PASSWORD');
 
@@ -120,39 +142,45 @@ serve(async (req: Request) => {
     const periodStr = `${lastMonday.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })} - ${lastSunday.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`;
     const subject = `[AUDIT] Laporan Selisih Setoran Mingguan (>50k) - Periode ${periodStr}`;
 
-    // 5. Perakitan HTML Email (McKinsey Style)
     let tableRows = '';
     highDiscrepancyList.forEach(m => {
-      const color = m.selisihRaw > 0 ? '#dc2626' : '#2563eb'; // Merah jika kurang, Biru jika lebih
+      const color1 = m.delta1 === 0 ? '#4b5563' : m.delta1 > 0 ? '#2563eb' : '#dc2626';
+      const color2 = m.delta2 === 0 ? '#4b5563' : m.delta2 > 0 ? '#2563eb' : '#dc2626';
+      const formatVal = (v: number) => v === 0 ? 'Rp 0' : (v > 0 ? '+' : '') + formatRupiah(v);
+      
       tableRows += `
-        <tr style="border-bottom: 1px solid #e5e7eb;">
-          <td style="padding: 12px; color: #374151;">${m.tanggal}</td>
-          <td style="padding: 12px; color: #1f2937; font-weight: bold;">${m.namaToko}</td>
-          <td style="padding: 12px; color: #4b5563; text-align: right;">${m.sales}</td>
-          <td style="padding: 12px; color: #4b5563; text-align: right;">${m.setor}</td>
-          <td style="padding: 12px; color: ${color}; text-align: right; font-weight: bold;">${m.selisih}</td>
+        <tr style="border-bottom: 1px solid #e5e7eb; font-size: 11px;">
+          <td style="padding: 12px; color: #1f2937; font-weight: bold;">${m.namaApotek}</td>
+          <td style="padding: 12px; color: #4b5563; text-align: right; font-family: monospace;">${formatRupiah(m.xilnexSales)}</td>
+          <td style="padding: 12px; color: #4b5563; text-align: right; font-family: monospace;">${formatRupiah(m.reportSales)}</td>
+          <td style="padding: 12px; color: #4b5563; text-align: right; font-family: monospace;">(${formatRupiah(m.potongan)})</td>
+          <td style="padding: 12px; color: #4b5563; text-align: right; font-family: monospace;">${formatRupiah(m.nominalSetor)}</td>
+          <td style="padding: 12px; color: ${color1}; text-align: right; font-weight: bold; font-family: monospace;">${formatVal(m.delta1)}</td>
+          <td style="padding: 12px; color: ${color2}; text-align: right; font-weight: bold; font-family: monospace;">${formatVal(m.delta2)}</td>
         </tr>
       `;
     });
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; background: #f3f4f6; padding: 20px;">
-        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="max-width: 800px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
           <div style="background: #f97316; padding: 20px; text-align: center;">
-            <h2 style="color: white; margin: 0;">Laporan Audit Keuangan</h2>
-            <p style="color: #ffedd5; font-size: 12px; margin-top: 5px;">Periode: ${periodStr}</p>
+            <h2 style="color: white; margin: 0;">Laporan Audit Keuangan (Selisih &gt; 50k)</h2>
+            <p style="color: #ffedd5; font-size: 12px; margin-top: 5px;">Periode Penjualan: ${periodStr}</p>
           </div>
           <div style="padding: 20px;">
             <p style="color: #374151; font-size: 14px; line-height: 1.6;">Berikut adalah daftar setoran dengan selisih di atas <strong>${formatRupiah(DISCREPANCY_THRESHOLD)}</strong> untuk periode minggu lalu:</p>
             
-            <table width="100%" style="border-collapse: collapse; margin-top: 20px; border: 1px solid #e5e7eb; font-size: 13px;">
+            <table width="100%" style="border-collapse: collapse; margin-top: 20px; border: 1px solid #e5e7eb; font-size: 12px;">
               <thead>
                 <tr style="background: #f8fafc;">
-                  <th style="padding: 12px; text-align: left; color: #475569; border-bottom: 2px solid #cbd5e1;">Tanggal</th>
                   <th style="padding: 12px; text-align: left; color: #475569; border-bottom: 2px solid #cbd5e1;">Nama Toko</th>
-                  <th style="padding: 12px; text-align: right; color: #475569; border-bottom: 2px solid #cbd5e1;">Sales</th>
+                  <th style="padding: 12px; text-align: right; color: #475569; border-bottom: 2px solid #cbd5e1;">Sales Xilnex</th>
+                  <th style="padding: 12px; text-align: right; color: #475569; border-bottom: 2px solid #cbd5e1;">Sales Manual</th>
+                  <th style="padding: 12px; text-align: right; color: #475569; border-bottom: 2px solid #cbd5e1;">Potongan</th>
                   <th style="padding: 12px; text-align: right; color: #475569; border-bottom: 2px solid #cbd5e1;">Setoran</th>
-                  <th style="padding: 12px; text-align: right; color: #475569; border-bottom: 2px solid #cbd5e1;">Selisih</th>
+                  <th style="padding: 12px; text-align: right; color: #475569; border-bottom: 2px solid #cbd5e1;">Selisih 1 (POS vs Manual)</th>
+                  <th style="padding: 12px; text-align: right; color: #475569; border-bottom: 2px solid #cbd5e1;">Selisih 2 (POS vs Setor+Pot)</th>
                 </tr>
               </thead>
               <tbody>
