@@ -413,7 +413,7 @@ export default function ManajemenLaporanPage() {
                             onClick={() => navigate('/finance/rekonsiliasi-pos')} 
                             className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 h-9 px-4 border border-blue-200 text-blue-700 bg-blue-50/50 hover:bg-blue-50 text-xs font-bold rounded-lg transition-all"
                         >
-                            <span className="material-symbols-outlined text-base">compare</span> Rekonsiliasi POS
+                            <span className="material-symbols-outlined text-base">compare</span> Rekonsiliasi Xilnex
                         </button>
                         <button 
                             onClick={() => navigate('/finance/koreksi-approval')} 
