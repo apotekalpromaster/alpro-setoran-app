@@ -65,8 +65,8 @@ export default function ManajemenLaporanPage() {
                         user_id,
                         profiles!laporan_user_id_fkey!inner ( username, email, kode_toko )
                     `)
-                    .gte('tanggal_setor', startDate)
-                    .lte('tanggal_setor', endDate);
+                    .gte('tanggal_jual', startDate)
+                    .lte('tanggal_jual', endDate);
 
                 if (searchTerm) {
                     query = query.ilike('profiles.username', `%${searchTerm}%`);
@@ -79,7 +79,7 @@ export default function ManajemenLaporanPage() {
                 }
 
                 const { data, error: err } = await query
-                    .order('tanggal_setor', { ascending: false })
+                    .order('tanggal_jual', { ascending: false })
                     .range(from, to);
 
                 if (err) throw err;
@@ -465,7 +465,7 @@ export default function ManajemenLaporanPage() {
 
                         {/* Date Dari */}
                         <div>
-                            <label className="block text-xs font-semibold text-gray-500 mb-1">Dari Tanggal Setor</label>
+                            <label className="block text-xs font-semibold text-gray-500 mb-1">Dari Tanggal Sales</label>
                             <input 
                                 type="date" 
                                 value={startDate} 
