@@ -411,7 +411,7 @@ export default function AdminBerandaPage() {
                     <div className="absolute right-0 top-0 h-full w-1 bg-primary-500"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
                                 Total Sales Tunai (Data Xilnex)
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
@@ -428,7 +428,7 @@ export default function AdminBerandaPage() {
                     <div className="absolute right-0 top-0 h-full w-1 bg-green-500"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
                                 Total Setoran
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
@@ -445,7 +445,7 @@ export default function AdminBerandaPage() {
                     <div className="absolute right-0 top-0 h-full w-1 bg-red-500"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
                                 Potongan Penjualan
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
@@ -462,7 +462,7 @@ export default function AdminBerandaPage() {
                     <div className={`absolute right-0 top-0 h-full w-1 ${metrics.selisihPerluDiperiksa > 0 ? 'bg-amber-500' : 'bg-green-500'}`}></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
                                 Selisih Perlu Diperiksa
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
@@ -483,7 +483,7 @@ export default function AdminBerandaPage() {
                     <div className="absolute right-0 top-0 h-full w-1 bg-orange-500"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
                                 Apotek Belum Lapor
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
