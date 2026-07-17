@@ -6,7 +6,7 @@ import AIChatFAB from './AIChatFAB';
 const NAV_ITEMS = [
     { label: 'Dashboard', icon: 'dashboard', path: '/admin' },
     { label: 'Manajemen Laporan', icon: 'table_view', path: '/admin/laporan' },
-    { label: 'Rekonsiliasi POS', icon: 'compare', path: '/finance/rekonsiliasi-pos' },
+    { label: 'Rekonsiliasi Xilnex', icon: 'compare', path: '/finance/rekonsiliasi-pos' },
     { label: 'Laporan Analitik', icon: 'bar_chart', path: '/admin/analitik' },
     { label: 'Laporan Pending', icon: 'pending_actions', path: '/admin/pending' },
     { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
