@@ -39,6 +39,10 @@ export default function AreaManagerKoreksiApprovalPage() {
                     created_at,
                     processed_at,
                     requested_by,
+                    jenis_pelaporan_baru,
+                    tanggal_jual_baru,
+                    tanggal_setor_baru,
+                    bukti_urls_baru,
                     profiles!koreksi_requests_requested_by_fkey!inner (
                         username,
                         area_manager
@@ -69,26 +73,31 @@ export default function AreaManagerKoreksiApprovalPage() {
         }
     };
 
-    const handleApprove = async (reqId) => {
-        if (!window.confirm('Apakah Anda yakin menyetujui koreksi laporan ini? Data laporan asli akan diperbarui otomatis.')) {
+    const handleApprove = async (req) => {
+        const isDelete = req.jenis_pelaporan_baru === 'HAPUS_DATA';
+        const confirmMsg = isDelete 
+            ? 'Apakah Anda yakin menyetujui penghapusan laporan ini? Data laporan asli akan dihapus secara permanen dari database.'
+            : 'Apakah Anda yakin menyetujui koreksi laporan ini? Data laporan asli akan diperbarui otomatis.';
+
+        if (!window.confirm(confirmMsg)) {
             return;
         }
 
-        setActionLoadingId(reqId);
+        setActionLoadingId(req.id);
         setError('');
         setSuccessMsg('');
 
         try {
             // Call RPC approve_koreksi_request(p_request_id, p_admin_id)
             const { data: success, error: rpcErr } = await supabase.rpc('approve_koreksi_request', {
-                p_request_id: reqId,
+                p_request_id: req.id,
                 p_admin_id: profile.id
             });
 
             if (rpcErr) throw rpcErr;
             if (!success) throw new Error('Gagal memproses persetujuan. Pastikan data berstatus Pending.');
 
-            setSuccessMsg('Koreksi laporan berhasil disetujui dan data laporan asli telah diperbarui.');
+            setSuccessMsg(isDelete ? 'Laporan berhasil dihapus secara permanen dari database.' : 'Koreksi laporan berhasil disetujui dan data laporan asli telah diperbarui.');
             fetchRequests();
         } catch (err) {
             setError('Gagal memproses persetujuan: ' + err.message);
@@ -228,30 +237,40 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                     <div>Potong: {formatRupiah(lap.potongan)}</div>
                                                 </td>
                                                 <td className="py-4 px-6 text-right text-xs font-mono text-primary-700">
-                                                    <div>
-                                                        Jual: <strong>{formatRupiah(item.nominal_jual_baru)}</strong>
-                                                        {deltaJual !== 0 && (
-                                                            <span className={`text-[10px] ml-1 ${deltaJual > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                                ({deltaJual > 0 ? '+' : ''}{formatRupiah(deltaJual)})
+                                                    {item.jenis_pelaporan_baru === 'HAPUS_DATA' ? (
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-700 border border-red-200 inline-flex items-center gap-1">
+                                                                <span className="material-symbols-outlined text-sm">delete_forever</span> Permohonan Hapus
                                                             </span>
-                                                        )}
-                                                    </div>
-                                                    <div>
-                                                        Setor: <strong>{formatRupiah(item.nominal_setoran_baru)}</strong>
-                                                        {deltaSetor !== 0 && (
-                                                            <span className={`text-[10px] ml-1 ${deltaSetor > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                                ({deltaSetor > 0 ? '+' : ''}{formatRupiah(deltaSetor)})
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div>
-                                                        Potong: <strong>{formatRupiah(item.potongan_baru)}</strong>
-                                                        {deltaPotong !== 0 && (
-                                                            <span className={`text-[10px] ml-1 ${deltaPotong > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                                ({deltaPotong > 0 ? '+' : ''}{formatRupiah(deltaPotong)})
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div>
+                                                                Jual: <strong>{formatRupiah(item.nominal_jual_baru)}</strong>
+                                                                {deltaJual !== 0 && (
+                                                                    <span className={`text-[10px] ml-1 ${deltaJual > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                        ({deltaJual > 0 ? '+' : ''}{formatRupiah(deltaJual)})
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div>
+                                                                Setor: <strong>{formatRupiah(item.nominal_setoran_baru)}</strong>
+                                                                {deltaSetor !== 0 && (
+                                                                    <span className={`text-[10px] ml-1 ${deltaSetor > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                        ({deltaSetor > 0 ? '+' : ''}{formatRupiah(deltaSetor)})
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div>
+                                                                Potong: <strong>{formatRupiah(item.potongan_baru)}</strong>
+                                                                {deltaPotong !== 0 && (
+                                                                    <span className={`text-[10px] ml-1 ${deltaPotong > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                        ({deltaPotong > 0 ? '+' : ''}{formatRupiah(deltaPotong)})
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </td>
                                                 <td className="py-4 px-6 max-w-xs break-words" title={item.penjelasan_koreksi}>
                                                     {item.penjelasan_koreksi}
@@ -260,7 +279,7 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                     {item.status === 'Pending' ? (
                                                         <div className="flex justify-center gap-1.5">
                                                             <button
-                                                                onClick={() => handleApprove(item.id)}
+                                                                onClick={() => handleApprove(item)}
                                                                 disabled={actionLoadingId !== ''}
                                                                 className="px-2.5 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg flex items-center gap-0.5"
                                                             >
