@@ -97,8 +97,8 @@ export default function AdminBerandaPage() {
             const endStr = todayDate.toLocaleDateString('sv-SE');
 
             // 3. Sequential Fetch reports - using YYYY-MM-DD local timezone on sales date (tanggal_jual)
-            const PAGE_SIZE = 500;
-            const MAX_ROWS = 5000;
+            const PAGE_SIZE = 1000;
+            const MAX_ROWS = 100000;
             let allLaporan = [];
             let from = 0;
             let done = false;
