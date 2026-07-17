@@ -21,97 +21,123 @@ serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 1. Logika Gap Analysis (7 Hari Terakhir)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // D-7
-    const lastWeek = new Date(today);
-    lastWeek.setDate(lastWeek.getDate() - 7);
-
-    // Tarik profil yang aktif
-    const { data: profiles, error: profileErr } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'User');
-
-    if (profileErr) throw profileErr;
-    if (!profiles || profiles.length === 0) {
-      return new Response(JSON.stringify({ message: 'Tidak ada profil cabang.' }), { status: 200, headers: CORS });
-    }
-
-    // Tarik laporan dalam 7 hari terakhir
-    const { data: laporan, error: lapErr } = await supabase
-      .from('laporan')
-      .select('user_id, tanggal_jual, tanggal_setor')
-      .gte('tanggal_jual', lastWeek.toISOString().split('T')[0])
-      .lte('tanggal_jual', today.toISOString().split('T')[0]);
-
-    if (lapErr) throw lapErr;
-
-    // Kalkulasi Tunggakan
-    const targetWorkingDates: Date[] = [];
-    let loopDate = new Date(lastWeek);
-    const endDate = new Date(today);
-    endDate.setDate(endDate.getDate() - 1); // sampai H-1
-
-    while (loopDate <= endDate) {
-      if (loopDate.getDay() !== 0) { // Lewati hari Minggu
-        const clone = new Date(loopDate);
-        targetWorkingDates.push(clone);
+    // Read optional request body
+    let bodyData: any = null;
+    try {
+      if (req.headers.get('content-type')?.includes('application/json')) {
+        bodyData = await req.json();
       }
-      loopDate.setDate(loopDate.getDate() + 1);
-    }
+    } catch (_) {}
 
-    const menunggakList: Array<{ cabang: string, frekuensi: string, tunggakan: string[] }> = [];
+    let menunggakList: Array<{ cabang: string, frekuensi: string, tunggakan: string[] }> = [];
+    let customRecipient: string | null = null;
 
-    for (const p of profiles) {
-      // Laporan milik cabang ini dalam 7 hari terakhir
-      const cabangLaporan = (laporan || []).filter((l: any) => l.user_id === p.id);
-
-      const reportedDates = new Set<string>();
-      cabangLaporan.forEach((l: any) => {
-        if (l.tanggal_jual) {
-          const d = new Date(l.tanggal_jual);
-          d.setHours(0, 0, 0, 0);
-          reportedDates.add(d.getTime().toString());
+    let customOutletEmails: string[] = [];
+    if (bodyData && bodyData.recipientEmail && bodyData.pending && bodyData.pending.length > 0) {
+      customRecipient = bodyData.recipientEmail;
+      bodyData.pending.forEach((p: any) => {
+        if (p.email && p.email.trim()) {
+          customOutletEmails.push(p.email.trim());
         }
-      });
-
-      const missingDates: Date[] = [];
-      for (const wDate of targetWorkingDates) {
-        if (!reportedDates.has(wDate.getTime().toString())) {
-          missingDates.push(wDate);
-        }
-      }
-
-      // Hitung ekspektasi berdasar frekuensi_setoran (dalam skala 7 hari)
-      const freq = (p.frekuensi_setoran || '').toUpperCase();
-      let expectedCount = targetWorkingDates.length; // Default Harian (sekitar 6 hari/minggu)
-
-      if (freq.includes('3X SEMINGGU')) {
-        expectedCount = Math.floor(targetWorkingDates.length / 2);
-      } else if (freq.includes('2X SEMINGGU')) {
-        expectedCount = Math.floor(targetWorkingDates.length / 3);
-      } else if (freq.includes('SEMINGGU SEKALI') || freq.includes('1X SEMINGGU')) {
-        expectedCount = Math.floor(targetWorkingDates.length / 6);
-      }
-
-      const totalReported = reportedDates.size;
-
-      if (totalReported < expectedCount && missingDates.length > 0) {
         menunggakList.push({
-          cabang: p.username || 'Cabang Tidak Diketahui',
-          frekuensi: p.frekuensi_setoran || 'Harian',
-          tunggakan: missingDates.map(d => d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }))
+          cabang: p.namaToko || p.cabang,
+          frekuensi: p.frekuensi || 'Harian',
+          tunggakan: (p.tanggalBolong || p.tunggakan).map((dStr: string) => {
+            // dStr is YYYY-MM-DD
+            const parts = dStr.split('-');
+            const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            return d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+          })
         });
+      });
+    } else {
+      // 1. Logika Gap Analysis (7 Hari Terakhir)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // D-7
+      const lastWeek = new Date(today);
+      lastWeek.setDate(lastWeek.getDate() - 7);
+
+      // Tarik profil yang aktif
+      const { data: profiles, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'User');
+
+      if (profileErr) throw profileErr;
+      if (!profiles || profiles.length === 0) {
+        return new Response(JSON.stringify({ message: 'Tidak ada profil cabang.' }), { status: 200, headers: CORS });
+      }
+
+      // Tarik laporan dalam 7 hari terakhir
+      const { data: laporan, error: lapErr } = await supabase
+        .from('laporan')
+        .select('user_id, tanggal_jual, tanggal_setor')
+        .gte('tanggal_jual', lastWeek.toISOString().split('T')[0])
+        .lte('tanggal_jual', today.toISOString().split('T')[0]);
+
+      if (lapErr) throw lapErr;
+
+      // Kalkulasi Tunggakan
+      const targetWorkingDates: Date[] = [];
+      let loopDate = new Date(lastWeek);
+      const endDate = new Date(today);
+      endDate.setDate(endDate.getDate() - 1); // sampai H-1
+
+      while (loopDate <= endDate) {
+        if (loopDate.getDay() !== 0) { // Lewati hari Minggu
+          const clone = new Date(loopDate);
+          targetWorkingDates.push(clone);
+        }
+        loopDate.setDate(loopDate.getDate() + 1);
+      }
+
+      for (const p of profiles) {
+        const cabangLaporan = (laporan || []).filter((l: any) => l.user_id === p.id);
+
+        const reportedDates = new Set<string>();
+        cabangLaporan.forEach((l: any) => {
+          if (l.tanggal_jual) {
+            const d = new Date(l.tanggal_jual);
+            d.setHours(0, 0, 0, 0);
+            reportedDates.add(d.getTime().toString());
+          }
+        });
+
+        const missingDates: Date[] = [];
+        for (const wDate of targetWorkingDates) {
+          if (!reportedDates.has(wDate.getTime().toString())) {
+            missingDates.push(wDate);
+          }
+        }
+
+        const freq = (p.frekuensi_setoran || '').toUpperCase();
+        let expectedCount = targetWorkingDates.length;
+
+        if (freq.includes('3X SEMINGGU')) {
+          expectedCount = Math.floor(targetWorkingDates.length / 2);
+        } else if (freq.includes('2X SEMINGGU')) {
+          expectedCount = Math.floor(targetWorkingDates.length / 3);
+        } else if (freq.includes('SEMINGGU SEKALI') || freq.includes('1X SEMINGGU')) {
+          expectedCount = Math.floor(targetWorkingDates.length / 6);
+        }
+
+        const totalReported = reportedDates.size;
+
+        if (totalReported < expectedCount && missingDates.length > 0) {
+          menunggakList.push({
+            cabang: p.username || 'Cabang Tidak Diketahui',
+            frekuensi: p.frekuensi_setoran || 'Harian',
+            tunggakan: missingDates.map(d => d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }))
+          });
+        }
       }
     }
 
     if (menunggakList.length === 0) {
       return new Response(JSON.stringify({ message: 'Semua cabang patuh! Tidak ada email yang perlu dikirim.' }), { status: 200, headers: CORS });
     }
-
     // 2. Pengaturan Email
     const smtpUser = Deno.env.get('GMAIL_SMTP_USER');
     const smtpPass = Deno.env.get('GMAIL_SMTP_PASSWORD');
@@ -121,10 +147,14 @@ serve(async (req: Request) => {
     }
 
     const fromEmail = 'apotekalpro.master@gmail.com';
-    const targetEmail = 'outlets@apotekalpro.id, areamanager@apotekalpro.id';
+    const targetEmail = customRecipient 
+      ? (customOutletEmails.length > 0 
+          ? [...new Set(customOutletEmails)].join(', ') + ', ' + customRecipient 
+          : 'outlets@apotekalpro.id, ' + customRecipient) 
+      : 'outlets@apotekalpro.id, areamanager@apotekalpro.id';
     const ccEmails = 'operation@apotekalpro.id, finance@apotekalpro.id, operation.excellence@apotekalpro.id';
 
-    const subject = `[REPORT] Laporan Apotek Menunggak Setoran (Mingguan)`;
+    const subject = customRecipient ? `[REMINDER] Laporan Apotek Menunggak Setoran` : `[REPORT] Laporan Apotek Menunggak Setoran (Mingguan)`;
 
     // 3. Perakitan HTML Email
     let tableRows = '';
