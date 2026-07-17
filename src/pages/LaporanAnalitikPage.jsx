@@ -95,40 +95,61 @@ export default function LaporanAnalitikPage() {
         setTableData([]);
         setAiSummary('');
         try {
-            let allData = [];
-            let from = 0;
-            let done = false;
-
-            while (!done) {
-                const to = from + PAGE_SIZE - 1;
+            // Fetch reports paginated
+            let reports = [];
+            let rFrom = 0;
+            let rDone = false;
+            while (!rDone) {
                 let query = supabase
                     .from('laporan')
                     .select(`
-                        tanggal_setor, jenis_pelaporan,
+                        tanggal_jual, tanggal_setor, jenis_pelaporan,
                         nominal_jual, nominal_setoran, potongan,
                         profiles!laporan_user_id_fkey!inner ( username )
                     `)
-                    .gte('tanggal_setor', start)
-                    .lte('tanggal_setor', end)
-                    .range(from, to);
+                    .gte('tanggal_jual', start)
+                    .lte('tanggal_jual', end)
+                    .range(rFrom, rFrom + PAGE_SIZE - 1);
 
                 if (pharmacyFilter) query = query.ilike('profiles.username', `%${pharmacyFilter}%`);
 
                 const { data, error: err } = await query;
                 if (err) throw err;
-
+                
                 const batch = data || [];
-                allData = allData.concat(batch);
-                setLoadingMsg(`Memproses data... [${allData.length} baris]`);
-
-                if (allData.length >= MAX_ROWS || batch.length < PAGE_SIZE) {
-                    done = true;
-                } else {
-                    from += PAGE_SIZE;
-                }
+                reports = reports.concat(batch);
+                setLoadingMsg(`Memproses data laporan... [${reports.length} baris]`);
+                
+                if (batch.length < PAGE_SIZE) rDone = true;
+                else rFrom += PAGE_SIZE;
             }
 
-            processAnalytics(allData, period, start, end);
+            // Fetch POS Xilnex sales paginated
+            let posData = [];
+            let pFrom = 0;
+            let pDone = false;
+            while (!pDone) {
+                let query = supabase
+                    .from('pos_sales_data')
+                    .select('kode_cabang, tanggal_jual, sales_pos')
+                    .gte('tanggal_jual', start)
+                    .lte('tanggal_jual', end)
+                    .range(pFrom, pFrom + PAGE_SIZE - 1);
+
+                if (pharmacyFilter) query = query.eq('kode_cabang', pharmacyFilter);
+
+                const { data, error: err } = await query;
+                if (err) throw err;
+                
+                const batch = data || [];
+                posData = posData.concat(batch);
+                setLoadingMsg(`Memproses data Xilnex... [${posData.length} baris]`);
+
+                if (batch.length < PAGE_SIZE) pDone = true;
+                else pFrom += PAGE_SIZE;
+            }
+
+            processAnalytics(reports, posData, period, start, end);
         } catch (e) {
             setError(e.message || 'Gagal memuat data analitik.');
         } finally {
@@ -136,84 +157,151 @@ export default function LaporanAnalitikPage() {
         }
     };
 
-    const processAnalytics = (rows, activePeriod, start, end) => {
-        if (!rows.length) { setAnalytics(null); setTableData([]); return; }
+    const processAnalytics = (reports, posData, activePeriod, start, end) => {
+        // KPI Scorecard calculations
+        let totalXilnex = 0;
+        posData.forEach(p => {
+            totalXilnex += p.sales_pos || 0;
+        });
 
-        // Scorecard
-        let totalPenjualan = 0, totalPotongan = 0, totalSetoran = 0;
+        let totalManualJual = 0, totalPotongan = 0, totalSetoran = 0;
         let kasusAnomali = 0;
         const NON_FINANCIAL = ['Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'];
 
-        rows.forEach((r) => {
-            totalPenjualan += r.nominal_jual || 0;
+        reports.forEach((r) => {
+            totalManualJual += r.nominal_jual || 0;
             totalPotongan += r.potongan || 0;
             totalSetoran += r.nominal_setoran || 0;
             if (NON_FINANCIAL.includes(r.jenis_pelaporan)) kasusAnomali++;
         });
-        const totalSelisih = (totalPenjualan - totalPotongan) - totalSetoran;
 
-        // Line chart: weekly DOW average for last_7, chronological for others
+        const totalSelisih = totalXilnex - totalSetoran - totalPotongan;
+
+        // Daily trend charts mapping
         let weeklyChart;
+        const byDate = {};
+
+        // Map reports by date
+        reports.forEach((r) => {
+            const d = r.tanggal_jual;
+            if (d) {
+                if (!byDate[d]) byDate[d] = { reportSales: 0, deposit: 0, potongan: 0, xilnexSales: 0 };
+                byDate[d].reportSales += r.nominal_jual || 0;
+                byDate[d].deposit += r.nominal_setoran || 0;
+                byDate[d].potongan += r.potongan || 0;
+            }
+        });
+
+        // Map POS sales by date
+        posData.forEach((p) => {
+            const d = p.tanggal_jual;
+            if (d) {
+                if (!byDate[d]) byDate[d] = { reportSales: 0, deposit: 0, potongan: 0, xilnexSales: 0 };
+                byDate[d].xilnexSales += p.sales_pos || 0;
+            }
+        });
+
         const useChronological = activePeriod === 'last_30' || activePeriod === 'custom';
         if (useChronological) {
-            const byDate = {};
-            rows.forEach((r) => {
-                const d = r.tanggal_setor;
-                if (!byDate[d]) byDate[d] = { sales: 0, deposit: 0 };
-                byDate[d].sales += r.nominal_jual || 0;
-                byDate[d].deposit += r.nominal_setoran || 0;
-            });
             const sortedDates = Object.keys(byDate).sort();
             weeklyChart = {
                 labels: sortedDates.map((d) => d.slice(5)),
                 avgDeposit: sortedDates.map((d) => byDate[d].deposit),
-                avgSales: sortedDates.map((d) => byDate[d].sales),
+                avgDepositAndPotongan: sortedDates.map((d) => byDate[d].deposit + byDate[d].potongan),
+                avgXilnex: sortedDates.map((d) => byDate[d].xilnexSales),
+                avgSales: sortedDates.map((d) => byDate[d].reportSales),
             };
         } else {
             const dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
             const salesByDay = Array(7).fill(0);
             const depositByDay = Array(7).fill(0);
-            const countByDay = Array(7).fill(0);
-            rows.forEach((r) => {
-                const d = new Date(r.tanggal_setor);
-                const dow = (d.getDay() + 6) % 7;
-                salesByDay[dow] += r.nominal_jual || 0;
-                depositByDay[dow] += r.nominal_setoran || 0;
-                countByDay[dow] += 1;
+            const potonganByDay = Array(7).fill(0);
+            const xilnexByDay = Array(7).fill(0);
+            const countByDayReport = Array(7).fill(0);
+            const countByDayPos = Array(7).fill(0);
+
+            reports.forEach((r) => {
+                const dStr = r.tanggal_jual;
+                if (dStr) {
+                    const d = new Date(dStr);
+                    const dow = (d.getDay() + 6) % 7;
+                    salesByDay[dow] += r.nominal_jual || 0;
+                    depositByDay[dow] += r.nominal_setoran || 0;
+                    potonganByDay[dow] += r.potongan || 0;
+                    countByDayReport[dow] += 1;
+                }
             });
+
+            posData.forEach((p) => {
+                const dStr = p.tanggal_jual;
+                if (dStr) {
+                    const d = new Date(dStr);
+                    const dow = (d.getDay() + 6) % 7;
+                    xilnexByDay[dow] += p.sales_pos || 0;
+                    countByDayPos[dow] += 1;
+                }
+            });
+
             weeklyChart = {
                 labels: dayNames,
-                avgDeposit: depositByDay.map((v, i) => countByDay[i] ? Math.round(v / countByDay[i]) : 0),
-                avgSales: salesByDay.map((v, i) => countByDay[i] ? Math.round(v / countByDay[i]) : 0),
+                avgDeposit: depositByDay.map((v, i) => countByDayReport[i] ? Math.round(v / countByDayReport[i]) : 0),
+                avgDepositAndPotongan: depositByDay.map((v, i) => {
+                    const totalCash = v + potonganByDay[i];
+                    return countByDayReport[i] ? Math.round(totalCash / countByDayReport[i]) : 0;
+                }),
+                avgXilnex: xilnexByDay.map((v, i) => countByDayPos[i] ? Math.round(v / countByDayPos[i]) : 0),
+                avgSales: salesByDay.map((v, i) => countByDayReport[i] ? Math.round(v / countByDayReport[i]) : 0),
             };
         }
 
-        // Jenis distribution chart — mapped labels to prevent duplicate
+        // Jenis distribution chart
         const jenisTotals = {};
-        rows.forEach((r) => {
+        reports.forEach((r) => {
             jenisTotals[r.jenis_pelaporan] = (jenisTotals[r.jenis_pelaporan] || 0) + (r.nominal_setoran || 0);
         });
 
-        // Summary table: group by username
+        // Summary table: group by username (Apotek)
         const byUser = {};
-        rows.forEach((r) => {
+        const getEntry = (name) => {
+            if (!byUser[name]) {
+                byUser[name] = {
+                    namaApotek: name,
+                    xilnexSales: 0,
+                    reportSales: 0,
+                    potongan: 0,
+                    nominalSetor: 0,
+                };
+            }
+            return byUser[name];
+        };
+
+        reports.forEach((r) => {
             const name = r.profiles?.username || 'Unknown';
-            if (!byUser[name]) byUser[name] = { totalJual: 0, potongan: 0, setor: 0 };
-            byUser[name].totalJual += r.nominal_jual || 0;
-            byUser[name].potongan += r.potongan || 0;
-            byUser[name].setor += r.nominal_setoran || 0;
+            const entry = getEntry(name);
+            entry.reportSales += r.nominal_jual || 0;
+            entry.potongan += r.potongan || 0;
+            entry.nominalSetor += r.nominal_setoran || 0;
         });
-        const table = Object.entries(byUser).map(([name, v]) => ({
-            namaApotek: name,
-            totalJual: v.totalJual,
-            potongan: v.potongan,
-            nominalSetor: v.setor,
-            selisih: (v.totalJual - v.potongan) - v.setor,
-        })).sort((a, b) => b.totalJual - a.totalJual);
+
+        posData.forEach((p) => {
+            const name = p.kode_cabang || 'Unknown';
+            const entry = getEntry(name);
+            entry.xilnexSales += p.sales_pos || 0;
+        });
+
+        const table = Object.values(byUser).map(entry => {
+            const delta1 = entry.reportSales - entry.xilnexSales;
+            const delta2 = (entry.nominalSetor + entry.potongan) - entry.xilnexSales;
+            return {
+                ...entry,
+                delta1,
+                delta2
+            };
+        }).sort((a, b) => b.xilnexSales - a.xilnexSales);
 
         setTableData(table);
         setAnalytics({
-            scorecard: { totalPenjualan, totalPotongan, totalSetoran, totalSelisih, kasusAnomali },
+            scorecard: { totalXilnex, totalPenjualan: totalManualJual, totalPotongan, totalSetoran, totalSelisih, kasusAnomali },
             weeklyChart,
             useChronological,
             distChart: {
@@ -247,13 +335,20 @@ export default function LaporanAnalitikPage() {
 
     const downloadCSV = () => {
         if (!tableData.length) return;
-        const header = 'Nama Apotek,Total Penjualan,Potongan,Nominal Setoran,Selisih\n';
+        const header = 'Nama Apotek,Sales Xilnex,Sales Manual,Potongan,Nominal Setoran,Selisih 1 (POS vs Sales Manual),Selisih 2 (POS vs Setoran+Potongan)\n';
         const body = tableData.map((r) =>
-            `"${r.namaApotek}",${r.totalJual},${r.potongan},${r.nominalSetor},${r.selisih}`
+            `"${r.namaApotek}",${r.xilnexSales},${r.reportSales},${r.potongan},${r.nominalSetor},${r.delta1},${r.delta2}`
         ).join('\n');
         const blob = new Blob([header + body], { type: 'text/csv;charset=utf-8;' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
         a.download = `Analitik_${effectiveDates.start}.csv`; a.click();
+    };
+
+    const renderDelta = (v) => {
+        if (v === 0) return <span className="text-gray-400 font-bold">Rp 0</span>;
+        const formatted = formatRupiah(v);
+        if (v > 0) return <span className="text-blue-600 font-bold">+${formatted}</span>;
+        return <span className="text-red-600 font-bold">${formatted}</span>;
     };
 
     const chartOptions = {
@@ -364,10 +459,10 @@ export default function LaporanAnalitikPage() {
                     <div className="space-y-6 animate-slide-in">
                         {/* SCORECARDS */}
                         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                            <Scorecard label="Total Penjualan" value={formatRupiah(analytics.scorecard.totalPenjualan)} barColor="bg-blue-500" barBg="bg-blue-100" />
+                            <Scorecard label="Total Sales (Xilnex)" value={formatRupiah(analytics.scorecard.totalXilnex)} barColor="bg-blue-500" barBg="bg-blue-100" />
                             <Scorecard label="Total Potongan" value={formatRupiah(analytics.scorecard.totalPotongan)} barColor="bg-orange-500" barBg="bg-orange-100" />
                             <Scorecard label="Total Setoran" value={formatRupiah(analytics.scorecard.totalSetoran)} barColor="bg-green-500" barBg="bg-green-100" valueClass="text-green-600" />
-                            <Scorecard label="Total Selisih" value={formatRupiah(analytics.scorecard.totalSelisih)} barColor={analytics.scorecard.totalSelisih > 0 ? 'bg-red-500' : analytics.scorecard.totalSelisih < 0 ? 'bg-blue-500' : 'bg-gray-400'} barBg="bg-gray-100" valueClass={analytics.scorecard.totalSelisih > 0 ? 'text-red-600' : analytics.scorecard.totalSelisih < 0 ? 'text-blue-600' : ''} />
+                            <Scorecard label="Total Selisih" value={formatRupiah(analytics.scorecard.totalSelisih)} barColor={analytics.scorecard.totalSelisih !== 0 ? 'bg-red-500' : 'bg-gray-400'} barBg="bg-gray-100" valueClass={analytics.scorecard.totalSelisih !== 0 ? 'text-red-600 font-bold' : ''} />
                             <Scorecard label="Kasus Anomali" value={analytics.scorecard.kasusAnomali} valueClass={analytics.scorecard.kasusAnomali > 0 ? 'text-red-600' : 'text-green-600'} barColor="bg-red-500" barBg="bg-red-100" icon={analytics.scorecard.kasusAnomali > 0 ? 'warning' : 'check_circle'} />
                         </div>
 
@@ -413,8 +508,8 @@ export default function LaporanAnalitikPage() {
                                         data={{
                                             labels: analytics.weeklyChart.labels,
                                             datasets: [
-                                                { label: 'Setoran', data: analytics.weeklyChart.avgDeposit, backgroundColor: '#F97316', borderRadius: 4 },
-                                                { label: 'Sales', data: analytics.weeklyChart.avgSales, backgroundColor: '#cbd5e1', borderRadius: 4 },
+                                                { label: 'Setoran + Potongan', data: analytics.weeklyChart.avgDepositAndPotongan, backgroundColor: '#F97316', borderRadius: 4 },
+                                                { label: 'Sales Xilnex', data: analytics.weeklyChart.avgXilnex, backgroundColor: '#3B82F6', borderRadius: 4 },
                                             ],
                                         }}
                                         options={{
@@ -468,27 +563,24 @@ export default function LaporanAnalitikPage() {
                                         <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
                                             <tr>
                                                 <th className="px-6 py-4">Nama Apotek</th>
-                                                <th className="px-6 py-4 text-right">Total Penjualan</th>
+                                                <th className="px-6 py-4 text-right bg-blue-50 text-blue-700">Sales Xilnex</th>
+                                                <th className="px-6 py-4 text-right">Sales Manual</th>
                                                 <th className="px-6 py-4 text-right">Potongan</th>
                                                 <th className="px-6 py-4 text-right">Nominal Setoran</th>
-                                                <th className="px-6 py-4 text-center">Selisih</th>
+                                                <th className="px-6 py-4 text-center text-red-700 bg-red-50">Selisih 1 (POS vs Sales Manual)</th>
+                                                <th className="px-6 py-4 text-center text-orange-700 bg-orange-50">Selisih 2 (POS vs Setoran+Potongan)</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100 text-gray-700">
                                             {tableData.map((row) => (
                                                 <tr key={row.namaApotek} className="hover:bg-gray-50 transition-colors">
                                                     <td className="px-6 py-4 font-bold text-gray-900">{row.namaApotek}</td>
-                                                    <td className="px-6 py-4 text-right">{formatRupiah(row.totalJual)}</td>
-                                                    <td className="px-6 py-4 text-right text-gray-500">({formatRupiah(row.potongan)})</td>
-                                                    <td className="px-6 py-4 text-right font-medium text-orange-600">{formatRupiah(row.nominalSetor)}</td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        {row.selisih > 0
-                                                            ? <span className="text-red-600 font-bold">{formatRupiah(row.selisih)}</span>
-                                                            : row.selisih < 0
-                                                                ? <span className="text-blue-600 font-bold">+{formatRupiah(Math.abs(row.selisih))}</span>
-                                                                : <span className="text-green-700 bg-green-50 px-2 py-0.5 rounded text-xs font-bold">Sesuai</span>
-                                                        }
-                                                    </td>
+                                                    <td className="px-6 py-4 text-right font-mono text-xs bg-blue-50/30 font-semibold">{formatRupiah(row.xilnexSales)}</td>
+                                                    <td className="px-6 py-4 text-right font-mono text-xs">{formatRupiah(row.reportSales)}</td>
+                                                    <td className="px-6 py-4 text-right font-mono text-xs text-gray-500">({formatRupiah(row.potongan)})</td>
+                                                    <td className="px-6 py-4 text-right font-mono text-xs font-semibold text-orange-600">{formatRupiah(row.nominalSetor)}</td>
+                                                    <td className="px-6 py-4 text-center font-mono text-xs bg-red-50/20">{renderDelta(row.delta1)}</td>
+                                                    <td className="px-6 py-4 text-center font-mono text-xs bg-orange-50/20">{renderDelta(row.delta2)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
