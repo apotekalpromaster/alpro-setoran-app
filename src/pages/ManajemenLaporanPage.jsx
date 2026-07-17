@@ -405,7 +405,7 @@ export default function ManajemenLaporanPage() {
                         <span className="material-symbols-outlined text-primary-500 text-3xl">payments</span>
                         <div>
                             <h4 className="font-bold text-gray-800 text-sm">Modul Rekonsiliasi &amp; Koreksi</h4>
-                            <p className="text-[11px] text-gray-500 leading-normal">Kelola verifikasi data POS dan persetujuan permohonan koreksi laporan cabang.</p>
+                            <p className="text-[11px] text-gray-500 leading-normal">Kelola verifikasi data Xilnex cabang.</p>
                         </div>
                     </div>
                     <div className="flex gap-2 w-full sm:w-auto">
@@ -414,12 +414,6 @@ export default function ManajemenLaporanPage() {
                             className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 h-9 px-4 border border-blue-200 text-blue-700 bg-blue-50/50 hover:bg-blue-50 text-xs font-bold rounded-lg transition-all"
                         >
                             <span className="material-symbols-outlined text-base">compare</span> Rekonsiliasi Xilnex
-                        </button>
-                        <button 
-                            onClick={() => navigate('/finance/koreksi-approval')} 
-                            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 h-9 px-4 border border-orange-200 text-orange-700 bg-orange-50/50 hover:bg-orange-50 text-xs font-bold rounded-lg transition-all"
-                        >
-                            <span className="material-symbols-outlined text-base">edit_note</span> Persetujuan Koreksi
                         </button>
                     </div>
                 </div>
