@@ -74,6 +74,8 @@ export default function AreaManagerDashboardPage() {
     const [tempEndDate, setTempEndDate] = useState(defaultEnd());
     const [showHighSelisih, setShowHighSelisih] = useState(false);
     const [selectedJenis, setSelectedJenis] = useState([]);
+    const [showJenisDropdown, setShowJenisDropdown] = useState(false);
+    const [specialCase, setSpecialCase] = useState(''); // '' | 'telat_lapor' | 'selisih_sales' | 'selisih_setoran'
 
     // Fetch data on initial load when profile is ready
     useEffect(() => {
@@ -320,20 +322,56 @@ export default function AreaManagerDashboardPage() {
     const filteredReports = useMemo(() => {
         const cleanSearch = searchTerm.trim().toLowerCase();
 
-        const actualFiltered = reports.map(r => ({
-            ...r,
-            selisih: (r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0)
-        })).filter(r => {
+        const getDiffDays = (createdStr, jualStr) => {
+            if (!createdStr || !jualStr) return 0;
+            const created = new Date(createdStr);
+            const jual = new Date(jualStr);
+            created.setHours(0,0,0,0);
+            jual.setHours(0,0,0,0);
+            const diffTime = created.getTime() - jual.getTime();
+            return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        };
+
+        const actualFiltered = reports.map(r => {
+            const codeKey = `${r.kode_toko}_${r.tanggal_jual}`;
+            const nameKey = `${r.username}_${r.tanggal_jual}`;
+            const posValAll = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(r.jenis_pelaporan);
+            const posVal1 = isValidTypeForPOS ? posValAll : undefined;
+
+            const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
+            const hasPOSAll = posValAll !== undefined && posValAll !== null;
+
+            const s1 = hasPOS1 ? (r.nominal_jual || 0) - posVal1 : null;
+            const s2 = hasPOSAll ? ((r.potongan || 0) + (r.nominal_setoran || 0)) - posValAll : null;
+
+            return {
+                ...r,
+                selisih: (r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0),
+                s1,
+                s2
+            };
+        }).filter(r => {
             const matchName = !cleanSearch || r.username.toLowerCase().includes(cleanSearch);
             const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD;
             const matchJenis = selectedJenis.length === 0 || selectedJenis.includes(r.jenis_pelaporan);
-            return matchName && matchSelisih && matchJenis;
+            
+            let matchSpecial = true;
+            if (specialCase === 'telat_lapor') {
+                matchSpecial = getDiffDays(r.created_at, r.tanggal_jual) >= 4;
+            } else if (specialCase === 'selisih_sales') {
+                matchSpecial = r.s1 !== null && r.s1 !== 0;
+            } else if (specialCase === 'selisih_setoran') {
+                matchSpecial = r.s2 !== null && r.s2 !== 0;
+            }
+
+            return matchName && matchSelisih && matchJenis && matchSpecial;
         });
 
         const showSales = selectedJenis.length === 0 || selectedJenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(j));
         
         let unreportedList = [];
-        if (showSales && outlets.length > 0) {
+        if (showSales && outlets.length > 0 && specialCase !== 'telat_lapor') {
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
             const yesterdayStr = yesterday.toLocaleDateString('sv-SE');
@@ -368,7 +406,17 @@ export default function AreaManagerDashboardPage() {
                             const mockSelisih = -(posVal || 0);
                             const matchSelisih = !showHighSelisih || Math.abs(mockSelisih) > DISCREPANCY_THRESHOLD;
 
-                            if (matchSelisih) {
+                            const s1 = posVal !== undefined && posVal !== null ? 0 - posVal : null;
+                            const s2 = posVal !== undefined && posVal !== null ? 0 - posVal : null;
+
+                            let matchSpecial = true;
+                            if (specialCase === 'selisih_sales') {
+                                matchSpecial = s1 !== null && s1 !== 0;
+                            } else if (specialCase === 'selisih_setoran') {
+                                matchSpecial = s2 !== null && s2 !== 0;
+                            }
+
+                            if (matchSelisih && matchSpecial) {
                                 unreportedList.push({
                                     id: 'unreported_' + o.id + '_' + dateStr,
                                     tanggal_jual: dateStr,
@@ -380,7 +428,9 @@ export default function AreaManagerDashboardPage() {
                                     nominal_jual: 0,
                                     potongan: 0,
                                     nominal_setoran: 0,
-                                    selisih: mockSelisih
+                                    selisih: mockSelisih,
+                                    s1,
+                                    s2
                                 });
                             }
                         }
@@ -395,7 +445,7 @@ export default function AreaManagerDashboardPage() {
             if (dateCompare !== 0) return dateCompare;
             return a.username.localeCompare(b.username);
         });
-    }, [reports, outlets, posSalesMap, searchTerm, showHighSelisih, selectedJenis, reportsStartDate, reportsEndDate]);
+    }, [reports, outlets, posSalesMap, searchTerm, showHighSelisih, selectedJenis, reportsStartDate, reportsEndDate, specialCase]);
 
     // Grand Totals for report table
     const tableTotals = useMemo(() => {
@@ -462,6 +512,8 @@ export default function AreaManagerDashboardPage() {
         setSearchTerm('');
         setShowHighSelisih(false);
         setSelectedJenis([]);
+        setSpecialCase('');
+        setShowJenisDropdown(false);
         const d = new Date();
         d.setDate(d.getDate() - 7);
         const resetStart = d.toLocaleDateString('sv-SE');
@@ -653,26 +705,89 @@ export default function AreaManagerDashboardPage() {
                                     </div>
                                 </div>
 
-                                {/* Row 2: Multi-select Jenis Pelaporan Chips */}
-                                <div className="pt-3 border-t border-gray-100 space-y-2">
-                                    <label className="block text-xs font-semibold text-gray-500">Filter Jenis Pelaporan (Bisa pilih lebih dari 1)</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {JELAS_TYPES.map((type) => {
-                                            const isSelected = selectedJenis.includes(type.id);
-                                            return (
-                                                <button
-                                                    key={type.id}
-                                                    onClick={() => handleToggleJenis(type.id)}
-                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all border ${
-                                                        isSelected
-                                                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-xs'
-                                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                                                    }`}
-                                                >
-                                                    {type.label}
-                                                </button>
-                                            );
-                                        })}
+                                {/* Row 2: Dropdowns for Filter (Grid 2 columns) */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-gray-100">
+                                    {/* Column 1: Jenis Pelaporan Multi-select Dropdown */}
+                                    <div className="relative">
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Filter Jenis Pelaporan (Bisa pilih lebih dari 1)</label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowJenisDropdown(p => !p)}
+                                            className="form-input w-full py-1.5 px-3 bg-gray-50 text-xs font-bold text-gray-800 flex justify-between items-center cursor-pointer min-h-[34px]"
+                                        >
+                                            <span className="truncate">
+                                                {selectedJenis.length === 0 
+                                                    ? 'Semua Jenis Pelaporan' 
+                                                    : `${selectedJenis.length} Jenis Pelaporan Terpilih`}
+                                            </span>
+                                            <span className="material-symbols-outlined text-sm text-gray-400">
+                                                {showJenisDropdown ? 'expand_less' : 'expand_more'}
+                                            </span>
+                                        </button>
+
+                                        {showJenisDropdown && (
+                                            <>
+                                                {/* Overlay to close on outside click */}
+                                                <div 
+                                                    className="fixed inset-0 z-20" 
+                                                    onClick={() => setShowJenisDropdown(false)}
+                                                />
+                                                <div className="absolute left-0 right-0 z-30 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-2 px-3 max-h-64 overflow-y-auto space-y-1.5 custom-scrollbar">
+                                                    <div className="flex justify-between items-center pb-1.5 border-b border-gray-100 mb-1.5 text-[10px] font-bold text-gray-500">
+                                                        <span>PILIH JENIS</span>
+                                                        <div className="flex gap-2">
+                                                            <button 
+                                                                type="button" 
+                                                                onClick={() => setSelectedJenis(JELAS_TYPES.map(t => t.id))}
+                                                                className="text-primary-600 hover:text-primary-700 cursor-pointer"
+                                                            >
+                                                                Pilih Semua
+                                                            </button>
+                                                            <span className="text-gray-300">|</span>
+                                                            <button 
+                                                                type="button" 
+                                                                onClick={() => setSelectedJenis([])}
+                                                                className="text-red-500 hover:text-red-600 cursor-pointer"
+                                                            >
+                                                                Bersihkan
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    {JELAS_TYPES.map((type) => {
+                                                        const isSelected = selectedJenis.includes(type.id);
+                                                        return (
+                                                            <label 
+                                                                key={type.id} 
+                                                                className="flex items-center gap-2.5 p-1.5 hover:bg-gray-50 rounded-md cursor-pointer select-none text-xs text-gray-700 font-semibold"
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isSelected}
+                                                                    onChange={() => handleToggleJenis(type.id)}
+                                                                    className="rounded text-primary-600 focus:ring-primary-500 border-gray-300 w-4 h-4 cursor-pointer"
+                                                                />
+                                                                <span className="truncate">{type.label}</span>
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Column 2: Special Cases Dropdown */}
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Filter Kasus Khusus (Audit)</label>
+                                        <select
+                                            value={specialCase}
+                                            onChange={(e) => setSpecialCase(e.target.value)}
+                                            className="form-input w-full py-1.5 px-3 bg-gray-50 text-xs cursor-pointer font-bold text-gray-800"
+                                        >
+                                            <option value="">Semua Laporan (Tanpa Filter Kasus)</option>
+                                            <option value="telat_lapor">Telat Lapor &gt; 4 Hari (Misal sales tgl 1, baru dilaporkan setelah tanggal 4)</option>
+                                            <option value="selisih_sales">Ada Selisih Data Sales (Xilnex) VS Nominal Sales</option>
+                                            <option value="selisih_setoran">Ada Selisih Data Sales (Xilnex) VS Potongan + Nominal Setor</option>
+                                        </select>
                                     </div>
                                 </div>
 
@@ -693,7 +808,7 @@ export default function AreaManagerDashboardPage() {
 
                                     {/* Right side: Action buttons */}
                                     <div className="flex gap-2 w-full sm:w-auto">
-                                        {(searchTerm || showHighSelisih || selectedJenis.length > 0 || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
+                                        {(searchTerm || showHighSelisih || selectedJenis.length > 0 || specialCase || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
                                             <button 
                                                 onClick={handleResetFilters}
                                                 className="flex-1 sm:flex-initial flex items-center justify-center gap-1 h-9 px-4 border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-red-500 rounded-lg transition-colors"
