@@ -19,7 +19,7 @@ serve(async (req: Request) => {
     }
 
     const fromEmail = 'apotekalpro.master@gmail.com';
-    const targetEmail = 'operation@apotekalpro.id, finance@apotekalpro.id';
+    const targetEmail = 'operation@apotekalpro.id, finance@apotekalpro.id, areamanager@apotekalpro.id';
 
     // Get current date string in WIB (UTC+7)
     const now = new Date();
@@ -32,20 +32,20 @@ serve(async (req: Request) => {
       year: 'numeric'
     });
 
-    const subject = `[REMINDER] Cek Anomali Laporan Setoran Harian - ${formattedDate}`;
+    const subject = `[WEEKLY REMINDER] Cek Anomali Laporan Setoran Harian - ${formattedDate}`;
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; background: #f3f4f6; padding: 20px;">
         <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
           <div style="background: #3b82f6; padding: 20px; text-align: center;">
-            <h2 style="color: white; margin: 0;">Pengingat Review Harian</h2>
+            <h2 style="color: white; margin: 0;">Pengingat Review Mingguan</h2>
             <p style="color: #dbeafe; font-size: 12px; margin-top: 5px;">Aplikasi Setoran Harian Apotek Alpro</p>
           </div>
           <div style="padding: 20px;">
-            <p style="color: #374151; font-size: 14px; line-height: 1.6;">Halo Tim Operasional & Keuangan,</p>
+            <p style="color: #374151; font-size: 14px; line-height: 1.6;">Halo Tim Operasional, Keuangan, & Area Manager,</p>
             
             <p style="color: #374151; font-size: 14px; line-height: 1.6;">
-              Ini adalah pengingat sore hari otomatis untuk melakukan peninjauan terhadap setoran masuk hari ini di dashboard Admin.
+              Ini adalah pengingat mingguan otomatis untuk melakukan peninjauan terhadap setoran masuk di dashboard masing-masing.
             </p>
             
             <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; font-size: 13px; color: #1e3a8a;">
@@ -53,12 +53,13 @@ serve(async (req: Request) => {
               <ul style="margin: 5px 0 0 0; padding-left: 20px;">
                 <li>Apakah ada anomali atau selisih setoran melebihi toleransi (> Rp 50.000)?</li>
                 <li>Apakah ada indikasi fraud (misal: hanya melapor uang pecahan kecil tanpa setoran penjualan utama)?</li>
-                <li>Apakah ada permohonan koreksi laporan yang butuh verifikasi dan persetujuan (approval)?</li>
+                <li>Apakah ada permohonan koreksi atau penghapusan laporan yang butuh verifikasi dan persetujuan (wewenang khusus milik Area Manager)?</li>
               </ul>
             </div>
 
             <div style="text-align: center; margin-top: 30px; margin-bottom: 20px;">
-              <a href="https://alpro-setoran-app.vercel.app/" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Buka Dashboard Admin</a>
+              <a href="https://alpro-setoran-app.vercel.app/admin" style="background: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-right: 10px; font-size: 13px;">Dashboard Admin (Ops & Fin)</a>
+              <a href="https://alpro-setoran-app.vercel.app/areamanager/dashboard" style="background: #10b981; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 13px;">Dashboard Area Manager</a>
             </div>
             
             <p style="margin-top: 30px; font-size: 11px; color: #6b7280; text-align: center;">
