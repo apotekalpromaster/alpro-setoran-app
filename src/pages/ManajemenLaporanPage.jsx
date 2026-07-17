@@ -141,16 +141,29 @@ export default function ManajemenLaporanPage() {
 
             let posSalesMap = {};
             if (searchKeys.length > 0 && allDates.length > 0) {
-                const { data: posData, error: posErr } = await supabase
-                    .from('pos_sales_data')
-                    .select('kode_cabang, tanggal_jual, sales_pos')
-                    .in('kode_cabang', searchKeys)
-                    .in('tanggal_jual', allDates);
+                let posDone = false;
+                let posFrom = 0;
+                const POS_PAGE_SIZE = 1000;
+                while (!posDone) {
+                    const posTo = posFrom + POS_PAGE_SIZE - 1;
+                    const { data: posData, error: posErr } = await supabase
+                        .from('pos_sales_data')
+                        .select('kode_cabang, tanggal_jual, sales_pos')
+                        .in('kode_cabang', searchKeys)
+                        .in('tanggal_jual', allDates)
+                        .range(posFrom, posTo);
 
-                if (!posErr && posData) {
-                    posData.forEach(item => {
+                    if (posErr) throw posErr;
+                    const posRows = posData || [];
+                    posRows.forEach(item => {
                         posSalesMap[item.kode_cabang + '_' + item.tanggal_jual] = item.sales_pos;
                     });
+
+                    if (posRows.length < POS_PAGE_SIZE) {
+                        posDone = true;
+                    } else {
+                        posFrom += POS_PAGE_SIZE;
+                    }
                 }
             }
 
@@ -244,6 +257,14 @@ export default function ManajemenLaporanPage() {
             const date = k.substring(idx + 1);
             return { username, date };
         });
+    }, [rows]);
+
+    // 2. Cari tanggal sales belum dilaporkan
+    const unreportedOutletDates = useMemo(() => {
+        return rows.filter(r => r.isUnreported).map(r => ({
+            username: r.username,
+            date: r.tanggal_jual
+        }));
     }, [rows]);
 
     // Client-side filter
@@ -545,20 +566,39 @@ export default function ManajemenLaporanPage() {
                             </span>
                         </div>
 
-                        {duplicateOutletDates.length > 0 && (
+                        {(duplicateOutletDates.length > 0 || unreportedOutletDates.length > 0) && (
                             <div className="mx-6 mt-5 mb-1 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg flex items-start gap-3 animate-fade-in shadow-xs">
                                 <span className="material-symbols-outlined text-red-500 flex-shrink-0 mt-0.5">warning</span>
-                                <div>
-                                    <p className="text-xs font-bold text-red-800 uppercase">Peringatan Duplikasi Tanggal Sales Outlet</p>
-                                    <p className="text-xs text-red-700 mt-1">
-                                        Terdapat pelaporan tanggal sales duplikat untuk:
-                                    </p>
-                                    <ul className="list-disc list-inside text-xs text-red-700 mt-1 font-semibold">
-                                        {duplicateOutletDates.map((d, i) => (
-                                            <li key={i}>{d.username} pada tanggal {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</li>
-                                        ))}
-                                    </ul>
-                                    <p className="text-[10px] text-red-600 mt-1.5">Harap periksa apakah ada kesalahan penginputan tanggal pada laporan outlet bersangkutan.</p>
+                                <div className="w-full">
+                                    <p className="text-xs font-bold text-red-800 uppercase">Pemberitahuan Penting Penjualan Outlet</p>
+                                    
+                                    {duplicateOutletDates.length > 0 && (
+                                        <div className="mt-2">
+                                            <p className="text-xs text-red-700 font-bold">
+                                                Terdapat pelaporan tanggal sales duplikat untuk:
+                                            </p>
+                                            <ul className="list-disc list-inside text-xs text-red-700 mt-1 font-semibold">
+                                                {duplicateOutletDates.map((d, i) => (
+                                                    <li key={i}>{d.username} pada tanggal {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+
+                                    {unreportedOutletDates.length > 0 && (
+                                        <div className="mt-3">
+                                            <p className="text-xs text-red-700 font-bold">
+                                                Apotek belum melaporkan penjualan (sales) untuk tanggal berikut:
+                                            </p>
+                                            <ul className="list-disc list-inside text-xs text-red-700 mt-1 font-semibold max-h-32 overflow-y-auto custom-scrollbar">
+                                                {unreportedOutletDates.map((d, i) => (
+                                                    <li key={i}>{d.username} pada tanggal {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                    
+                                    <p className="text-[10px] text-red-600 mt-2 font-medium">Harap periksa apakah ada kesalahan penginputan tanggal atau kelalaian pelaporan pada outlet bersangkutan.</p>
                                 </div>
                             </div>
                         )}
