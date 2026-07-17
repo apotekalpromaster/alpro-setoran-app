@@ -39,13 +39,15 @@ export default function AdminBerandaPage() {
     const [metrics, setMetrics] = useState({
         totalSales: 0,
         totalSetoran: 0,
-        uangBelumDisetor: 0,
+        potonganPenjualan: 0,
+        selisihPerluDiperiksa: 0,
         belumLapor: 0,
         totalApotek: 0
     });
 
-        const [chartData, setChartData] = useState(null);
+    const [chartData, setChartData] = useState(null);
     const [fraudAnomalies, setFraudAnomalies] = useState([]);
+    const [anomalyCollapsed, setAnomalyCollapsed] = useState(false);
 
     useEffect(() => {
         fetchDashboardData();
@@ -63,7 +65,7 @@ export default function AdminBerandaPage() {
 
             if (profileErr) throw profileErr;
 
-            // 2. Determine Date Range — using local timezone (sv-SE) to prevent H-1 leak
+            // 2. Determine Date Range
             const todayDate = new Date();
             let startDate = new Date();
 
@@ -83,7 +85,7 @@ export default function AdminBerandaPage() {
             const startStr = startDate.toLocaleDateString('sv-SE');
             const endStr = todayDate.toLocaleDateString('sv-SE');
 
-            // 3. Sequential Fetch — loop 500 rows/batch until all data retrieved
+            // 3. Sequential Fetch reports - using YYYY-MM-DD local timezone on sales date (tanggal_jual)
             const PAGE_SIZE = 500;
             const MAX_ROWS = 5000;
             let allLaporan = [];
@@ -94,9 +96,9 @@ export default function AdminBerandaPage() {
                 const to = from + PAGE_SIZE - 1;
                 const { data: batch, error: laporanErr } = await supabase
                     .from('laporan')
-                    .select('id, user_id, tanggal_setor, nominal_jual, nominal_setoran, potongan')
-                    .gte('tanggal_setor', startStr)
-                    .lte('tanggal_setor', endStr)
+                    .select('id, user_id, tanggal_jual, tanggal_setor, nominal_jual, nominal_setoran, potongan')
+                    .gte('tanggal_jual', startStr)
+                    .lte('tanggal_jual', endStr)
                     .range(from, to);
 
                 if (laporanErr) throw laporanErr;
@@ -111,38 +113,73 @@ export default function AdminBerandaPage() {
                 }
             }
 
-            // 4. Calculate Metrics
-            let sumSales = 0;
+            // 3.5 Fetch POS Sales Data for the selected period
+            let allPosSales = [];
+            let posFrom = 0;
+            let posDone = false;
+
+            while (!posDone) {
+                const posTo = posFrom + PAGE_SIZE - 1;
+                const { data: posBatch, error: posErr } = await supabase
+                    .from('pos_sales_data')
+                    .select('sales_pos, tanggal_jual')
+                    .gte('tanggal_jual', startStr)
+                    .lte('tanggal_jual', endStr)
+                    .range(posFrom, posTo);
+
+                if (posErr) throw posErr;
+                const posRows = posBatch || [];
+                allPosSales = allPosSales.concat(posRows);
+
+                if (posRows.length < PAGE_SIZE) {
+                    posDone = true;
+                } else {
+                    posFrom += PAGE_SIZE;
+                }
+            }
+
+            // 4. Calculate Metrics & Chart Data
+            let sumPosSales = 0;
             let sumSetoran = 0;
             let sumPotongan = 0;
             const uniqueReporters = new Set();
             const dailyData = {};
 
+            // Initialize daily data from POS sales
+            allPosSales.forEach(item => {
+                const dateKey = item.tanggal_jual;
+                const val = Number(item.sales_pos) || 0;
+                sumPosSales += val;
+                if (!dailyData[dateKey]) {
+                    dailyData[dateKey] = { sales: 0, setoran: 0 };
+                }
+                dailyData[dateKey].sales += val;
+            });
+
+            // Process Laporan deposits
             allLaporan.forEach(item => {
-                const sales = Number(item.nominal_jual) || 0;
                 const setoran = Number(item.nominal_setoran) || 0;
                 const potongan = Number(item.potongan) || 0;
 
-                sumSales += sales;
                 sumSetoran += setoran;
                 sumPotongan += potongan;
                 uniqueReporters.add(item.user_id);
 
-                const dateKey = item.tanggal_setor.split('T')[0];
+                const dateKey = item.tanggal_jual; // Align on sales date
                 if (!dailyData[dateKey]) {
                     dailyData[dateKey] = { sales: 0, setoran: 0 };
                 }
-                dailyData[dateKey].sales += sales;
                 dailyData[dateKey].setoran += setoran;
             });
 
-            const uangBelumDisetor = Math.max(0, sumSales - sumPotongan - sumSetoran);
+            const selisihPerluDiperiksa = sumPosSales - sumSetoran - sumPotongan;
             const belumLapor = (totalApotek || 0) - uniqueReporters.size;
 
-                        setMetrics({
-                totalSales: sumSales,
+            setMetrics({
+                totalSales: sumPosSales,
                 totalSetoran: sumSetoran,
-                uangBelumDisetor,
+                potonganPenjualan: sumPotongan,
+                selisihPerluDiperiksa,
                 belumLapor: Math.max(0, belumLapor),
                 totalApotek: totalApotek || 0
             });
@@ -166,7 +203,7 @@ export default function AdminBerandaPage() {
                 datasets: [
                     {
                         type: 'line',
-                        label: 'Tren Penjualan Tunai',
+                        label: 'Tren Penjualan Tunai (Xilnex)',
                         borderColor: '#f97316',
                         backgroundColor: '#f97316',
                         borderWidth: 2,
@@ -273,21 +310,36 @@ export default function AdminBerandaPage() {
                         {/* Anomali Fraud Warning Banner */}
             {fraudAnomalies.length > 0 && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-6 space-y-3">
-                    <div className="flex items-center gap-3 text-red-700">
-                        <span className="material-symbols-outlined text-red-500 text-2xl">warning</span>
-                        <h4 className="font-bold text-sm">Peringatan: Terdeteksi Anomali Penjualan Tanpa Setoran Utama</h4>
-                    </div>
-                    <p className="text-xs text-red-600">
-                        Sistem mendeteksi toko-toko berikut melaporkan setoran jenis pecahan/lain tetapi belum mengunggah laporan setoran utama (Setoran Harian/3x Seminggu/Potongan) pada tanggal penjualan berikut:
-                    </p>
-                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto custom-scrollbar">
-                        {fraudAnomalies.map((anom, idx) => (
-                            <span key={idx} className="inline-flex items-center bg-red-100/70 text-red-800 text-xs px-2.5 py-1 rounded-lg border border-red-200 font-semibold shadow-xs">
-                                <span className="material-symbols-outlined text-xs mr-1">storefront</span>
-                                {anom.username} ({new Date(anom.tanggal_jual).toLocaleDateString('id-ID', {day: '2-digit', month: 'short'})})
+                    <div className="flex items-center justify-between text-red-700">
+                        <div className="flex items-center gap-3">
+                            <span className="material-symbols-outlined text-red-500 text-2xl">warning</span>
+                            <h4 className="font-bold text-sm">Peringatan: Terdeteksi Anomali Penjualan Tanpa Setoran Utama</h4>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setAnomalyCollapsed(p => !p)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-red-100 text-red-500 transition-colors cursor-pointer"
+                        >
+                            <span className="material-symbols-outlined">
+                                {anomalyCollapsed ? 'expand_more' : 'expand_less'}
                             </span>
-                        ))}
+                        </button>
                     </div>
+                    {!anomalyCollapsed && (
+                        <>
+                            <p className="text-xs text-red-600">
+                                Sistem mendeteksi toko-toko berikut melaporkan setoran jenis pecahan/lain tetapi belum mengunggah laporan setoran utama (Setoran Harian/3x Seminggu/Potongan) pada tanggal penjualan berikut:
+                            </p>
+                            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                {fraudAnomalies.map((anom, idx) => (
+                                    <span key={idx} className="inline-flex items-center bg-red-100/70 text-red-800 text-xs px-2.5 py-1 rounded-lg border border-red-200 font-semibold shadow-xs">
+                                        <span className="material-symbols-outlined text-xs mr-1">storefront</span>
+                                        {anom.username} ({new Date(anom.tanggal_jual).toLocaleDateString('id-ID', {day: '2-digit', month: 'short'})})
+                                    </span>
+                                ))}
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
 
@@ -313,72 +365,93 @@ export default function AdminBerandaPage() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
                 {/* Sales */}
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                     <div className="absolute right-0 top-0 h-full w-1 bg-primary-500"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                                Total Sales Tunai
-                                {loading && <span className="material-symbols-outlined animate-spin text-sm text-gray-300">sync</span>}
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                                Total Sales Tunai (Data Xilnex)
+                                {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
-                            <h3 className="text-2xl font-bold text-gray-800 mt-1">
+                            <h3 className="text-xl font-bold text-gray-800 mt-1">
                                 {loading ? '...' : formatRupiah(metrics.totalSales)}
                             </h3>
                         </div>
-                        <div className="p-2 bg-orange-50 text-orange-600 rounded-lg"><span className="material-symbols-outlined">payments</span></div>
+                        <div className="p-1.5 bg-orange-50 text-orange-600 rounded-lg"><span className="material-symbols-outlined text-lg">payments</span></div>
                     </div>
                 </div>
 
                 {/* Deposit */}
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                     <div className="absolute right-0 top-0 h-full w-1 bg-green-500"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
                                 Total Setoran
-                                {loading && <span className="material-symbols-outlined animate-spin text-sm text-gray-300">sync</span>}
+                                {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
-                            <h3 className="text-2xl font-bold text-gray-800 mt-1">
+                            <h3 className="text-xl font-bold text-gray-800 mt-1">
                                 {loading ? '...' : formatRupiah(metrics.totalSetoran)}
                             </h3>
                         </div>
-                        <div className="p-2 bg-green-50 text-green-600 rounded-lg"><span className="material-symbols-outlined">account_balance</span></div>
+                        <div className="p-1.5 bg-green-50 text-green-600 rounded-lg"><span className="material-symbols-outlined text-lg">account_balance</span></div>
                     </div>
                 </div>
 
-                {/* Delta */}
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                {/* Potongan Penjualan */}
+                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                     <div className="absolute right-0 top-0 h-full w-1 bg-red-500"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                                Uang Belum Disetor
-                                {loading && <span className="material-symbols-outlined animate-spin text-sm text-gray-300">sync</span>}
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                                Potongan Penjualan
+                                {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
-                            <h3 className="text-2xl font-bold text-red-600 mt-1">
-                                {loading ? '...' : formatRupiah(metrics.uangBelumDisetor)}
+                            <h3 className="text-xl font-bold text-red-600 mt-1">
+                                {loading ? '...' : formatRupiah(metrics.potonganPenjualan)}
                             </h3>
                         </div>
-                        <div className="p-2 bg-red-50 text-red-600 rounded-lg"><span className="material-symbols-outlined">money_off</span></div>
+                        <div className="p-1.5 bg-red-50 text-red-600 rounded-lg"><span className="material-symbols-outlined text-lg">money_off</span></div>
+                    </div>
+                </div>
+
+                {/* Selisih Uang Perlu Diperiksa */}
+                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className={`absolute right-0 top-0 h-full w-1 ${metrics.selisihPerluDiperiksa > 0 ? 'bg-amber-500' : 'bg-green-500'}`}></div>
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                                Selisih Perlu Diperiksa
+                                {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
+                            </p>
+                            <h3 className={`text-xl font-bold mt-1 ${metrics.selisihPerluDiperiksa > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                                {loading ? '...' : formatRupiah(metrics.selisihPerluDiperiksa)}
+                            </h3>
+                        </div>
+                        <div className={`p-1.5 rounded-lg ${metrics.selisihPerluDiperiksa > 0 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>
+                            <span className="material-symbols-outlined text-lg">
+                                {metrics.selisihPerluDiperiksa > 0 ? 'question_mark' : 'done_all'}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
                 {/* Pending Reporters */}
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                     <div className="absolute right-0 top-0 h-full w-1 bg-orange-500"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
                                 Apotek Belum Lapor
-                                {loading && <span className="material-symbols-outlined animate-spin text-sm text-gray-300">sync</span>}
+                                {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
-                            <h3 className="text-2xl font-bold text-gray-800 mt-1">
+                            <h3 className="text-xl font-bold text-gray-800 mt-1">
                                 {loading ? '...' : `${metrics.belumLapor} / ${metrics.totalApotek}`}
                             </h3>
                         </div>
-                        <div className="p-2 bg-orange-50 text-orange-600 rounded-lg"><span className="material-symbols-outlined">storefront</span></div>
+                        <div className="p-1.5 bg-orange-50 text-orange-600 rounded-lg"><span className="material-symbols-outlined text-lg">storefront</span></div>
                     </div>
                 </div>
             </div>
