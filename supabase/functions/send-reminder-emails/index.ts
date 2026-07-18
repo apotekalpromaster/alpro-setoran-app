@@ -198,7 +198,7 @@ serve(async (req: Request) => {
       limitDate.setHours(23, 59, 59, 999);
       const limitDateStr = limitDate.toISOString().split('T')[0];
 
-      const submittedSet = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_setor}`));
+      const submittedSet = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_jual}`));
 
       const getBizDays = (startStr: string, endStr: string) => {
         const days: string[] = [];
@@ -249,104 +249,109 @@ serve(async (req: Request) => {
 
       console.log(`[send-reminder-emails] Starting automated loop for ${pendingUsers.length} pending/duplicated users.`);
 
-      // Sequentially send individual emails with throttling (1s delay)
+      // Batch sending (e.g. 10 emails in parallel, then 1s delay)
+      const batchSize = 10;
       let successCount = 0;
       let failCount = 0;
-      for (const item of pendingUsers) {
-        if (!item.email || !item.email.includes('@')) {
-          console.log(`[send-reminder-emails] Skip ${item.namaToko} - No registered email address.`);
-          continue;
-        }
 
-        const subject = `[REMINDER] Keterlambatan Laporan & Duplikasi Tanggal Setoran - ${item.namaToko}`;
-        
-        let pendingListHTML = '';
-        if (item.tanggalBolong.length > 0) {
-          pendingListHTML = `
-            <div style="margin-top: 15px;">
-              <h4 style="margin: 0 0 5px 0; color: #b91c1c;">Tanggal Belum Dilaporkan (Tunggakan):</h4>
-              <ul style="margin: 0; padding-left: 20px; color: #374151; font-size: 13px;">
-                ${item.tanggalBolong.slice(0, 30).map((tgl: string) => {
-                  const parts = tgl.split('-');
-                  const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-                  return `<li>${d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</li>`;
-                }).join('')}
-                ${item.tanggalBolong.length > 30 ? `<li>...dan ${item.tanggalBolong.length - 30} hari lainnya</li>` : ''}
-              </ul>
-            </div>
-          `;
-        }
+      for (let i = 0; i < pendingUsers.length; i += batchSize) {
+        const batch = pendingUsers.slice(i, i + batchSize);
+        const promises = batch.map(async (item: any) => {
+          if (!item.email || !item.email.includes('@')) {
+            console.log(`[send-reminder-emails] Skip ${item.namaToko} - No registered email address.`);
+            return;
+          }
 
-        let duplicateListHTML = '';
-        if (item.tanggalDuplikat.length > 0) {
-          duplicateListHTML = `
-            <div style="margin-top: 15px;">
-              <h4 style="margin: 0 0 5px 0; color: #f59e0b;">Tanggal Laporan Duplikat:</h4>
-              <ul style="margin: 0; padding-left: 20px; color: #374151; font-size: 13px;">
-                ${item.tanggalDuplikat.slice(0, 30).map((tgl: string) => {
-                  const parts = tgl.split('-');
-                  const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-                  return `<li>${d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</li>`;
-                }).join('')}
-                ${item.tanggalDuplikat.length > 30 ? `<li>...dan ${item.tanggalDuplikat.length - 30} tanggal lainnya</li>` : ''}
-              </ul>
-            </div>
-          `;
-        }
-
-        const htmlContent = `
-          <div style="font-family: Arial, sans-serif; background: #f3f4f6; padding: 20px;">
-            <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-              <div style="background: #ea580c; padding: 20px; text-align: center;">
-                <h2 style="color: white; margin: 0;">PEMBERITAHUAN KEPATUHAN SETORAN</h2>
-                <p style="color: #ffedd5; font-size: 12px; margin-top: 5px;">Apotek Alpro Setoran Harian</p>
+          const subject = `[REMINDER] Keterlambatan Laporan & Duplikasi Tanggal Setoran - ${item.namaToko}`;
+          
+          let pendingListHTML = '';
+          if (item.tanggalBolong.length > 0) {
+            pendingListHTML = `
+              <div style="margin-top: 15px;">
+                <h4 style="margin: 0 0 5px 0; color: #b91c1c;">Tanggal Belum Dilaporkan (Tunggakan):</h4>
+                <ul style="margin: 0; padding-left: 20px; color: #374151; font-size: 13px;">
+                  ${item.tanggalBolong.slice(0, 30).map((tgl: string) => {
+                    const parts = tgl.split('-');
+                    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    return `<li>${d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</li>`;
+                  }).join('')}
+                  ${item.tanggalBolong.length > 30 ? `<li>...dan ${item.tanggalBolong.length - 30} hari lainnya</li>` : ''}
+                </ul>
               </div>
-              <div style="padding: 20px;">
-                <p style="color: #374151; font-size: 14px; line-height: 1.6;">Halo Tim <strong>${item.namaToko}</strong>,</p>
-                <p style="color: #374151; font-size: 14px; line-height: 1.6;">
-                  Berdasarkan audit sistem setoran harian, ditemukan indikasi ketidakpatuhan berupa adanya <strong>tanggal belum dilaporkan</strong> (melewati toleransi 4 hari) atau <strong>laporan duplikat</strong> pada outlet Anda.
-                </p>
-                
-                ${pendingListHTML}
-                ${duplicateListHTML}
-                
-                <p style="color: #374151; font-size: 14px; line-height: 1.6; margin-top: 20px;">
-                  Mohon segera melengkapi laporan setoran yang belum masuk, atau merevisi laporan yang duplikat melalui aplikasi setoran harian Apotek Alpro.
-                </p>
-                
-                <div style="text-align: center; margin-top: 30px; margin-bottom: 20px;">
-                  <a href="https://alpro-setoran-app.vercel.app/" style="background: #ea580c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Buka Aplikasi Setoran</a>
+            `;
+          }
+
+          let duplicateListHTML = '';
+          if (item.tanggalDuplikat.length > 0) {
+            duplicateListHTML = `
+              <div style="margin-top: 15px;">
+                <h4 style="margin: 0 0 5px 0; color: #f59e0b;">Tanggal Laporan Duplikat:</h4>
+                <ul style="margin: 0; padding-left: 20px; color: #374151; font-size: 13px;">
+                  ${item.tanggalDuplikat.slice(0, 30).map((tgl: string) => {
+                    const parts = tgl.split('-');
+                    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    return `<li>${d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</li>`;
+                  }).join('')}
+                  ${item.tanggalDuplikat.length > 30 ? `<li>...dan ${item.tanggalDuplikat.length - 30} tanggal lainnya</li>` : ''}
+                </ul>
+              </div>
+            `;
+          }
+
+          const htmlContent = `
+            <div style="font-family: Arial, sans-serif; background: #f3f4f6; padding: 20px;">
+              <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div style="background: #ea580c; padding: 20px; text-align: center;">
+                  <h2 style="color: white; margin: 0;">PEMBERITAHUAN KEPATUHAN SETORAN</h2>
+                  <p style="color: #ffedd5; font-size: 12px; margin-top: 5px;">Apotek Alpro Setoran Harian</p>
                 </div>
-                
-                <p style="margin-top: 30px; font-size: 11px; color: #6b7280; text-align: center;">
-                  Dihasilkan otomatis oleh pg_cron & Edge Functions<br>
-                  Aplikasi Setoran Harian Apotek Alpro
-                </p>
+                <div style="padding: 20px;">
+                  <p style="color: #374151; font-size: 14px; line-height: 1.6;">Halo Tim <strong>${item.namaToko}</strong>,</p>
+                  <p style="color: #374151; font-size: 14px; line-height: 1.6;">
+                    Berdasarkan audit sistem setoran harian, ditemukan indikasi ketidakpatuhan berupa adanya <strong>tanggal belum dilaporkan</strong> (melewati toleransi 4 hari) atau <strong>laporan duplikat</strong> pada outlet Anda.
+                  </p>
+                  
+                  ${pendingListHTML}
+                  ${duplicateListHTML}
+                  
+                  <p style="color: #374151; font-size: 14px; line-height: 1.6; margin-top: 20px;">
+                    Mohon segera melengkapi laporan setoran yang belum masuk, atau merevisi laporan yang duplikat melalui aplikasi setoran harian Apotek Alpro.
+                  </p>
+                  
+                  <div style="text-align: center; margin-top: 30px; margin-bottom: 20px;">
+                    <a href="https://alpro-setoran-app.vercel.app/" style="background: #ea580c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Buka Aplikasi Setoran</a>
+                  </div>
+                  
+                  <p style="margin-top: 30px; font-size: 11px; color: #6b7280; text-align: center;">
+                    Dihasilkan otomatis oleh pg_cron & Edge Functions<br>
+                    Aplikasi Setoran Harian Apotek Alpro
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        `;
+          `;
 
-        try {
-          await transporter.sendMail({
-            from: fromEmail,
-            to: item.email,
-            cc: ccEmails,
-            subject: subject,
-            html: htmlContent
-          });
-          successCount++;
-        } catch (mailErr) {
-          console.error(`[send-reminder-emails] Gagal kirim ke ${item.namaToko}:`, mailErr);
-          failCount++;
-        }
+          try {
+            await transporter.sendMail({
+              from: fromEmail,
+              to: item.email,
+              cc: ccEmails,
+              subject: subject,
+              html: htmlContent
+            });
+            successCount++;
+          } catch (mailErr) {
+            console.error(`[send-reminder-emails] Gagal kirim ke ${item.namaToko}:`, mailErr);
+            failCount++;
+          }
+        });
 
-        // Throttling: wait 1000ms
+        await Promise.all(promises);
+        console.log(`[send-reminder-emails] Sent batch of ${batch.length} emails. Total success: ${successCount}`);
         await delay(1000);
       }
 
-      console.log(`[send-reminder-emails] Auto loop finished. Sukses: ${successCount}, Gagal: ${failCount}`);
-      return new Response(JSON.stringify({ success: true, count: successCount, failed: failCount }), {
+      console.log(`[send-reminder-emails] Auto loop finished. Sukses: ${successCount}, Gagal: ${failCount}`);      return new Response(JSON.stringify({ success: true, count: successCount, failed: failCount }), {
         status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
       });
     }
