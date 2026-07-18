@@ -82,7 +82,7 @@ serve(async (req: Request) => {
     limitDate.setHours(23, 59, 59, 999);
     const limitDateStr = limitDate.toISOString().split('T')[0];
 
-    const submittedSet = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_setor}`));
+    const submittedSet = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_jual}`));
 
     const getBizDays = (startStr: string, endStr: string) => {
       const days: string[] = [];
