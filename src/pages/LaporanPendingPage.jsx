@@ -120,9 +120,9 @@ export default function LaporanPendingPage() {
             while (hasMore) {
                 const { data: pageData, error: lErr } = await supabase
                     .from('laporan')
-                    .select('user_id, tanggal_setor')
-                    .gte('tanggal_setor', start)
-                    .lte('tanggal_setor', end)
+                    .select('user_id, tanggal_jual')
+                    .gte('tanggal_jual', start)
+                    .lte('tanggal_jual', end)
                     .range(rFrom, rFrom + limit - 1);
                 if (lErr) throw lErr;
 
@@ -135,7 +135,7 @@ export default function LaporanPendingPage() {
             }
 
             // 3. Build a Set<userId_date> of submitted dates
-            const submitted = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_setor}`));
+            const submitted = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_jual}`));
 
             // 4. Business days in range
             const bizDays = getBusinessDaysBetween(start, end);
