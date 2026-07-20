@@ -4,15 +4,26 @@ import { supabase } from '../services/supabaseClient';
 
 export default function LaporanBackdatePage() {
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState(null);
     const [rawLaporan, setRawLaporan] = useState([]);
-    const [profiles, setProfiles] = useState([]);
+    const [profilesMap, setProfilesMap] = useState({});
+    const [availableAMs, setAvailableAMs] = useState([]);
+
+    // Temporary Form Filter States
     const [filterPeriod, setFilterPeriod] = useState('15'); // '15', '30', 'month', 'custom'
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [selectedAM, setSelectedAM] = useState('ALL');
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Load initial data from Supabase
+    // Applied Filter States (Controlled by "Terapkan Filter")
+    const [appliedPeriod, setAppliedPeriod] = useState('15');
+    const [appliedStartDate, setAppliedStartDate] = useState('');
+    const [appliedEndDate, setAppliedEndDate] = useState('');
+    const [appliedAM, setAppliedAM] = useState('ALL');
+    const [appliedSearch, setAppliedSearch] = useState('');
+
+    // Load data from Supabase
     useEffect(() => {
         fetchData();
     }, []);
@@ -20,14 +31,24 @@ export default function LaporanBackdatePage() {
     const fetchData = async () => {
         try {
             setLoading(true);
+            setFetchError(null);
 
-            // 1. Fetch profiles for AM mapping
+            // 1. Fetch profiles for lookup
             const { data: profData, error: profErr } = await supabase
                 .from('profiles')
                 .select('id, username, area_manager')
                 .eq('role', 'User');
             if (profErr) throw profErr;
-            setProfiles(profData || []);
+
+            const pMap = {};
+            const amSet = new Set();
+            (profData || []).forEach((p) => {
+                pMap[p.id] = p;
+                if (p.area_manager) amSet.add(p.area_manager);
+            });
+
+            setProfilesMap(pMap);
+            setAvailableAMs(Array.from(amSet).sort());
 
             // 2. Fetch reports paginated
             let allReports = [];
@@ -38,7 +59,7 @@ export default function LaporanBackdatePage() {
             while (hasMore) {
                 const { data, error } = await supabase
                     .from('laporan')
-                    .select('id, user_id, tanggal_jual, tanggal_setor, created_at, jenis_pelaporan, nominal_setoran, profiles(username, area_manager)')
+                    .select('id, user_id, tanggal_jual, tanggal_setor, created_at, jenis_pelaporan, nominal_setoran')
                     .range(from, from + step - 1)
                     .order('tanggal_jual', { ascending: false });
 
@@ -51,33 +72,57 @@ export default function LaporanBackdatePage() {
             setRawLaporan(allReports);
         } catch (err) {
             console.error('Gagal mengambil data laporan:', err);
+            setFetchError(err.message || 'Gagal mengambil data laporan dari server.');
         } finally {
             setLoading(false);
         }
     };
 
-    // Calculate date bounds based on filterPeriod
+    // Apply & Reset Handlers
+    const handleApplyFilter = () => {
+        setAppliedPeriod(filterPeriod);
+        setAppliedStartDate(customStartDate);
+        setAppliedEndDate(customEndDate);
+        setAppliedAM(selectedAM);
+        setAppliedSearch(searchQuery);
+    };
+
+    const handleResetFilter = () => {
+        setFilterPeriod('15');
+        setCustomStartDate('');
+        setCustomEndDate('');
+        setSelectedAM('ALL');
+        setSearchQuery('');
+
+        setAppliedPeriod('15');
+        setAppliedStartDate('');
+        setAppliedEndDate('');
+        setAppliedAM('ALL');
+        setAppliedSearch('');
+    };
+
+    // Calculate date bounds based on appliedPeriod
     const dateBounds = useMemo(() => {
         const today = new Date();
         let start = new Date();
         let end = new Date();
 
-        if (filterPeriod === '15') {
+        if (appliedPeriod === '15') {
             start.setDate(today.getDate() - 15);
-        } else if (filterPeriod === '30') {
+        } else if (appliedPeriod === '30') {
             start.setDate(today.getDate() - 30);
-        } else if (filterPeriod === 'month') {
+        } else if (appliedPeriod === 'month') {
             start = new Date(today.getFullYear(), today.getMonth(), 1);
-        } else if (filterPeriod === 'custom') {
-            if (customStartDate) start = new Date(customStartDate);
-            if (customEndDate) end = new Date(customEndDate);
+        } else if (appliedPeriod === 'custom') {
+            if (appliedStartDate) start = new Date(appliedStartDate);
+            if (appliedEndDate) end = new Date(appliedEndDate);
         }
 
         start.setHours(0, 0, 0, 0);
         end.setHours(23, 59, 59, 999);
 
         return { start, end };
-    }, [filterPeriod, customStartDate, customEndDate]);
+    }, [appliedPeriod, appliedStartDate, appliedEndDate]);
 
     // Process backdate incidents (> 4 days gap)
     const backdateIncidents = useMemo(() => {
@@ -88,10 +133,9 @@ export default function LaporanBackdatePage() {
             if (!r.tanggal_jual) return;
 
             const salesDate = new Date(r.tanggal_jual);
-            // Ignore outside filter range
             if (salesDate < dateBounds.start || salesDate > dateBounds.end) return;
 
-            // Determine input date (prefer created_at date, fallback to tanggal_setor)
+            // Determine input date
             let inputDateStr = r.tanggal_setor;
             if (r.created_at) {
                 inputDateStr = r.created_at.split('T')[0];
@@ -104,7 +148,7 @@ export default function LaporanBackdatePage() {
 
             // Backdate threshold: gap > 4 days
             if (diffDays > 4) {
-                const profileObj = r.profiles || {};
+                const profileObj = profilesMap[r.user_id] || {};
                 const amName = profileObj.area_manager || 'Tanpa Area Manager';
                 const namaToko = profileObj.username || 'Unknown Toko';
 
@@ -123,25 +167,19 @@ export default function LaporanBackdatePage() {
         });
 
         return list;
-    }, [rawLaporan, dateBounds]);
+    }, [rawLaporan, profilesMap, dateBounds]);
 
-    // Filter list based on selected AM and Search Query
+    // Filter list based on appliedAM and appliedSearch
     const filteredIncidents = useMemo(() => {
         return backdateIncidents.filter((item) => {
-            const matchesAM = selectedAM === 'ALL' || item.amName === selectedAM;
+            const matchesAM = appliedAM === 'ALL' || item.amName === appliedAM;
             const matchesSearch =
-                !searchQuery ||
-                item.namaToko.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.amName.toLowerCase().includes(searchQuery.toLowerCase());
+                !appliedSearch ||
+                item.namaToko.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+                item.amName.toLowerCase().includes(appliedSearch.toLowerCase());
             return matchesAM && matchesSearch;
         });
-    }, [backdateIncidents, selectedAM, searchQuery]);
-
-    // Unique AM list for dropdown
-    const availableAMs = useMemo(() => {
-        const amSet = new Set(profiles.map((p) => p.area_manager).filter(Boolean));
-        return Array.from(amSet).sort();
-    }, [profiles]);
+    }, [backdateIncidents, appliedAM, appliedSearch]);
 
     // Grouping by Area Manager
     const groupedData = useMemo(() => {
@@ -163,7 +201,6 @@ export default function LaporanBackdatePage() {
             ? (filteredIncidents.reduce((sum, i) => sum + i.diffDays, 0) / totalIncidents).toFixed(1) 
             : 0;
 
-        // Find AM with most incidents
         let topAM = '-';
         let maxCount = 0;
         Object.entries(groupedData).forEach(([am, items]) => {
@@ -176,7 +213,6 @@ export default function LaporanBackdatePage() {
         return { totalIncidents, uniqueOutlets, avgDelay, topAM, maxCount };
     }, [filteredIncidents, groupedData]);
 
-    // Format helpers
     const formatDate = (dStr) => {
         if (!dStr) return '-';
         const [y, m, d] = dStr.split('-');
@@ -187,7 +223,6 @@ export default function LaporanBackdatePage() {
         return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val || 0);
     };
 
-    // CSV Export Handler
     const handleExportCSV = () => {
         if (!filteredIncidents.length) {
             alert('Tidak ada data insiden backdate untuk di-export.');
@@ -330,6 +365,24 @@ export default function LaporanBackdatePage() {
                             </div>
                         </div>
                     )}
+
+                    {/* Action Buttons: Reset Filter & Terapkan Filter */}
+                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                        <button
+                            onClick={handleResetFilter}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-200 transition-colors cursor-pointer"
+                        >
+                            <span className="material-symbols-outlined text-sm">restart_alt</span>
+                            Reset Filter
+                        </button>
+                        <button
+                            onClick={handleApplyFilter}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors shadow-xs cursor-pointer"
+                        >
+                            <span className="material-symbols-outlined text-sm">filter_alt</span>
+                            Terapkan Filter
+                        </button>
+                    </div>
                 </div>
 
                 {/* Summary Metric Cards */}
@@ -381,6 +434,18 @@ export default function LaporanBackdatePage() {
                     <div className="bg-white p-12 rounded-2xl border border-gray-100 shadow-xs text-center">
                         <span className="material-symbols-outlined text-amber-500 text-4xl animate-spin">sync</span>
                         <p className="text-sm font-semibold text-gray-500 mt-3">Mengambil data audit backdate...</p>
+                    </div>
+                ) : fetchError ? (
+                    <div className="bg-red-50 p-6 rounded-2xl border border-red-200 text-center">
+                        <span className="material-symbols-outlined text-red-500 text-4xl">error</span>
+                        <h3 className="text-base font-bold text-red-800 mt-2">Gagal Memuat Data</h3>
+                        <p className="text-xs text-red-600 mt-1">{fetchError}</p>
+                        <button
+                            onClick={fetchData}
+                            className="mt-4 px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 transition-colors cursor-pointer"
+                        >
+                            Coba Lagi
+                        </button>
                     </div>
                 ) : filteredIncidents.length === 0 ? (
                     <div className="bg-white p-12 rounded-2xl border border-gray-100 shadow-xs text-center">
@@ -449,4 +514,3 @@ export default function LaporanBackdatePage() {
         </AdminLayout>
     );
 }
-
