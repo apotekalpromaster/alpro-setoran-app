@@ -8,6 +8,12 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const PRIMARY_REPORT_TYPES = [
+  'Setoran Harian',
+  'Setoran 3x Seminggu',
+  'Setoran Sales Dengan Potongan Penjualan'
+];
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
 
@@ -70,10 +76,14 @@ serve(async (req: Request) => {
       else from += step;
     }
 
-    // 3. Filter backdate incidents (> 4 days gap)
+    // 3. Filter backdate incidents (> 4 days gap) - Only 3 primary report types
     const backdateIncidents: any[] = [];
     allReports.forEach((r) => {
       if (!r.tanggal_jual || !r.tanggal_setor) return;
+
+      // Strict Filter: Only process 3 primary report types
+      if (!PRIMARY_REPORT_TYPES.includes(r.jenis_pelaporan)) return;
+
       const salesDate = new Date(r.tanggal_jual);
       const inputDate = new Date(r.tanggal_setor);
       const diffMs = inputDate.getTime() - salesDate.getTime();
@@ -88,7 +98,7 @@ serve(async (req: Request) => {
           tanggalJual: r.tanggal_jual,
           tanggalInput: r.tanggal_setor,
           diffDays,
-          jenisPelaporan: r.jenis_pelaporan || 'Setoran Harian',
+          jenisPelaporan: r.jenis_pelaporan,
           nominalSetoran: r.nominal_setoran || 0,
         });
       }
@@ -112,7 +122,7 @@ serve(async (req: Request) => {
       bodyHTML = `
         <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 16px; text-align: center; color: #065f46;">
           <h3 style="margin: 0; font-size: 16px;">Kepatuhan 100% Sempurna</h3>
-          <p style="margin: 5px 0 0 0; font-size: 13px;">Tidak ditemukan insiden penginputan laporan backdate (> 4 hari dari tanggal sales) pada periode 15 hari terakhir.</p>
+          <p style="margin: 5px 0 0 0; font-size: 13px;">Tidak ditemukan insiden penginputan laporan backdate (> 4 hari dari tanggal sales) pada 3 jenis pelaporan utama selama 15 hari terakhir.</p>
         </div>
       `;
     } else {
@@ -171,7 +181,7 @@ serve(async (req: Request) => {
       bodyHTML = `
         <div style="margin-top: 15px;">
           <p style="color: #374151; font-size: 14px; line-height: 1.6;">
-            Ditemukan total <strong>${totalIncidents} insiden penginputan backdate (&gt; 4 hari)</strong> selama 15 hari terakhir. Berikut rincian terkelompok berdasarkan Area Manager:
+            Ditemukan total <strong>${totalIncidents} insiden penginputan backdate (&gt; 4 hari)</strong> pada 3 jenis pelaporan utama selama 15 hari terakhir. Berikut rincian terkelompok berdasarkan Area Manager:
           </p>
           ${groupTablesHTML}
         </div>
@@ -183,7 +193,7 @@ serve(async (req: Request) => {
         <div style="max-width: 750px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
           <div style="background: #d97706; padding: 24px; text-align: center;">
             <h2 style="color: white; margin: 0; font-size: 20px;">AUDIT KEPATUHAN INPUT BACKDATE (2 MINGGUAN)</h2>
-            <p style="color: #fef3c7; font-size: 13px; margin-top: 6px;">Evaluasi Periode 15 Hari Terakhir - Tanggal Audit: ${todayFormatted}</p>
+            <p style="color: #fef3c7; font-size: 13px; margin-top: 6px;">Evaluasi 3 Jenis Pelaporan Utama Periode 15 Hari Terakhir - Tanggal Audit: ${todayFormatted}</p>
           </div>
           <div style="padding: 24px;">
             ${bodyHTML}
