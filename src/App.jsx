@@ -23,6 +23,7 @@ import DetailRiwayatPage from './pages/DetailRiwayatPage';
 import ManajemenLaporanPage from './pages/ManajemenLaporanPage';
 import LaporanAnalitikPage from './pages/LaporanAnalitikPage';
 import LaporanPendingPage from './pages/LaporanPendingPage';
+import LaporanBackdatePage from './pages/LaporanBackdatePage';
 
 // Phase 9 (Improvement V2)
 import RekonsiliasiPOSPage from './pages/RekonsiliasiPOSPage';
@@ -127,6 +128,7 @@ function AppRoutes() {
       <Route path="/admin/laporan" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><ManajemenLaporanPage /></ProtectedRoute>} />
       <Route path="/admin/analitik" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanAnalitikPage /></ProtectedRoute>} />
             <Route path="/admin/pending" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanPendingPage /></ProtectedRoute>} />
+      <Route path="/admin/backdate" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanBackdatePage /></ProtectedRoute>} />
       <Route path="/finance/rekonsiliasi-pos" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><RekonsiliasiPOSPage /></ProtectedRoute>} />
       <Route path="/areamanager/koreksi-approval" element={<ProtectedRoute allowedRoles={['AreaManager']}><AreaManagerKoreksiApprovalPage /></ProtectedRoute>} />
       <Route path="/admin/bantuan" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><BantuanAdminPage /></ProtectedRoute>} />
