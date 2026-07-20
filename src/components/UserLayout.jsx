@@ -9,6 +9,7 @@ const NAV_ITEMS = [
     { label: 'Lapor Setoran', icon: 'add_circle', path: '/setoran' },
     { label: 'Riwayat Laporan', icon: 'history', path: '/riwayat' },
     { label: 'Koreksi Laporan', icon: 'edit_note', path: '/koreksi' },
+    { label: 'Troubleshooting Bank', icon: 'troubleshoot', path: '/user/troubleshooting' },
     { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
     { label: 'Petunjuk Penggunaan', icon: 'menu_book', path: '/bantuan' },
 ];
