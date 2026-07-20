@@ -103,11 +103,12 @@ export default function TroubleshootingFinancePage() {
             const matchesPIC = selectedPIC === 'ALL' || item.pic_finance === selectedPIC;
             const matchesCategory = selectedCategory === 'ALL' || item.kategori_issue === selectedCategory;
             const matchesStatus = selectedStatus === 'ALL' || item.status === selectedStatus;
+            const q = searchQuery.toLowerCase();
             const matchesSearch =
                 !searchQuery ||
-                item.kode_toko.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (item.keterangan_finance || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (item.pic_finance || '').toLowerCase().includes(searchQuery.toLowerCase());
+                (item.kode_toko || '').toLowerCase().includes(q) ||
+                (item.keterangan_finance || '').toLowerCase().includes(q) ||
+                (item.pic_finance || '').toLowerCase().includes(q);
             return matchesPIC && matchesCategory && matchesStatus && matchesSearch;
         });
     }, [rawIssues, selectedPIC, selectedCategory, selectedStatus, searchQuery]);
@@ -120,7 +121,9 @@ export default function TroubleshootingFinancePage() {
         const rejected = filteredIssues.filter((i) => i.status === 'REJECTED').length;
 
         const now = new Date();
-        const overdueSLA = filteredIssues.filter((i) => i.status === 'PENDING_STORE_RESPONSE' && new Date(i.sla_deadline) < now).length;
+        const overdueSLA = filteredIssues.filter(
+            (i) => i.status === 'PENDING_STORE_RESPONSE' && i.sla_deadline && new Date(i.sla_deadline) < now
+        ).length;
 
         return { total, pendingStore, pendingApproval, approved, rejected, overdueSLA };
     }, [filteredIssues]);
@@ -140,7 +143,7 @@ export default function TroubleshootingFinancePage() {
 
             const newRecord = {
                 batch_id: 'MANUAL-' + Date.now(),
-                uploaded_by: user.id,
+                uploaded_by: user?.id || null,
                 pic_finance: manualForm.pic_finance.trim() || 'Finance',
                 kategori_issue: manualForm.kategori_issue,
                 periode_minggu: manualForm.periode_minggu.trim() || null,
@@ -158,7 +161,7 @@ export default function TroubleshootingFinancePage() {
 
             await supabase.from('finance_troubleshooting_history').insert({
                 issue_id: data.id,
-                actor_id: user.id,
+                actor_id: user?.id || null,
                 action_type: 'MANUAL_CREATED',
                 notes: 'Isu ditambahkan secara manual oleh ' + manualForm.pic_finance
             });
@@ -212,7 +215,7 @@ export default function TroubleshootingFinancePage() {
             setUploadingExcel(true);
             const recordsToInsert = parsedPreview.map((item) => ({
                 ...item,
-                uploaded_by: user.id,
+                uploaded_by: user?.id || null,
                 pic_finance: profile?.username || 'Finance',
             }));
 
@@ -244,7 +247,7 @@ export default function TroubleshootingFinancePage() {
                     .from('finance_troubleshooting_issues')
                     .update({
                         status: 'APPROVED',
-                        approved_by: user.id,
+                        approved_by: user?.id || null,
                         approved_at: nowIso,
                         updated_at: nowIso
                     })
@@ -253,7 +256,7 @@ export default function TroubleshootingFinancePage() {
 
                 await supabase.from('finance_troubleshooting_history').insert({
                     issue_id: reviewIssue.id,
-                    actor_id: user.id,
+                    actor_id: user?.id || null,
                     action_type: 'APPROVED_BY_FINANCE',
                     notes: 'Finance menyetujui tanggapan / klarifikasi toko.'
                 });
@@ -278,7 +281,7 @@ export default function TroubleshootingFinancePage() {
 
                 await supabase.from('finance_troubleshooting_history').insert({
                     issue_id: reviewIssue.id,
-                    actor_id: user.id,
+                    actor_id: user?.id || null,
                     action_type: 'REJECTED_BY_FINANCE',
                     notes: 'Finance menolak tanggapan toko dengan catatan: ' + rejectNotes.trim()
                 });
@@ -319,8 +322,9 @@ export default function TroubleshootingFinancePage() {
 
     const formatDate = (dStr) => {
         if (!dStr) return '-';
-        const [y, m, d] = dStr.split('T')[0].split('-');
-        return `${d}/${m}/${y}`;
+        const parts = dStr.split('T')[0].split('-');
+        if (parts.length < 3) return dStr;
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
     };
 
     return (
