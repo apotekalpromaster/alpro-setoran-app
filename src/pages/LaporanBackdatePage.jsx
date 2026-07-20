@@ -2,6 +2,12 @@
 import AdminLayout from '../components/AdminLayout';
 import { supabase } from '../services/supabaseClient';
 
+const PRIMARY_REPORT_TYPES = [
+    'Setoran Harian',
+    'Setoran 3x Seminggu',
+    'Setoran Sales Dengan Potongan Penjualan'
+];
+
 export default function LaporanBackdatePage() {
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState(null);
@@ -50,7 +56,7 @@ export default function LaporanBackdatePage() {
             setProfilesMap(pMap);
             setAvailableAMs(Array.from(amSet).sort());
 
-            // 2. Fetch reports paginated (without nonexistent created_at column)
+            // 2. Fetch reports paginated
             let allReports = [];
             let from = 0;
             const step = 1000;
@@ -124,13 +130,16 @@ export default function LaporanBackdatePage() {
         return { start, end };
     }, [appliedPeriod, appliedStartDate, appliedEndDate]);
 
-    // Process backdate incidents (> 4 days gap between tanggal_setor & tanggal_jual)
+    // Process backdate incidents (> 4 days gap) - Filtering ONLY 3 primary report types
     const backdateIncidents = useMemo(() => {
         if (!rawLaporan.length) return [];
 
         const list = [];
         rawLaporan.forEach((r) => {
             if (!r.tanggal_jual || !r.tanggal_setor) return;
+
+            // Strict Filter: Only process the 3 primary report types
+            if (!PRIMARY_REPORT_TYPES.includes(r.jenis_pelaporan)) return;
 
             const salesDate = new Date(r.tanggal_jual);
             if (salesDate < dateBounds.start || salesDate > dateBounds.end) return;
@@ -153,7 +162,7 @@ export default function LaporanBackdatePage() {
                     tanggalJual: r.tanggal_jual,
                     tanggalInput: r.tanggal_setor,
                     diffDays,
-                    jenisPelaporan: r.jenis_pelaporan || 'Setoran Harian',
+                    jenisPelaporan: r.jenis_pelaporan,
                     nominalSetoran: r.nominal_setoran || 0,
                 });
             }
@@ -255,7 +264,7 @@ export default function LaporanBackdatePage() {
                             Audit Input Backdate Setoran
                         </h1>
                         <p className="text-gray-500 text-sm mt-1">
-                            Mendeteksi dan merekap laporan yang diinput terlambat (jarak Tanggal Input vs Tanggal Sales &gt; 4 Hari)
+                            Mendeteksi dan merekap laporan 3 jenis pelaporan utama yang diinput terlambat (jarak Tanggal Input vs Tanggal Sales &gt; 4 Hari)
                         </p>
                     </div>
                     <button
@@ -445,7 +454,7 @@ export default function LaporanBackdatePage() {
                         <span className="material-symbols-outlined text-emerald-500 text-5xl">check_circle</span>
                         <h3 className="text-lg font-bold text-gray-800 mt-3">Tidak Ada Insiden Input Backdate</h3>
                         <p className="text-sm text-gray-500 mt-1">
-                            Semua toko melapor secara tepat waktu (&lt;= 4 hari dari tanggal sales) pada periode ini.
+                            Semua toko melapor 3 jenis pelaporan utama secara tepat waktu (&lt;= 4 hari dari tanggal sales) pada periode ini.
                         </p>
                     </div>
                 ) : (
