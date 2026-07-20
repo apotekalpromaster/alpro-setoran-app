@@ -50,7 +50,7 @@ export default function LaporanBackdatePage() {
             setProfilesMap(pMap);
             setAvailableAMs(Array.from(amSet).sort());
 
-            // 2. Fetch reports paginated
+            // 2. Fetch reports paginated (without nonexistent created_at column)
             let allReports = [];
             let from = 0;
             const step = 1000;
@@ -59,7 +59,7 @@ export default function LaporanBackdatePage() {
             while (hasMore) {
                 const { data, error } = await supabase
                     .from('laporan')
-                    .select('id, user_id, tanggal_jual, tanggal_setor, created_at, jenis_pelaporan, nominal_setoran')
+                    .select('id, user_id, tanggal_jual, tanggal_setor, jenis_pelaporan, nominal_setoran')
                     .range(from, from + step - 1)
                     .order('tanggal_jual', { ascending: false });
 
@@ -124,25 +124,18 @@ export default function LaporanBackdatePage() {
         return { start, end };
     }, [appliedPeriod, appliedStartDate, appliedEndDate]);
 
-    // Process backdate incidents (> 4 days gap)
+    // Process backdate incidents (> 4 days gap between tanggal_setor & tanggal_jual)
     const backdateIncidents = useMemo(() => {
         if (!rawLaporan.length) return [];
 
         const list = [];
         rawLaporan.forEach((r) => {
-            if (!r.tanggal_jual) return;
+            if (!r.tanggal_jual || !r.tanggal_setor) return;
 
             const salesDate = new Date(r.tanggal_jual);
             if (salesDate < dateBounds.start || salesDate > dateBounds.end) return;
 
-            // Determine input date
-            let inputDateStr = r.tanggal_setor;
-            if (r.created_at) {
-                inputDateStr = r.created_at.split('T')[0];
-            }
-            if (!inputDateStr) return;
-
-            const inputDate = new Date(inputDateStr);
+            const inputDate = new Date(r.tanggal_setor);
             const diffMs = inputDate.getTime() - salesDate.getTime();
             const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
@@ -158,7 +151,7 @@ export default function LaporanBackdatePage() {
                     namaToko,
                     amName,
                     tanggalJual: r.tanggal_jual,
-                    tanggalInput: inputDateStr,
+                    tanggalInput: r.tanggal_setor,
                     diffDays,
                     jenisPelaporan: r.jenis_pelaporan || 'Setoran Harian',
                     nominalSetoran: r.nominal_setoran || 0,
