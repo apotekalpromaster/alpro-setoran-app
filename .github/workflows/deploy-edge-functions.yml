@@ -43,3 +43,8 @@ jobs:
         run: supabase functions deploy send-biweekly-backdate-report --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy sync-pos-sales-from-drive
+        run: supabase functions deploy sync-pos-sales-from-drive --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
