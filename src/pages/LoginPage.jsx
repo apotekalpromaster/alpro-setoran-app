@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../services/supabaseClient';
 import AutocompleteInput from '../components/AutocompleteInput';
 
 export default function LoginPage() {
@@ -22,7 +22,6 @@ export default function LoginPage() {
             if (!username.trim()) throw new Error('Username tidak boleh kosong.');
 
             // Step 1: Cari email dari username via RPC SECURITY DEFINER
-            // Fungsi ini bypass RLS secara aman agar anon role bisa membaca email
             setStatus({ message: 'Memverifikasi username...', type: 'loading' });
             const { data: emailResult, error: rpcLookupErr } = await supabase
                 .rpc('get_email_by_username', { p_username: username.trim() });
@@ -32,7 +31,6 @@ export default function LoginPage() {
                 throw new Error('Gagal memverifikasi username. Coba lagi beberapa saat.');
             }
 
-            // emailResult is a scalar TEXT (null if not found)
             const resolvedEmail = emailResult ?? null;
 
             if (!resolvedEmail) {
@@ -47,8 +45,7 @@ export default function LoginPage() {
 
             setStatus({ message: 'Login berhasil! Mengalihkan...', type: 'success' });
 
-            // Step 3: Ambil role via RPC untuk menentukan redirect
-            // Menggunakan SECURITY DEFINER agar tidak terkena RLS setelah login
+            // Step 3: Ambil role via RPC / Direct Query untuk menentukan redirect
             let role = null;
             try {
                 const { data: rpcData, error: rpcError } = await supabase
@@ -71,11 +68,15 @@ export default function LoginPage() {
                 role = profileRows?.[0]?.role ?? null;
             }
 
-            // Redirect berdasarkan role, default ke /beranda jika role tidak diketahui
-            if (role === 'Admin' || role === 'Finance') {
-                navigate('/admin');
+            const cleanRole = (role || '').toString().trim().toLowerCase();
+
+            // Redirect berdasarkan role (case-insensitive)
+            if (cleanRole === 'admin' || cleanRole === 'finance') {
+                navigate('/admin/beranda', { replace: true });
+            } else if (cleanRole === 'areamanager') {
+                navigate('/areamanager/dashboard', { replace: true });
             } else {
-                navigate('/beranda');
+                navigate('/beranda', { replace: true });
             }
 
         } catch (err) {
@@ -90,125 +91,85 @@ export default function LoginPage() {
         }
     };
 
-    const handleForgotPassword = async (e) => {
-        e.preventDefault();
-        if (!username.trim()) {
-            setStatus({ message: 'Masukkan username terlebih dahulu untuk reset password.', type: 'error' });
-            return;
-        }
-
-        setStatus({ message: 'Mencari akun...', type: 'loading' });
-
-        // Cari email berdasarkan username via RPC (aman, bypass RLS)
-        const { data: resolvedEmail, error: lookupErr } = await supabase
-            .rpc('get_email_by_username', { p_username: username.trim() });
-
-        if (lookupErr || !resolvedEmail) {
-            setStatus({ message: 'Username tidak ditemukan atau terjadi kesalahan.', type: 'error' });
-            return;
-        }
-
-        if (!window.confirm(`Kirim instruksi reset password ke email terdaftar untuk "${username}"?`)) {
-            setStatus({ message: '', type: '' });
-            return;
-        }
-
-        setStatus({ message: 'Memproses permintaan...', type: 'loading' });
-        const { error } = await supabase.auth.resetPasswordForEmail(resolvedEmail);
-
-        if (error) {
-            setStatus({ message: 'Gagal: ' + error.message, type: 'error' });
-        } else {
-            setStatus({ message: 'Instruksi pemulihan telah dikirim ke email terdaftar.', type: 'success' });
-        }
-    };
-
     return (
-        <div className="bg-gray-100 flex items-center justify-center min-h-screen font-sans p-4">
-            <div className="w-full max-w-sm p-8 space-y-6 bg-white shadow-2xl rounded-2xl">
-                <div className="text-center">
-                    <div className="mx-auto flex justify-center mb-6">
-                        {/* Logo placeholder - assuming logo comes from Google Drive normally, we use a placeholder or local asset in Vite */}
-                        <img src="/logo.png" alt="Logo Apotek Alpro" className="h-20 w-auto object-contain transition-transform hover:scale-105" />
+        <div className="min-h-screen bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-400 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-white/20">
+                <div className="text-center mb-8">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-orange-100 text-orange-600 mb-4 shadow-inner">
+                        <span className="material-symbols-outlined text-3xl">monitoring</span>
                     </div>
-                    <h2 className="mt-5 text-3xl font-extrabold text-primary-500">Selamat Datang Kembali</h2>
-                    <p className="mt-2 text-sm text-gray-500">Silakan masuk untuk melanjutkan</p>
+                    <h1 className="text-2xl font-bold text-gray-900">Apotek Alpro</h1>
+                    <p className="text-xs text-gray-500 mt-1">Sistem Pelaporan Setoran Harian</p>
                 </div>
 
-                <div className="border-t border-primary-500/30"></div>
-
-                <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
-                    {/* Username field dengan autocomplete dropdown via RPC search_usernames */}
-                    <AutocompleteInput
-                        value={username}
-                        onChange={setUsername}
-                        onSelect={(item) => item && setUsername(item.username)}
-                        column="username"
-                        queryFn={async (term) => {
-                            const { data, error } = await supabase.rpc('search_usernames', { search_term: term });
-                            if (error) {
-                                console.error('[LoginPage] search_usernames error:', error);
-                                return [];
-                            }
-                            return (data || []).map((row) => ({ username: row.username }));
-                        }}
-                        placeholder="USERNAME"
-                        icon="person"
-                        minChars={2}
-                        className="w-full"
-                        inputProps={{
-                            id: 'username',
-                            name: 'username',
-                            required: true,
-                            style: { textTransform: 'uppercase' },
-                        }}
-                    />
-
-
-                    <div className="relative fade-in">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span className="material-symbols-outlined text-gray-400">lock</span>
-                        </div>
-                        <input
-                            id="password"
-                            name="password"
-                            type={showPassword ? "text" : "password"}
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="block w-full rounded-lg border border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm pl-10 pr-10 py-3 transition-all"
-                            placeholder="KATA SANDI"
-                        />
-                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer group" onClick={() => setShowPassword(!showPassword)}>
-                            <span className="material-symbols-outlined text-gray-400 group-hover:text-primary-500 transition-colors">
-                                {showPassword ? 'visibility_off' : 'visibility'}
-                            </span>
-                        </div>
+                {status.message && (
+                    <div
+                        className={`mb-6 p-4 rounded-2xl text-xs font-semibold flex items-center gap-3 ${
+                            status.type === 'loading'
+                                ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                                : status.type === 'success'
+                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                : 'bg-red-50 text-red-800 border border-red-200'
+                        }`}
+                    >
+                        {status.type === 'loading' && (
+                            <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                        )}
+                        {status.type === 'success' && (
+                            <span className="material-symbols-outlined text-sm">check_circle</span>
+                        )}
+                        {status.type === 'error' && (
+                            <span className="material-symbols-outlined text-sm">error</span>
+                        )}
+                        <span>{status.message}</span>
                     </div>
-                    <div className="text-right mt-2">
-                        <a href="#" onClick={handleForgotPassword} className="text-xs text-primary-500 hover:text-primary-600 font-medium transition-colors">Lupa Password?</a>
+                )}
+
+                <form onSubmit={handleLogin} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                            Username / Kode Toko
+                        </label>
+                        <AutocompleteInput
+                            value={username}
+                            onChange={(val) => setUsername(val)}
+                            placeholder="Contoh: BTTSDL1 / admin"
+                        />
                     </div>
 
                     <div>
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed"
-                        >
-                            {isLoading ? (
-                                <><span className="material-symbols-outlined animate-spin text-sm align-middle mr-1">sync</span> Memproses...</>
-                            ) : 'Masuk'}
-                        </button>
+                        <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                            Kata Sandi
+                        </label>
+                        <div className="relative">
+                            <input
+                                type={showPassword ? 'text' : 'password'}
+                                required
+                                placeholder="••••••••"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
+                            >
+                                <span className="material-symbols-outlined text-sm">
+                                    {showPassword ? 'visibility_off' : 'visibility'}
+                                </span>
+                            </button>
+                        </div>
                     </div>
+
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full py-3.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl shadow-md transition-colors text-sm cursor-pointer disabled:opacity-50 mt-2"
+                    >
+                        {isLoading ? 'Processing...' : 'Masuk ke Sistem'}
+                    </button>
                 </form>
-
-                <div className={`text-center text-sm font-bold h-4 mt-2 ${status.type === 'error' ? 'text-red-600' : status.type === 'success' ? 'text-green-600' : 'text-orange-500 animate-pulse'}`}>
-                    {status.message}
-                </div>
-
-                <div className="text-center text-xs text-gray-400 pt-6 border-t border-gray-100 mt-6">
-                    <p>&copy; 2025 OSS Department, Apotek Alpro</p>
-                </div>
             </div>
         </div>
     );
