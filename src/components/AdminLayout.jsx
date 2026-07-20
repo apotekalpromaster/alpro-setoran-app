@@ -47,14 +47,26 @@ export default function AdminLayout({ children, title, activePath }) {
                     ${collapsed ? 'md:w-[68px]' : 'md:w-64'}
                 `}
             >
-                <div className={`h-16 border-b border-gray-100 flex items-center flex-shrink-0 ${collapsed ? 'justify-center px-0' : 'gap-3 px-5'}`}>
-                    <span className="material-symbols-outlined text-3xl text-primary-500 flex-shrink-0">monitoring</span>
-                    {!collapsed && (
-                        <div className="min-w-0">
-                            <span className="font-extrabold text-gray-800 tracking-tight text-base whitespace-nowrap">Apotek Alpro</span>
-                            <p className="text-xs text-gray-400 font-medium -mt-0.5">Admin Panel</p>
-                        </div>
-                    )}
+                {/* Header Sidebar dengan Tombol Toggle Ciutkan/Perluas di Bagian Atas */}
+                <div className={`h-16 border-b border-gray-100 flex items-center justify-between flex-shrink-0 ${collapsed ? 'justify-center px-0' : 'px-4'}`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="material-symbols-outlined text-3xl text-primary-500 flex-shrink-0">monitoring</span>
+                        {!collapsed && (
+                            <div className="min-w-0">
+                                <span className="font-extrabold text-gray-800 tracking-tight text-base whitespace-nowrap">Apotek Alpro</span>
+                                <p className="text-xs text-gray-400 font-medium -mt-0.5">Admin Panel</p>
+                            </div>
+                        )}
+                    </div>
+                    <button
+                        onClick={toggleDesktop}
+                        title={collapsed ? 'Perluas Sidebar' : 'Ciutkan Sidebar'}
+                        className="hidden md:flex items-center justify-center p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+                    >
+                        <span className="material-symbols-outlined text-xl">
+                            {collapsed ? 'chevron_right' : 'chevron_left'}
+                        </span>
+                    </button>
                 </div>
 
                 {!collapsed && (
@@ -111,16 +123,6 @@ export default function AdminLayout({ children, title, activePath }) {
                         {!collapsed && 'Keluar'}
                     </button>
                 </div>
-
-                <button
-                    onClick={toggleDesktop}
-                    title={collapsed ? 'Perluas Sidebar' : 'Ciutkan Sidebar'}
-                    className="hidden md:flex items-center justify-center h-10 border-t border-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
-                >
-                    <span className="material-symbols-outlined text-xl">
-                        {collapsed ? 'chevron_right' : 'chevron_left'}
-                    </span>
-                </button>
             </aside>
 
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -131,6 +133,15 @@ export default function AdminLayout({ children, title, activePath }) {
                             className="md:hidden p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 cursor-pointer"
                         >
                             <span className="material-symbols-outlined text-2xl">menu</span>
+                        </button>
+                        <button
+                            onClick={toggleDesktop}
+                            title={collapsed ? 'Perluas Sidebar' : 'Ciutkan Sidebar'}
+                            className="hidden md:flex items-center justify-center p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 cursor-pointer mr-1"
+                        >
+                            <span className="material-symbols-outlined text-xl">
+                                {collapsed ? 'menu_open' : 'menu'}
+                            </span>
                         </button>
                         <h1 className="text-lg font-bold text-gray-800">{title}</h1>
                     </div>
