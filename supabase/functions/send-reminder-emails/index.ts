@@ -33,7 +33,7 @@ serve(async (req: Request) => {
     const fromEmail = 'apotekalpro.master@gmail.com';
     const ccEmails = 'operation@apotekalpro.id, finance@apotekalpro.id, operation.excellence@apotekalpro.id';
 
-    // Nodemailer Transporter with Connection Pooling (Option 1)
+    // Nodemailer Transporter with Connection Pooling
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -153,7 +153,7 @@ serve(async (req: Request) => {
       });
 
     } else {
-      // 2. AUTOMATIC SCHEDULER: Loops through all pending/duplicated outlets and sends individual emails (sequentially via connection pool)
+      // 2. AUTOMATIC SCHEDULER: Loops through top pending/duplicated outlets (Max 25 per run for Option A)
       const { data: users, error: uErr } = await supabase
         .from('profiles')
         .select('id, username, email, frekuensi_setoran, tanggal_aktif')
@@ -252,12 +252,19 @@ serve(async (req: Request) => {
         }
       });
 
-      console.log(`[send-reminder-emails] Starting automated loop for ${pendingUsers.length} pending/duplicated users (Sequential sending via SMTP Pool).`);
+      // Sort by highest number of total issues (missing + duplicate dates) first
+      pendingUsers.sort((a, b) => (b.tanggalBolong.length + b.tanggalDuplikat.length) - (a.tanggalBolong.length + a.tanggalDuplikat.length));
 
-      // Sequentially send individual emails one-by-one with 150ms delay
+      // Option A: Limit to top 25 pending outlets per run to ensure runtime ~30s and avoid 421 Google SMTP rate limits
+      const MAX_PER_RUN = 25;
+      const targetUsers = pendingUsers.slice(0, MAX_PER_RUN);
+
+      console.log(`[send-reminder-emails] Total pending/duplicated outlets found: ${pendingUsers.length}. Processing top ${targetUsers.length} in this run (Option A Chunking Limit).`);
+
+      // Sequentially send individual emails one-by-one with 250ms delay
       let successCount = 0;
       let failCount = 0;
-      for (const item of pendingUsers) {
+      for (const item of targetUsers) {
         if (!item.email || !item.email.includes('@')) {
           console.log(`[send-reminder-emails] Skip ${item.namaToko} - No registered email address.`);
           continue;
@@ -346,13 +353,13 @@ serve(async (req: Request) => {
           failCount++;
         }
 
-        // Delay 150ms per email to avoid hitting rate limits
-        await delay(150);
+        // Delay 250ms per email to avoid hitting rate limits
+        await delay(250);
       }
 
       transporter.close(); // Close SMTP connection pool
-      console.log(`[send-reminder-emails] Auto loop finished. Sukses: ${successCount}, Gagal: ${failCount}`);
-      return new Response(JSON.stringify({ success: true, count: successCount, failed: failCount }), {
+      console.log(`[send-reminder-emails] Option A run finished. Processed: ${targetUsers.length} of ${pendingUsers.length}. Sukses: ${successCount}, Gagal: ${failCount}`);
+      return new Response(JSON.stringify({ success: true, processed: targetUsers.length, totalPending: pendingUsers.length, count: successCount, failed: failCount }), {
         status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
       });
     }
