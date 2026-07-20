@@ -241,10 +241,7 @@ const handleFileChange = (e) => {
                     throw new Error('Berkas tidak memiliki baris data yang cukup (header di baris 13).');
                 }
                 
-                // Header is on row 13 (index 12)
-                const headers = rawRows[12].map(h => (h || '').toString().trim());
-                
-                // Create lookup map mapping both kode_toko and username to username
+                               // Create lookup map mapping both kode_toko and username to username
                 const storeMap = {};
                 profilesForLookup.forEach(p => {
                     if (p.kode_toko) {
@@ -254,58 +251,105 @@ const handleFileChange = (e) => {
                         storeMap[p.username.toString().trim().toLowerCase()] = p.username;
                     }
                 });
-                
-                const rows = [];
-                
-                // Data starts on row 14 (index 13)
-                for (let i = 13; i < rawRows.length; i++) {
-                    const row = rawRows[i];
-                    if (!row || row.length === 0) continue;
-                    
-                    const rawDateVal = (row[0] || '').toString().trim();
-                    const rawStoreVal = (row[1] || '').toString().trim();
-                    const rawSalesVal = (row[2] || '').toString().trim();
-                    
-                    // Filter: "hilangkan baris pada kolom A yang memiliki kata Total ataupun Grand Total"
-                    const lowerDate = rawDateVal.toLowerCase();
-                    if (lowerDate.includes('total') || lowerDate.includes('grand total') || !rawDateVal) {
-                        continue;
-                    }
-                    
-                    // Lookup B (Store) to profiles
-                    const cleanStoreKey = rawStoreVal.toLowerCase();
-                    const matchedUsername = storeMap[cleanStoreKey];
-                    
-                    if (!matchedUsername) {
-                        continue;
-                    }
-                    
-                    // Format Date to YYYY-MM-DD
-                    let formattedDate = '';
-                    if (/^\d+(\.\d+)?$/.test(rawDateVal)) {
-                        const excelDateNum = parseFloat(rawDateVal);
-                        const d = new Date((excelDateNum - 25569) * 86400 * 1000);
-                        if (!isNaN(d.getTime())) {
-                            formattedDate = d.toLocaleDateString('sv-SE');
-                        }
-                    } else {
-                        const d = new Date(rawDateVal);
-                        if (!isNaN(d.getTime())) {
-                            formattedDate = d.toLocaleDateString('sv-SE');
-                        }
-                    }
-                    
-                    const cleanSales = parseInt(rawSalesVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
-                    
-                    if (matchedUsername && formattedDate) {
-                        rows.push({
-                            kode_cabang: matchedUsername,
-                            tanggal_jual: formattedDate,
-                            sales_pos: cleanSales
-                        });
+
+                // Auto-detect template format:
+                // Mode A: New Template "Cash & Card Automation" (Header at Row 14, Index 13)
+                // Mode B: Legacy Template "POS Simple" (Header at Row 13, Index 12)
+                let isNewTemplate = false;
+                let startRowIndex = 13; // Default data start index (Row 14) for legacy if index 12 is header
+
+                if (rawRows.length >= 14) {
+                    const row14Str = rawRows[13].map(c => (c || '').toString().toLowerCase()).join(' ');
+                    if (row14Str.includes('date') && row14Str.includes('store') && row14Str.includes('cash amount')) {
+                        isNewTemplate = true;
+                        startRowIndex = 14; // Data starts on Row 15 (Index 14)
                     }
                 }
-                
+
+                const rows = [];
+
+                for (let i = startRowIndex; i < rawRows.length; i++) {
+                    const row = rawRows[i];
+                    if (!row || row.length === 0) continue;
+
+                    const rawDateVal = (row[0] || '').toString().trim();
+                    const rawStoreVal = (row[1] || '').toString().trim();
+                    const rawColCVal = (row[2] || '').toString().trim();
+
+                    if (!rawDateVal || !rawStoreVal) continue;
+
+                    if (isNewTemplate) {
+                        // NEW TEMPLATE LOGIC (Cash & Card Automation):
+                        // 1. Filter out if Col A, B, or C contains 'total' (case-insensitive)
+                        const lowerA = rawDateVal.toLowerCase();
+                        const lowerB = rawStoreVal.toLowerCase();
+                        const lowerC = rawColCVal.toLowerCase();
+                        if (lowerA.includes('total') || lowerB.includes('total') || lowerC.includes('total')) {
+                            continue;
+                        }
+
+                        // 2. Extract Cash Amount from Col E (Index 4)
+                        const rawCashVal = (row[4] || '').toString().trim();
+                        const cleanSales = parseInt(rawCashVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
+
+                        // 3. Filter out Rp 0 cash amount
+                        if (cleanSales === 0) continue;
+
+                        // 4. Store Lookup
+                        const cleanStoreKey = rawStoreVal.toLowerCase();
+                        const matchedUsername = storeMap[cleanStoreKey];
+                        if (!matchedUsername) continue;
+
+                        // 5. Date Parsing
+                        let formattedDate = '';
+                        if (/^\d+(\.\d+)?$/.test(rawDateVal)) {
+                            const excelDateNum = parseFloat(rawDateVal);
+                            const d = new Date((excelDateNum - 25569) * 86400 * 1000);
+                            if (!isNaN(d.getTime())) formattedDate = d.toLocaleDateString('sv-SE');
+                        } else {
+                            const d = new Date(rawDateVal);
+                            if (!isNaN(d.getTime())) formattedDate = d.toLocaleDateString('sv-SE');
+                        }
+
+                        if (matchedUsername && formattedDate) {
+                            rows.push({
+                                kode_cabang: matchedUsername,
+                                tanggal_jual: formattedDate,
+                                sales_pos: cleanSales
+                            });
+                        }
+                    } else {
+                        // LEGACY TEMPLATE LOGIC:
+                        const lowerDate = rawDateVal.toLowerCase();
+                        if (lowerDate.includes('total') || lowerDate.includes('grand total')) continue;
+
+                        const rawSalesVal = (row[2] || '').toString().trim();
+                        const cleanStoreKey = rawStoreVal.toLowerCase();
+                        const matchedUsername = storeMap[cleanStoreKey];
+                        if (!matchedUsername) continue;
+
+                        let formattedDate = '';
+                        if (/^\d+(\.\d+)?$/.test(rawDateVal)) {
+                            const excelDateNum = parseFloat(rawDateVal);
+                            const d = new Date((excelDateNum - 25569) * 86400 * 1000);
+                            if (!isNaN(d.getTime())) formattedDate = d.toLocaleDateString('sv-SE');
+                        } else {
+                            const d = new Date(rawDateVal);
+                            if (!isNaN(d.getTime())) formattedDate = d.toLocaleDateString('sv-SE');
+                        }
+
+                        const cleanSales = parseInt(rawSalesVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
+
+                        if (matchedUsername && formattedDate) {
+                            rows.push({
+                                kode_cabang: matchedUsername,
+                                tanggal_jual: formattedDate,
+                                sales_pos: cleanSales
+                            });
+                        }
+                    }
+                }
+
                 if (rows.length === 0) {
                     throw new Error('Tidak ada baris data valid yang berhasil dibaca. Pastikan nama cabang terdaftar di profiles (lookup kode_toko).');
                 }
@@ -657,9 +701,9 @@ const handleFileChange = (e) => {
                             <span className="font-bold text-gray-700 block">ðŸ’¡ Ketentuan Format Excel:</span>
                             <ul className="list-disc pl-5 space-y-1">
                                 <li>Menerima berkas spreadsheet Excel (*.xlsx, *.xls).</li>
-                                <li>Baris header wajib berada pada <strong>baris 13</strong>, yang mendefinisikan kolom: <strong>Date</strong> (Kolom A), <strong>Store</strong> (Kolom B), dan <strong>Cash Amount Total</strong> (Kolom C).</li>
+                                <li>Mendukung <strong>Template Otomatis Baru (Cash & Card Automation)</strong> dengan Header pada <strong>baris 14</strong>, membaca sales tunai dari <strong>Kolom E (Cash Amount)</strong> yang bukan Rp 0, serta menyaring otomatis baris Total pada Kolom A, B, dan C.</li>
+                                <li>Mendukung juga <strong>Template Lama</strong> dengan Header pada baris 13.</li>
                                 <li>Kolom B (Store) otomatis dicocokkan dengan <strong>Kode Toko</strong> pada profil apotek untuk mendapatkan kode cabang yang sesuai.</li>
-                                <li>Baris total/grand total pada Kolom A otomatis disaring dan diabaikan.</li>
                             </ul>
                         </div>
 
