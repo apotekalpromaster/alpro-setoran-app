@@ -16,11 +16,19 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     }
 
     if (!user) {
-        return <Navigate to="/" replace />;
+        return <Navigate to="/login" replace />;
     }
 
-    if (allowedRoles && profile && !allowedRoles.includes(profile.role)) {
-        return <Navigate to="/" replace />; // Or to a 'Not Authorized' page
+    if (allowedRoles && allowedRoles.length > 0) {
+        const userRole = (profile?.role || '').toString().trim().toLowerCase();
+        const hasPermission = allowedRoles.some(
+            (role) => role.toString().trim().toLowerCase() === userRole
+        );
+
+        if (!hasPermission) {
+            console.warn(`[ProtectedRoute] Access denied for path. User role: "${profile?.role}", Allowed:`, allowedRoles);
+            return <Navigate to="/" replace />;
+        }
     }
 
     return children;
