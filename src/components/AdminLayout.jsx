@@ -9,6 +9,7 @@ const NAV_ITEMS = [
     { label: 'Rekonsiliasi Xilnex', icon: 'compare', path: '/finance/rekonsiliasi-pos' },
     { label: 'Laporan Analitik', icon: 'bar_chart', path: '/admin/analitik' },
     { label: 'Laporan Pending', icon: 'pending_actions', path: '/admin/pending' },
+    { label: 'Audit Input Backdate', icon: 'history_toggle_off', path: '/admin/backdate' },
     { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
     { label: 'Petunjuk Penggunaan', icon: 'help', path: '/admin/bantuan' },
 ];
