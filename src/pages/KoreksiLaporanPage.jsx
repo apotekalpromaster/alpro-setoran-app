@@ -87,7 +87,7 @@ export default function KoreksiLaporanPage() {
         try {
             const { data, error: err } = await supabase
                 .from('laporan')
-                .select('id, tanggal_jual, jenis_pelaporan, nominal_jual, nominal_setoran, potongan')
+                .select('id, tanggal_jual, jenis_pelaporan, nominal_jual, nominal_setoran, potongan, bukti_urls')
                 .eq('user_id', profile.id)
                 .eq('tanggal_jual', selectedDate);
 
@@ -188,9 +188,11 @@ export default function KoreksiLaporanPage() {
         setSuccessMsg('');
 
         try {
-            // 1. Upload staged files if any (only for edit)
+            // 1. Upload staged files if any (only for edit) and merge with existing bukti_urls per slot
             if (requestType === 'edit' && stagedFiles.filter(Boolean).length > 0) {
-                newBuktiUrls = [];
+                const existingUrls = Array.isArray(selectedReport.bukti_urls) ? [...selectedReport.bukti_urls] : [];
+                const mergedUrls = [...existingUrls];
+
                 const filesToUpload = stagedFiles.filter(Boolean);
                 let uploadCount = 1;
                 for (let i = 0; i < stagedFiles.length; i++) {
@@ -199,10 +201,11 @@ export default function KoreksiLaporanPage() {
                         setUploadStatus(`Mengunggah bukti baru (${uploadCount}/${filesToUpload.length})...`);
                         const url = await uploadToDrive(item.file);
                         if (!url) throw new Error(`Gagal mengunggah file ${item.file.name}`);
-                        newBuktiUrls.push(url);
+                        mergedUrls[i] = url;
                         uploadCount++;
                     }
                 }
+                newBuktiUrls = mergedUrls.filter(Boolean);
             }
 
             const { error: insertError } = await supabase

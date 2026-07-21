@@ -40,7 +40,7 @@ export default function DetailRiwayatPage() {
             // Fetch related correction requests
             const { data: corrData, error: corrErr } = await supabase
                 .from('koreksi_requests')
-                .select('id, nominal_jual_baru, nominal_setoran_baru, potongan_baru, penjelasan_koreksi, status, created_at, processed_at')
+                .select('id, nominal_jual_baru, nominal_setoran_baru, potongan_baru, penjelasan_koreksi, status, created_at, processed_at, bukti_urls_baru')
                 .eq('laporan_id', id)
                 .order('created_at', { ascending: false });
 
@@ -237,6 +237,23 @@ export default function DetailRiwayatPage() {
                                                 <p className="text-gray-700 font-semibold mt-1">Alasan: <span className="italic font-normal">"{c.penjelasan_koreksi}"</span></p>
                                             </div>
                                         </div>
+                                        {c.bukti_urls_baru && c.bukti_urls_baru.length > 0 && (
+                                            <div className="pt-2 border-t border-gray-200/60 flex items-center gap-2 flex-wrap">
+                                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Lampiran Bukti Koreksi:</span>
+                                                {c.bukti_urls_baru.map((url, uIdx) => (
+                                                    <a
+                                                        key={uIdx}
+                                                        href={url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 font-semibold"
+                                                    >
+                                                        <span className="material-symbols-outlined text-xs">open_in_new</span>
+                                                        Bukti #{uIdx + 1}
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
