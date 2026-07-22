@@ -1,4 +1,4 @@
-﻿import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 import * as XLSX from 'npm:xlsx@0.18.5';
 
@@ -9,6 +9,53 @@ const CORS = {
 };
 
 const TARGET_FOLDER_ID = '1lreZQGF8F-3sFdPkQ1jzcQpVanz8ovY0';
+
+function getMatchedUsername(rawStoreStr: string, storeMap: { [key: string]: string }): string {
+  if (!rawStoreStr) return '';
+  const clean = rawStoreStr.trim().toLowerCase();
+  if (storeMap[clean]) return storeMap[clean];
+
+  // Handle composite store string like "0001-JKJSTT1"
+  if (clean.includes('-')) {
+    const parts = clean.split('-');
+    const part0 = parts[0].trim();
+    const part1 = parts[1].trim();
+    if (storeMap[part0]) return storeMap[part0];
+    if (storeMap[part1]) return storeMap[part1];
+  }
+  return '';
+}
+
+function parseFormattedDate(rawVal: any): string {
+  if (!rawVal) return '';
+  const strVal = rawVal.toString().trim();
+
+  // Excel Serial Number (e.g. 46223)
+  if (/^d+(.d+)?$/.test(strVal)) {
+    const excelDateNum = parseFloat(strVal);
+    const d = new Date((excelDateNum - 25569) * 86400 * 1000);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  }
+
+  // YYYY-MM-DD format (including timestamp YYYY-MM-DD HH:mm:ss)
+  const isoMatch = strVal.match(/^(d{4}-d{2}-d{2})/);
+  if (isoMatch) return isoMatch[1];
+
+  // DD/MM/YYYY or DD-MM-YYYY format
+  const ddmmyyyyMatch = strVal.match(/^(d{1,2})[/-](d{1,2})[/-](d{4})/);
+  if (ddmmyyyyMatch) {
+    const day = ddmmyyyyMatch[1].padStart(2, '0');
+    const month = ddmmyyyyMatch[2].padStart(2, '0');
+    const year = ddmmyyyyMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // Standard Date fallback
+  const d = new Date(strVal);
+  if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+
+  return '';
+}
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -169,19 +216,10 @@ serve(async (req: Request) => {
           const cleanSales = parseInt(rawCashVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
           if (cleanSales === 0) continue;
 
-          const cleanStoreKey = rawStoreVal.toLowerCase();
-          const matchedUsername = storeMap[cleanStoreKey];
+          const matchedUsername = getMatchedUsername(rawStoreVal, storeMap);
           if (!matchedUsername) continue;
 
-          let formattedDate = '';
-          if (/^\d+(\.\d+)?$/.test(rawDateVal)) {
-            const excelDateNum = parseFloat(rawDateVal);
-            const d = new Date((excelDateNum - 25569) * 86400 * 1000);
-            if (!isNaN(d.getTime())) formattedDate = d.toISOString().split('T')[0];
-          } else {
-            const d = new Date(rawDateVal);
-            if (!isNaN(d.getTime())) formattedDate = d.toISOString().split('T')[0];
-          }
+          const formattedDate = parseFormattedDate(rawDateVal);
 
           if (matchedUsername && formattedDate) {
             rowsToUpsert.push({
@@ -196,20 +234,10 @@ serve(async (req: Request) => {
           if (lowerDate.includes('total') || lowerDate.includes('grand total')) continue;
 
           const rawSalesVal = (row[2] || '').toString().trim();
-          const cleanStoreKey = rawStoreVal.toLowerCase();
-          const matchedUsername = storeMap[cleanStoreKey];
+          const matchedUsername = getMatchedUsername(rawStoreVal, storeMap);
           if (!matchedUsername) continue;
 
-          let formattedDate = '';
-          if (/^\d+(\.\d+)?$/.test(rawDateVal)) {
-            const excelDateNum = parseFloat(rawDateVal);
-            const d = new Date((excelDateNum - 25569) * 86400 * 1000);
-            if (!isNaN(d.getTime())) formattedDate = d.toISOString().split('T')[0];
-          } else {
-            const d = new Date(rawDateVal);
-            if (!isNaN(d.getTime())) formattedDate = d.toISOString().split('T')[0];
-          }
-
+          const formattedDate = parseFormattedDate(rawDateVal);
           const cleanSales = parseInt(rawSalesVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
 
           if (matchedUsername && formattedDate) {
