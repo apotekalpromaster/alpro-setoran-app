@@ -109,7 +109,7 @@ serve(async (req: Request) => {
 
     // 3. Query Google Drive API for files in folder 1lreZQGF8F-3sFdPkQ1jzcQpVanz8ovY0
     const queryStr = `'${TARGET_FOLDER_ID}' in parents and trashed = false`;
-    const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
+    const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
 
     const listResp = await fetch(driveSearchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -159,7 +159,7 @@ serve(async (req: Request) => {
     for (const fileItem of targetFiles) {
       console.log(`[sync-pos-sales-from-drive] Downloading & parsing file: ${fileItem.name} (${fileItem.id})`);
 
-      const fileDownloadUrl = `https://www.googleapis.com/drive/v3/files/${fileItem.id}?alt=media`;
+      const fileDownloadUrl = `https://www.googleapis.com/drive/v3/files/${fileItem.id}?alt=media&supportsAllDrives=true`;
       const dlResp = await fetch(fileDownloadUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
