@@ -20,6 +20,7 @@ const JELAS_TYPES = [
     { id: 'Setoran Harian', label: 'Setoran Harian' },
     { id: 'Setoran 3x Seminggu', label: 'Setoran 3x Seminggu' },
     { id: 'Setoran Sales Dengan Potongan Penjualan', label: 'Setoran Potongan' },
+    { id: 'Belum Dilaporkan', label: 'Belum Dilaporkan' },
     { id: 'Setoran Uang Pecahan Kecil', label: 'Uang Pecahan' },
     { id: 'Setoran Uang Lebih', label: 'Uang Lebih' },
     { id: 'Pengembalian Petty Cash', label: 'Petty Cash' },
@@ -357,7 +358,9 @@ export default function AreaManagerDashboardPage() {
             const matchJenis = selectedJenis.length === 0 || selectedJenis.includes(r.jenis_pelaporan);
             
             let matchSpecial = true;
-            if (specialCase === 'telat_lapor') {
+            if (specialCase === 'belum_dilaporkan') {
+                matchSpecial = false;
+            } else if (specialCase === 'telat_lapor') {
                 matchSpecial = getDiffDays(r.created_at, r.tanggal_jual) >= 4;
             } else if (specialCase === 'selisih_sales') {
                 matchSpecial = r.s1 !== null && r.s1 !== 0;
@@ -368,7 +371,7 @@ export default function AreaManagerDashboardPage() {
             return matchName && matchSelisih && matchJenis && matchSpecial;
         });
 
-        const showSales = selectedJenis.length === 0 || selectedJenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(j));
+        const showSales = selectedJenis.length === 0 || selectedJenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(j));
         
         let unreportedList = [];
         if (showSales && outlets.length > 0 && specialCase !== 'telat_lapor') {
@@ -410,7 +413,9 @@ export default function AreaManagerDashboardPage() {
                             const s2 = posVal !== undefined && posVal !== null ? 0 - posVal : null;
 
                             let matchSpecial = true;
-                            if (specialCase === 'selisih_sales') {
+                            if (specialCase === 'belum_dilaporkan') {
+                                matchSpecial = true;
+                            } else if (specialCase === 'selisih_sales') {
                                 matchSpecial = s1 !== null && s1 !== 0;
                             } else if (specialCase === 'selisih_setoran') {
                                 matchSpecial = s2 !== null && s2 !== 0;
@@ -574,7 +579,7 @@ export default function AreaManagerDashboardPage() {
                             <StatCard 
                                 icon="store" 
                                 color="bg-indigo-50 text-indigo-700" 
-                                title="Binaan Outlet" 
+                                title="Jumlah Outlet" 
                                 value={stats.totalOutlets} 
                                 desc="Total cabang di bawah koordinasi" 
                             />
@@ -784,6 +789,7 @@ export default function AreaManagerDashboardPage() {
                                             className="form-input w-full py-1.5 px-3 bg-gray-50 text-xs cursor-pointer font-bold text-gray-800"
                                         >
                                             <option value="">Semua Laporan (Tanpa Filter Kasus)</option>
+                                            <option value="belum_dilaporkan">Belum Dilaporkan (Tunggakan)</option>
                                             <option value="telat_lapor">Telat Lapor &gt; 4 Hari (Misal sales tgl 1, baru dilaporkan setelah tanggal 4)</option>
                                             <option value="selisih_sales">Ada Selisih Data Sales (Xilnex) VS Nominal Sales</option>
                                             <option value="selisih_setoran">Ada Selisih Data Sales (Xilnex) VS Potongan + Nominal Setor</option>
