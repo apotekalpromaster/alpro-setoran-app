@@ -153,10 +153,25 @@ serve(async (req: Request) => {
       });
 
     } else {
-      // 2. AUTOMATIC SCHEDULER: Loops through top pending/duplicated outlets (Max 25 per run for Option A)
+      // 2. AUTOMATIC SCHEDULER: Loops through pending/duplicated outlets in hourly batches (25 per batch)
+      // Fetch Area Manager emails map
+      const { data: amProfiles } = await supabase
+        .from('profiles')
+        .select('username, email')
+        .or('role.eq.Area Manager,role.eq.area manager,role.eq.AREA MANAGER');
+
+      const amEmailMap: { [name: string]: string } = {};
+      if (amProfiles) {
+        amProfiles.forEach((am: any) => {
+          if (am.username && am.email) {
+            amEmailMap[am.username.trim().toUpperCase()] = am.email.trim();
+          }
+        });
+      }
+
       const { data: users, error: uErr } = await supabase
         .from('profiles')
-        .select('id, username, email, frekuensi_setoran, tanggal_aktif')
+        .select('id, username, email, frekuensi_setoran, tanggal_aktif, area_manager')
         .eq('role', 'User');
       if (uErr) throw uErr;
 
@@ -245,6 +260,7 @@ serve(async (req: Request) => {
           pendingUsers.push({
             namaToko: user.username,
             email: user.email,
+            areaManager: user.area_manager || null,
             frekuensi: user.frekuensi_setoran || 'SETIAP HARI',
             tanggalBolong: missing,
             tanggalDuplikat: duplicates,
@@ -255,11 +271,27 @@ serve(async (req: Request) => {
       // Sort by highest number of total issues (missing + duplicate dates) first
       pendingUsers.sort((a, b) => (b.tanggalBolong.length + b.tanggalDuplikat.length) - (a.tanggalBolong.length + a.tanggalDuplikat.length));
 
-      // Option A: Limit to top 25 pending outlets per run to ensure runtime ~30s and avoid 421 Google SMTP rate limits
-      const MAX_PER_RUN = 25;
-      const targetUsers = pendingUsers.slice(0, MAX_PER_RUN);
+      // Tentukan offset batch berdasarkan jam eksekusi WIB (UTC+7)
+      // Jam 08:00 WIB (UTC 01:00) -> Offset 0   (Toko 1 - 25)
+      // Jam 09:00 WIB (UTC 02:00) -> Offset 25  (Toko 26 - 50)
+      // Jam 10:00 WIB (UTC 03:00) -> Offset 50  (Toko 51 - 75)
+      // Jam 11:00 WIB (UTC 04:00) -> Offset 75  (Toko 76 - 100)
+      const now = new Date();
+      const wibHour = (now.getUTCHours() + 7) % 24;
 
-      console.log(`[send-reminder-emails] Total pending/duplicated outlets found: ${pendingUsers.length}. Processing top ${targetUsers.length} in this run (Option A Chunking Limit).`);
+      let offset = 0;
+      if (wibHour === 9) {
+        offset = 25;
+      } else if (wibHour === 10) {
+        offset = 50;
+      } else if (wibHour >= 11) {
+        offset = 75;
+      }
+
+      const MAX_PER_RUN = 25;
+      const targetUsers = pendingUsers.slice(offset, offset + MAX_PER_RUN);
+
+      console.log(`[send-reminder-emails] Jam WIB: ${wibHour}:00, Batch Offset: ${offset}. Total outlet bermasalah: ${pendingUsers.length}. Memproses ${targetUsers.length} outlet (Urutan ${offset + 1} s/d ${offset + targetUsers.length}).`);
 
       // Sequentially send individual emails one-by-one with 250ms delay
       let successCount = 0;
@@ -340,10 +372,19 @@ serve(async (req: Request) => {
         `;
 
         try {
+          // CC email dinamis ke Area Manager yang membawahi toko
+          let targetCC: string | undefined = undefined;
+          if (item.areaManager) {
+            const matchedAm = amEmailMap[item.areaManager.trim().toUpperCase()];
+            if (matchedAm) {
+              targetCC = matchedAm;
+            }
+          }
+
           await transporter.sendMail({
             from: fromEmail,
             to: item.email,
-            cc: ccEmails,
+            ...(targetCC ? { cc: targetCC } : {}),
             subject: subject,
             html: htmlContent
           });
