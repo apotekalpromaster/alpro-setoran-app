@@ -8,17 +8,32 @@ export function AuthProvider({ children }) {
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                fetchProfile(session.user.id);
-            } else {
-                setLoading(false);
-            }
-        });
+    const fetchProfile = async (userId) => {
+        try {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (error) throw error;
+            setProfile(data);
+            return data;
+        } catch (error) {
+            console.error('Error fetching profile:', error.message);
+            setProfile(null);
+            return null;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        let isMounted = true;
+
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!isMounted) return;
             setUser(session?.user ?? null);
             if (session?.user) {
                 fetchProfile(session.user.id);
@@ -28,37 +43,46 @@ export function AuthProvider({ children }) {
             }
         });
 
-        return () => subscription.unsubscribe();
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (!isMounted) return;
+            setUser(session?.user ?? null);
+            if (session?.user) {
+                await fetchProfile(session.user.id);
+            } else {
+                setProfile(null);
+                setLoading(false);
+            }
+        });
+
+        return () => {
+            isMounted = false;
+            subscription.unsubscribe();
+        };
     }, []);
 
-    const fetchProfile = async (userId) => {
-        try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-
-            if (error) throw error;
-            setProfile(data);
-        } catch (error) {
-            console.error('Error fetching profile:', error.message);
-        } finally {
+    const signIn = async (email, password) => {
+        setLoading(true);
+        const res = await supabase.auth.signInWithPassword({ email, password });
+        if (res.data?.user) {
+            await fetchProfile(res.data.user.id);
+        } else {
             setLoading(false);
         }
-    };
-
-    const signIn = async (email, password) => {
-        return supabase.auth.signInWithPassword({ email, password });
+        return res;
     };
 
     const signOut = async () => {
-        return supabase.auth.signOut();
+        setLoading(true);
+        setProfile(null);
+        setUser(null);
+        const res = await supabase.auth.signOut();
+        setLoading(false);
+        return res;
     };
 
     return (
-        <AuthContext.Provider value={{ user, profile, loading, signIn, signOut }}>
-            {!loading && children}
+        <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, fetchProfile }}>
+            {children}
         </AuthContext.Provider>
     );
 }

@@ -108,7 +108,7 @@ serve(async (req: Request) => {
     console.log(`[sync-pos-sales-from-drive] Search cutoff (Modified >=): ${searchCutoffIso}`);
 
     // 3. Query Google Drive API for files in folder 1lreZQGF8F-3sFdPkQ1jzcQpVanz8ovY0
-    const queryStr = `'${TARGET_FOLDER_ID}' in parents and trashed = false`;
+    const queryStr = `('${TARGET_FOLDER_ID}' in parents or name contains 'Cash & Card Automation') and trashed = false`;
     const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
 
     const listResp = await fetch(driveSearchUrl, {
