@@ -1,6 +1,7 @@
 ﻿import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FormWizardProvider } from './context/FormWizardContext';
+import { NotificationProvider } from './context/NotificationContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
@@ -70,7 +71,8 @@ function RootRedirect() {
 export default function App() {
   return (
     <AuthProvider>
-      <FormWizardProvider>
+      <NotificationProvider>
+        <FormWizardProvider>
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginPage />} />
@@ -247,6 +249,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </FormWizardProvider>
-    </AuthProvider>
-  );
+    </NotificationProvider>
+  </AuthProvider>
+);
 }

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AIChatFAB from './AIChatFAB';
+import { useNotification } from '../context/NotificationContext';
+import NotificationDrawer from './NotificationDrawer';
 
 const NAV_ITEMS = [
     { label: 'Dashboard', icon: 'dashboard', path: '/admin/beranda' },

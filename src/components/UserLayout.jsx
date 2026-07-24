@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AIChatFAB from './AIChatFAB';
+import { useNotification } from '../context/NotificationContext';
+import NotificationDrawer from './NotificationDrawer';
 
 /* ─── Navigation items ──────────────────────────────────────────────────────── */
 const NAV_ITEMS = [
@@ -18,6 +20,7 @@ const NAV_ITEMS = [
 
 /* ─── Main UserLayout ───────────────────────────────────────────────────────── */
 export default function UserLayout({ children, title, activeRoute }) {
+    const { unreadKoreksiCount, unreadTroubleshootingCount } = useNotification();
     const { profile, signOut } = useAuth();
     const navigate = useNavigate();
 
@@ -98,7 +101,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                                 onClick={() => { navigate(item.path); setMobileOpen(false); }}
                                 title={item.label}
                                 className={`
-                                    w-full flex items-center gap-3 rounded-lg text-sm font-medium transition-colors
+                                    relative w-full flex items-center gap-3 rounded-lg text-sm font-medium transition-colors
                                     ${collapsed ? 'justify-center px-0 py-3' : 'px-4 py-3'}
                                     ${isActive
                                         ? 'bg-orange-50 text-primary-600 font-bold'
@@ -108,7 +111,23 @@ export default function UserLayout({ children, title, activeRoute }) {
                                 <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isActive ? 'text-primary-500' : 'text-gray-400'}`}>
                                     {item.icon}
                                 </span>
-                                {!collapsed && <span className="truncate">{item.label}</span>}
+                                {!collapsed && <span className="truncate flex-1">{item.label}</span>}
+                                {!collapsed && item.path === '/koreksi' && unreadKoreksiCount > 0 && (
+                                    <span className="bg-red-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full flex-shrink-0 animate-pulse">
+                                        {unreadKoreksiCount}
+                                    </span>
+                                )}
+                                {!collapsed && item.path === '/user/troubleshooting' && unreadTroubleshootingCount > 0 && (
+                                    <span className="bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full flex-shrink-0 animate-pulse">
+                                        {unreadTroubleshootingCount}
+                                    </span>
+                                )}
+                                {collapsed && item.path === '/koreksi' && unreadKoreksiCount > 0 && (
+                                    <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 border border-white" />
+                                )}
+                                {collapsed && item.path === '/user/troubleshooting' && unreadTroubleshootingCount > 0 && (
+                                    <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-amber-500 border border-white" />
+                                )}
                             </button>
                         );
                     })}
@@ -150,16 +169,20 @@ export default function UserLayout({ children, title, activeRoute }) {
                         <h1 id="header-title" className="text-base sm:text-xl font-bold text-gray-800">{title}</h1>
                     </div>
 
-                    {/* Username (right side) */}
-                    <div className="flex items-center gap-2.5">
-                        <div className="bg-primary-100 text-primary-700 h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0">
-                            <span className="material-symbols-outlined text-lg">person</span>
-                        </div>
-                        <div className="hidden sm:block min-w-0">
-                            <p className="text-sm font-bold text-gray-800 truncate max-w-[160px]" id="header-username">
-                                {profile?.username || 'User'}
-                            </p>
-                            <p className="text-xs text-gray-400 truncate max-w-[160px]">{profile?.role || 'User'}</p>
+                    {/* Right side: Notification Bell + User Profile */}
+                    <div className="flex items-center gap-3">
+                        <NotificationDrawer />
+                        <div className="h-6 w-px bg-gray-200 hidden sm:block" />
+                        <div className="flex items-center gap-2.5">
+                            <div className="bg-primary-100 text-primary-700 h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span className="material-symbols-outlined text-lg">person</span>
+                            </div>
+                            <div className="hidden sm:block min-w-0">
+                                <p className="text-sm font-bold text-gray-800 truncate max-w-[160px]" id="header-username">
+                                    {profile?.username || 'User'}
+                                </p>
+                                <p className="text-xs text-gray-400 truncate max-w-[160px]">{profile?.role || 'User'}</p>
+                            </div>
                         </div>
                     </div>
                 </header>
