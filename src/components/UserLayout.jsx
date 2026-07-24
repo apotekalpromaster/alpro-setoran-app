@@ -112,7 +112,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                                     {item.icon}
                                 </span>
                                 {!collapsed && <span className="text-left truncate flex-1">{item.label}</span>}
-                                {!collapsed && item.path === '/koreksi' && unreadKoreksiCount > 0 && (
+                                {!collapsed && (item.path === '/koreksi' || item.path === '/areamanager/koreksi-approval') && unreadKoreksiCount > 0 && (
                                     <span className="bg-red-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full flex-shrink-0 animate-pulse">
                                         {unreadKoreksiCount}
                                     </span>
@@ -122,7 +122,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                                         {unreadTroubleshootingCount}
                                     </span>
                                 )}
-                                {collapsed && item.path === '/koreksi' && unreadKoreksiCount > 0 && (
+                                {collapsed && (item.path === '/koreksi' || item.path === '/areamanager/koreksi-approval') && unreadKoreksiCount > 0 && (
                                     <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 border border-white" />
                                 )}
                                 {collapsed && item.path === '/user/troubleshooting' && unreadTroubleshootingCount > 0 && (
