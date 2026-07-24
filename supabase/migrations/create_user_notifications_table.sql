@@ -33,11 +33,24 @@ FOR ALL
 USING (true)
 WITH CHECK (true);
 
--- 2. Trigger Function for Koreksi Laporan Status Changes
+-- 2. Trigger Function for Koreksi Laporan Status Changes (table: public.koreksi_requests)
 CREATE OR REPLACE FUNCTION fn_notify_koreksi_status()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_kode_toko VARCHAR(50);
+    v_tanggal_jual DATE;
 BEGIN
     IF (OLD.status IS DISTINCT FROM NEW.status) AND NEW.status IN ('Approved', 'Rejected') THEN
+        -- Resolve store code & sale date from linked laporan / profile
+        SELECT l.kode_cabang, l.tanggal_jual 
+        INTO v_kode_toko, v_tanggal_jual
+        FROM public.laporan l 
+        WHERE l.id = NEW.laporan_id;
+
+        IF v_kode_toko IS NULL THEN
+            SELECT p.username INTO v_kode_toko FROM public.profiles p WHERE p.id = NEW.requested_by;
+        END IF;
+
         INSERT INTO public.user_notifications (
             user_id,
             kode_toko,
@@ -48,16 +61,16 @@ BEGIN
             link
         )
         VALUES (
-            NEW.user_id,
-            COALESCE(NEW.kode_toko, ''),
+            NEW.requested_by,
+            COALESCE(v_kode_toko, ''),
             'koreksi',
             CASE 
                 WHEN NEW.status = 'Approved' THEN 'Koreksi Laporan Disetujui'
                 ELSE 'Koreksi Laporan Ditolak'
             END,
             CASE 
-                WHEN NEW.status = 'Approved' THEN 'Pengajuan koreksi tanggal penjualan ' || COALESCE(NEW.tanggal_jual::text, '-') || ' telah disetujui.'
-                ELSE 'Pengajuan koreksi tanggal penjualan ' || COALESCE(NEW.tanggal_jual::text, '-') || ' ditolak. Catatan: ' || COALESCE(NEW.penjelasan_koreksi, 'Tidak ada alasan.')
+                WHEN NEW.status = 'Approved' THEN 'Pengajuan koreksi tanggal penjualan ' || COALESCE(v_tanggal_jual::text, '-') || ' telah disetujui.'
+                ELSE 'Pengajuan koreksi tanggal penjualan ' || COALESCE(v_tanggal_jual::text, '-') || ' ditolak. Catatan: ' || COALESCE(NEW.penjelasan_koreksi, 'Tidak ada alasan.')
             END,
             NEW.id::text,
             '/koreksi'
@@ -67,13 +80,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS trg_notify_koreksi_status ON public.laporan_koreksi;
+DROP TRIGGER IF EXISTS trg_notify_koreksi_status ON public.koreksi_requests;
 CREATE TRIGGER trg_notify_koreksi_status
-AFTER UPDATE ON public.laporan_koreksi
+AFTER UPDATE ON public.koreksi_requests
 FOR EACH ROW EXECUTE FUNCTION fn_notify_koreksi_status();
 
 
--- 3. Trigger Function for Troubleshooting Bank Issues
+-- 3. Trigger Function for Troubleshooting Bank Issues (table: public.finance_troubleshooting_issues)
 CREATE OR REPLACE FUNCTION fn_notify_troubleshooting_update()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -95,7 +108,7 @@ BEGIN
             'Isu Audit Bank Baru',
             'Tim Finance menambahkan isu audit bank untuk tanggal penjualan ' || COALESCE(NEW.tanggal_penjualan::text, '-') || ' (' || COALESCE(NEW.nama_bank, 'Bank') || ').',
             NEW.id::text,
-            '/troubleshooting'
+            '/user/troubleshooting'
         );
     -- Kasus 2: Status atau Catatan Admin Diperbarui
     ELSIF (TG_OP = 'UPDATE') THEN
@@ -116,7 +129,7 @@ BEGIN
                 'Pembaruan Troubleshooting Bank',
                 'Status isu tanggal ' || COALESCE(NEW.tanggal_penjualan::text, '-') || ' diubah menjadi ' || COALESCE(NEW.status, 'Diperbarui') || '.',
                 NEW.id::text,
-                '/troubleshooting'
+                '/user/troubleshooting'
             );
         END IF;
     END IF;
