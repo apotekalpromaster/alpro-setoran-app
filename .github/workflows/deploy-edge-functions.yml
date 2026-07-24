@@ -20,31 +20,31 @@ jobs:
           version: latest
 
       - name: Deploy send-weekly-discrepancy-report
-        run: supabase functions deploy send-weekly-discrepancy-report --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase functions deploy send-weekly-discrepancy-report --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Deploy send-afternoon-anomaly-reminder
-        run: supabase functions deploy send-afternoon-anomaly-reminder --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase functions deploy send-afternoon-anomaly-reminder --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Deploy send-reminder-emails
-        run: supabase functions deploy send-reminder-emails --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase functions deploy send-reminder-emails --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Deploy send-weekly-pending-report
-        run: supabase functions deploy send-weekly-pending-report --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase functions deploy send-weekly-pending-report --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Deploy send-biweekly-backdate-report
-        run: supabase functions deploy send-biweekly-backdate-report --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase functions deploy send-biweekly-backdate-report --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Deploy sync-pos-sales-from-drive
-        run: supabase functions deploy sync-pos-sales-from-drive --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase functions deploy sync-pos-sales-from-drive --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
