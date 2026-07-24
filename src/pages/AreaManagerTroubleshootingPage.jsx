@@ -30,10 +30,33 @@ export default function AreaManagerTroubleshootingPage() {
 
             const amUsername = profile.username || '';
 
+            // 1. Fetch store profiles under this Area Manager
+            const { data: storesData, error: storeErr } = await supabase
+                .from('profiles')
+                .select('id, username, kode_toko')
+                .ilike('area_manager', amUsername);
+
+            if (storeErr) throw storeErr;
+
+            const storeIds = (storesData || []).map(s => s.id);
+            const storeUsernames = (storesData || []).map(s => s.username).filter(Boolean);
+            const storeCodes = (storesData || []).map(s => s.kode_toko).filter(Boolean);
+
+            if (storeIds.length === 0 && storeUsernames.length === 0) {
+                setIssues([]);
+                return;
+            }
+
+            // Build OR query string for Supabase .or()
+            const orParts = [];
+            if (storeIds.length > 0) orParts.push(`user_id.in.(${storeIds.map(id => `"${id}"`).join(',')})`);
+            if (storeUsernames.length > 0) orParts.push(`kode_toko.in.(${storeUsernames.map(u => `"${u}"`).join(',')})`);
+            if (storeCodes.length > 0) orParts.push(`kode_toko.in.(${storeCodes.map(c => `"${c}"`).join(',')})`);
+
             const { data, error } = await supabase
                 .from('finance_troubleshooting_issues')
                 .select('*')
-                .ilike('area_manager', amUsername)
+                .or(orParts.join(','))
                 .order('created_at', { ascending: false });
 
             if (error) throw error;

@@ -1,4 +1,4 @@
--- Migration: Add Area Manager support & notifications for Troubleshooting Bank
+-- Migration: Add Area Manager support & notifications for Troubleshooting Bank (Dynamic Store Lookup)
 
 -- 1. Add RLS policy for Area Manager to view troubleshooting issues in their area
 DROP POLICY IF EXISTS "Area Manager can view troubleshooting in area" ON public.finance_troubleshooting_issues;
@@ -6,10 +6,15 @@ CREATE POLICY "Area Manager can view troubleshooting in area"
 ON public.finance_troubleshooting_issues FOR SELECT
 USING (
     EXISTS (
-        SELECT 1 FROM public.profiles p
-        WHERE p.id = auth.uid()
-          AND p.role = 'AreaManager'
-          AND LOWER(TRIM(p.username)) = LOWER(TRIM(finance_troubleshooting_issues.area_manager))
+        SELECT 1 
+        FROM public.profiles store_p
+        JOIN public.profiles am_p ON LOWER(TRIM(store_p.area_manager)) = LOWER(TRIM(am_p.username))
+        WHERE am_p.id = auth.uid()
+          AND (
+              store_p.id = finance_troubleshooting_issues.user_id 
+              OR LOWER(TRIM(store_p.username)) = LOWER(TRIM(finance_troubleshooting_issues.kode_toko))
+              OR LOWER(TRIM(store_p.kode_toko)) = LOWER(TRIM(finance_troubleshooting_issues.kode_toko))
+          )
     )
 );
 
@@ -17,37 +22,54 @@ USING (
 CREATE OR REPLACE FUNCTION fn_notify_troubleshooting_update()
 RETURNS TRIGGER AS $$
 DECLARE
+    v_am_username VARCHAR(100);
     v_am_user_id UUID;
+    v_kode_toko VARCHAR(50);
 BEGIN
-    -- Resolve Area Manager user_id from profiles table
-    IF NEW.area_manager IS NOT NULL AND NEW.area_manager <> '' THEN
+    -- Resolve Area Manager username & kode_toko from profiles table
+    SELECT p.area_manager, COALESCE(p.username, p.kode_toko)
+    INTO v_am_username, v_kode_toko
+    FROM public.profiles p
+    WHERE p.id = NEW.user_id 
+       OR LOWER(TRIM(p.username)) = LOWER(TRIM(NEW.kode_toko))
+       OR LOWER(TRIM(p.kode_toko)) = LOWER(TRIM(NEW.kode_toko))
+    LIMIT 1;
+
+    -- Resolve Area Manager user_id from profiles
+    IF v_am_username IS NOT NULL AND v_am_username <> '' THEN
         SELECT id INTO v_am_user_id 
         FROM public.profiles 
-        WHERE LOWER(TRIM(username)) = LOWER(TRIM(NEW.area_manager)) 
+        WHERE LOWER(TRIM(username)) = LOWER(TRIM(v_am_username)) 
         LIMIT 1;
+    END IF;
+
+    IF v_kode_toko IS NULL OR v_kode_toko = '' THEN
+        v_kode_toko := COALESCE(NEW.kode_toko, '');
     END IF;
 
     -- A. Finance Menambahkan Isu Baru (INSERT) -> Notifikasi ke Toko & Area Manager
     IF (TG_OP = 'INSERT') THEN
         -- Notifikasi ke Toko
-        INSERT INTO public.user_notifications (
-            user_id,
-            kode_toko,
-            category,
-            title,
-            message,
-            reference_id,
-            link
-        )
-        VALUES (
-            NEW.user_id,
-            COALESCE(NEW.kode_toko, ''),
-            'troubleshooting',
-            'Isu Audit Bank Baru',
-            'Tim Finance menambahkan isu audit bank untuk tanggal penjualan ' || COALESCE(NEW.tanggal_penjualan::text, '-') || ' (' || COALESCE(NEW.nama_bank, 'Bank') || ').',
-            NEW.id::text,
-            '/user/troubleshooting'
-        );
+        IF NEW.user_id IS NOT NULL THEN
+            INSERT INTO public.user_notifications (
+                user_id,
+                kode_toko,
+                category,
+                title,
+                message,
+                reference_id,
+                link
+            )
+            VALUES (
+                NEW.user_id,
+                v_kode_toko,
+                'troubleshooting',
+                'Isu Audit Bank Baru',
+                'Tim Finance menambahkan isu audit bank untuk tanggal penjualan ' || COALESCE(NEW.tanggal_penjualan::text, '-') || ' (' || COALESCE(NEW.nama_bank, 'Bank') || ').',
+                NEW.id::text,
+                '/user/troubleshooting'
+            );
+        END IF;
 
         -- Notifikasi ke Area Manager
         IF v_am_user_id IS NOT NULL THEN
@@ -62,10 +84,10 @@ BEGIN
             )
             VALUES (
                 v_am_user_id,
-                COALESCE(NEW.kode_toko, ''),
+                v_kode_toko,
                 'troubleshooting',
                 'Isu Bank Baru di Wilayah',
-                'Cabang ' || COALESCE(NEW.kode_toko, 'Toko') || ' mendapatkan isu audit bank untuk tanggal penjualan ' || COALESCE(NEW.tanggal_penjualan::text, '-') || '.',
+                'Cabang ' || COALESCE(v_kode_toko, 'Toko') || ' mendapatkan isu audit bank untuk tanggal penjualan ' || COALESCE(NEW.tanggal_penjualan::text, '-') || '.',
                 NEW.id::text,
                 '/areamanager/troubleshooting'
             );
@@ -75,24 +97,26 @@ BEGIN
     ELSIF (TG_OP = 'UPDATE') THEN
         -- B1. Finance mengupdate status atau catatan admin -> Notifikasi ke Toko
         IF (OLD.status IS DISTINCT FROM NEW.status) OR (OLD.catatan_admin IS DISTINCT FROM NEW.catatan_admin) THEN
-            INSERT INTO public.user_notifications (
-                user_id,
-                kode_toko,
-                category,
-                title,
-                message,
-                reference_id,
-                link
-            )
-            VALUES (
-                NEW.user_id,
-                COALESCE(NEW.kode_toko, ''),
-                'troubleshooting',
-                'Pembaruan Troubleshooting Bank',
-                'Status isu tanggal ' || COALESCE(NEW.tanggal_penjualan::text, '-') || ' diubah menjadi ' || COALESCE(NEW.status, 'Diperbarui') || '.',
-                NEW.id::text,
-                '/user/troubleshooting'
-            );
+            IF NEW.user_id IS NOT NULL THEN
+                INSERT INTO public.user_notifications (
+                    user_id,
+                    kode_toko,
+                    category,
+                    title,
+                    message,
+                    reference_id,
+                    link
+                )
+                VALUES (
+                    NEW.user_id,
+                    v_kode_toko,
+                    'troubleshooting',
+                    'Pembaruan Troubleshooting Bank',
+                    'Status isu tanggal ' || COALESCE(NEW.tanggal_penjualan::text, '-') || ' diubah menjadi ' || COALESCE(NEW.status, 'Diperbarui') || '.',
+                    NEW.id::text,
+                    '/user/troubleshooting'
+                );
+            END IF;
         END IF;
 
         -- B2. Toko memperbarui tindakan/bukti respon (action_outlet) -> Notifikasi ke Finance & Area Manager
@@ -109,10 +133,10 @@ BEGIN
             )
             VALUES (
                 NULL,
-                COALESCE(NEW.kode_toko, ''),
+                v_kode_toko,
                 'troubleshooting',
                 'Respon Toko Troubleshooting Bank',
-                'Cabang ' || COALESCE(NEW.kode_toko, 'Toko') || ' telah mengirimkan respon/bukti foto untuk isu tanggal ' || COALESCE(NEW.tanggal_penjualan::text, '-') || '.',
+                'Cabang ' || COALESCE(v_kode_toko, 'Toko') || ' telah mengirimkan respon/bukti foto untuk isu tanggal ' || COALESCE(NEW.tanggal_penjualan::text, '-') || '.',
                 NEW.id::text,
                 '/admin/troubleshooting'
             );
@@ -130,10 +154,10 @@ BEGIN
                 )
                 VALUES (
                     v_am_user_id,
-                    COALESCE(NEW.kode_toko, ''),
+                    v_kode_toko,
                     'troubleshooting',
                     'Respon Toko Troubleshooting Bank',
-                    'Cabang ' || COALESCE(NEW.kode_toko, 'Toko') || ' telah menanggapi isu bank tanggal ' || COALESCE(NEW.tanggal_penjualan::text, '-') || '.',
+                    'Cabang ' || COALESCE(v_kode_toko, 'Toko') || ' telah menanggapi isu bank tanggal ' || COALESCE(NEW.tanggal_penjualan::text, '-') || '.',
                     NEW.id::text,
                     '/areamanager/troubleshooting'
                 );
