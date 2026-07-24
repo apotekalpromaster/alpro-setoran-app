@@ -28,9 +28,14 @@ export default function AreaManagerTroubleshootingPage() {
             setLoading(true);
             setFetchError(null);
 
-            const amUsername = profile.username || '';
+            const amUsername = (profile?.username || '').trim();
+            if (!amUsername) {
+                setIssues([]);
+                setLoading(false);
+                return;
+            }
 
-            // 1. Fetch store profiles under this Area Manager
+            // 1. Fetch store profiles under this Area Manager from public.profiles
             const { data: storesData, error: storeErr } = await supabase
                 .from('profiles')
                 .select('id, username, kode_toko')
@@ -38,29 +43,47 @@ export default function AreaManagerTroubleshootingPage() {
 
             if (storeErr) throw storeErr;
 
-            const storeIds = (storesData || []).map(s => s.id);
+            const storeIds = (storesData || []).map(s => s.id).filter(Boolean);
             const storeUsernames = (storesData || []).map(s => s.username).filter(Boolean);
             const storeCodes = (storesData || []).map(s => s.kode_toko).filter(Boolean);
 
-            if (storeIds.length === 0 && storeUsernames.length === 0) {
+            if (storeIds.length === 0 && storeUsernames.length === 0 && storeCodes.length === 0) {
                 setIssues([]);
+                setLoading(false);
                 return;
             }
 
-            // Build OR query string for Supabase .or()
-            const orParts = [];
-            if (storeIds.length > 0) orParts.push(`user_id.in.(${storeIds.map(id => `"${id}"`).join(',')})`);
-            if (storeUsernames.length > 0) orParts.push(`kode_toko.in.(${storeUsernames.map(u => `"${u}"`).join(',')})`);
-            if (storeCodes.length > 0) orParts.push(`kode_toko.in.(${storeCodes.map(c => `"${c}"`).join(',')})`);
+            // 2. Fetch issues safely via .in() queries to avoid PostgREST .or() formatting pitfalls
+            let combined = [];
 
-            const { data, error } = await supabase
-                .from('finance_troubleshooting_issues')
-                .select('*')
-                .or(orParts.join(','))
-                .order('created_at', { ascending: false });
+            if (storeIds.length > 0) {
+                const { data: byIdData, error: errId } = await supabase
+                    .from('finance_troubleshooting_issues')
+                    .select('*')
+                    .in('user_id', storeIds);
+                if (!errId && byIdData) combined.push(...byIdData);
+            }
 
-            if (error) throw error;
-            setIssues(data || []);
+            const allStoreCodes = Array.from(new Set([...storeUsernames, ...storeCodes]));
+            if (allStoreCodes.length > 0) {
+                const { data: byCodeData, error: errCode } = await supabase
+                    .from('finance_troubleshooting_issues')
+                    .select('*')
+                    .in('kode_toko', allStoreCodes);
+                if (!errCode && byCodeData) combined.push(...byCodeData);
+            }
+
+            // Deduplicate by issue ID and sort descending by created_at
+            const uniqueMap = new Map();
+            combined.forEach(item => {
+                if (item && item.id) uniqueMap.set(item.id, item);
+            });
+
+            const sortedIssues = Array.from(uniqueMap.values()).sort((a, b) => {
+                return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+            });
+
+            setIssues(sortedIssues);
         } catch (err) {
             console.error('Gagal mengambil data troubleshooting area manager:', err);
             setFetchError(err.message || 'Gagal memuat data dari server.');
