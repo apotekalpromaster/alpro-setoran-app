@@ -101,7 +101,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                                 onClick={() => { navigate(item.path); setMobileOpen(false); }}
                                 title={item.label}
                                 className={`
-                                    relative w-full flex items-center gap-3 rounded-lg text-sm font-medium transition-colors
+                                    relative w-full flex items-center gap-3 rounded-lg text-sm font-medium text-left transition-colors
                                     ${collapsed ? 'justify-center px-0 py-3' : 'px-4 py-3'}
                                     ${isActive
                                         ? 'bg-orange-50 text-primary-600 font-bold'
@@ -111,7 +111,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                                 <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isActive ? 'text-primary-500' : 'text-gray-400'}`}>
                                     {item.icon}
                                 </span>
-                                {!collapsed && <span className="truncate flex-1">{item.label}</span>}
+                                {!collapsed && <span className="text-left truncate flex-1">{item.label}</span>}
                                 {!collapsed && item.path === '/koreksi' && unreadKoreksiCount > 0 && (
                                     <span className="bg-red-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full flex-shrink-0 animate-pulse">
                                         {unreadKoreksiCount}
