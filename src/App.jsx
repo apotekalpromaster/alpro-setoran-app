@@ -30,6 +30,7 @@ import LaporanBackdatePage from './pages/LaporanBackdatePage';
 import RekonsiliasiPOSPage from './pages/RekonsiliasiPOSPage';
 import KoreksiLaporanPage from './pages/KoreksiLaporanPage';
 import AreaManagerKoreksiApprovalPage from './pages/AreaManagerKoreksiApprovalPage';
+import AreaManagerTroubleshootingPage from './pages/AreaManagerTroubleshootingPage';
 import TroubleshootingTokoPage from './pages/TroubleshootingTokoPage';
 import TroubleshootingFinancePage from './pages/TroubleshootingFinancePage';
 
@@ -165,6 +166,14 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={['AreaManager']}>
                 <AreaManagerKoreksiApprovalPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/areamanager/troubleshooting"
+            element={
+              <ProtectedRoute allowedRoles={['AreaManager']}>
+                <AreaManagerTroubleshootingPage />
               </ProtectedRoute>
             }
           />

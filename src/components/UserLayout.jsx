@@ -28,6 +28,7 @@ export default function UserLayout({ children, title, activeRoute }) {
     const items = isAM ? [
         { label: 'Dashboard AM', icon: 'dashboard', path: '/areamanager/dashboard' },
         { label: 'Persetujuan Koreksi', icon: 'task_alt', path: '/areamanager/koreksi-approval' },
+        { label: 'Troubleshooting Bank', icon: 'troubleshoot', path: '/areamanager/troubleshooting' },
         { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
         { label: 'Petunjuk Penggunaan', icon: 'menu_book', path: '/bantuan' },
     ] : NAV_ITEMS;
@@ -117,7 +118,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                                         {unreadKoreksiCount}
                                     </span>
                                 )}
-                                {!collapsed && item.path === '/user/troubleshooting' && unreadTroubleshootingCount > 0 && (
+                                {!collapsed && (item.path === '/user/troubleshooting' || item.path === '/areamanager/troubleshooting') && unreadTroubleshootingCount > 0 && (
                                     <span className="bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full flex-shrink-0 animate-pulse">
                                         {unreadTroubleshootingCount}
                                     </span>
@@ -125,7 +126,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                                 {collapsed && (item.path === '/koreksi' || item.path === '/areamanager/koreksi-approval') && unreadKoreksiCount > 0 && (
                                     <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 border border-white" />
                                 )}
-                                {collapsed && item.path === '/user/troubleshooting' && unreadTroubleshootingCount > 0 && (
+                                {collapsed && (item.path === '/user/troubleshooting' || item.path === '/areamanager/troubleshooting') && unreadTroubleshootingCount > 0 && (
                                     <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-amber-500 border border-white" />
                                 )}
                             </button>
