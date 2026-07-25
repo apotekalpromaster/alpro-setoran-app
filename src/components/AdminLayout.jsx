@@ -96,7 +96,12 @@ export default function AdminLayout({ children, title, activePath }) {
                         return (
                             <button
                                 key={item.path}
-                                onClick={() => { navigate(item.path); setMobileOpen(false); }}
+                                onClick={() => {
+    setMobileOpen(false);
+    if (location.pathname !== item.path) {
+        window.location.href = item.path;
+    }
+}}
                                 title={item.label}
                                 className={`
                                     w-full flex items-center gap-3 rounded-lg text-sm font-medium text-left transition-colors cursor-pointer

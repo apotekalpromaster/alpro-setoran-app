@@ -227,13 +227,13 @@ export default function BerandaPage() {
                     </h3>
                     <div className="flex flex-wrap gap-3">
                         <button
-                            onClick={() => navigate('/setoran')}
+                            onClick={() => window.location.href = '/setoran'}
                             className="flex items-center gap-2 bg-primary-500 text-white font-semibold py-2.5 px-5 rounded-lg hover:bg-primary-600 transition-all shadow-md transform hover:-translate-y-0.5 text-sm"
                         >
                             <span className="material-symbols-outlined text-xl">add_circle</span> Buat Laporan Baru
                         </button>
                         <button
-                            onClick={() => navigate('/riwayat')}
+                            onClick={() => window.location.href = '/riwayat'}
                             className="flex items-center gap-2 bg-white text-gray-700 font-semibold py-2.5 px-5 rounded-lg border border-gray-300 hover:bg-gray-50 transition-all shadow-sm text-sm"
                         >
                             <span className="material-symbols-outlined text-xl">history</span> Riwayat Laporan
