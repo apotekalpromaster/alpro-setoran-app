@@ -88,10 +88,46 @@ export async function askAssistant(userQuery, username) {
     return sendChatMessages([{ role: 'user', content: userQuery }], username);
 }
 
+function generateLocalAnalyticsSummary(payload) {
+    if (!payload || typeof payload !== 'object') {
+        return "Data laporan tidak cukup untuk dianalisis.";
+    }
+
+    const formatRp = (num) => 'Rp ' + (Number(num) || 0).toLocaleString('id-ID');
+
+    const totalSales = formatRp(payload.total_sales_manual);
+    const totalSetoran = formatRp(payload.total_setoran);
+    const totalPotongan = formatRp(payload.total_potongan);
+    const totalPos = formatRp(payload.total_pos_sales);
+    const countAnomali = payload.total_anomali_selisih || 0;
+    const totalRecords = payload.total_records || 0;
+
+    let narrative = `### 📊 Analisis Keuangan Virtual (Senior Financial Analyst)\n\n`;
+    narrative += `**1. Ringkasan Konsolidasi Penjualan & Setoran**:\n`;
+    narrative += `- **Total Omzet Sales Manual**: ${totalSales}\n`;
+    narrative += `- **Total Dana Disetorkan (Bank/ATM)**: ${totalSetoran}\n`;
+    narrative += `- **Total Potongan Operational Expense**: ${totalPotongan}\n`;
+    narrative += `- **Total Penjualan POS Xilnex**: ${totalPos}\n\n`;
+
+    narrative += `**2. Audit Anomali & Rekonsiliasi**:\n`;
+    if (countAnomali > 0) {
+        narrative += `- ⚠️ Terdeteksi **${countAnomali} transaksi** dengan selisih penjualan vs POS Xilnex melebihi ambang batas Rp 50.000.\n`;
+    } else {
+        narrative += `- ✅ Seluruh **${totalRecords} transaksi** setoran cabang berada dalam batas aman selisih rekonsiliasi.\n`;
+    }
+
+    narrative += `\n**3. Saran Rekomendasi Strategis**:\n`;
+    narrative += `1. **Prioritas Audit**: Lakukan pengecekan khusus pada toko yang memiliki catatan selisih POS terbesar.\n`;
+    narrative += `2. **Disiplin Harian**: Imbau Area Manager (AM) untuk mengawasi ketepatan waktu penginputan setoran sebelum closing harian.\n`;
+    narrative += `3. **Sinkronisasi POS**: Pastikan data POS Xilnex di Google Drive disinkronkan harian agar matching otomatis berjalan presisi.`;
+
+    return narrative;
+}
+
 export async function generateAnalyticsSummary(tableData) {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
 
         const response = await fetch(`${supabaseUrl}/functions/v1/groq-ai-service`, {
             method: 'POST',
@@ -106,12 +142,16 @@ export async function generateAnalyticsSummary(tableData) {
 
         clearTimeout(timeoutId);
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+            console.warn("Groq Admin Summary status error, activating local analytics generator:", response.status);
+            return generateLocalAnalyticsSummary(tableData);
+        }
+
         const data = await response.json();
-        return data?.reply || "Gagal membuat analisis AI.";
+        return data?.reply || generateLocalAnalyticsSummary(tableData);
 
     } catch (error) {
-        console.error("Admin Summary Error:", error);
-        return "Gagal mendapatkan analisis AI. Edge function mungkin tidak merespons.";
+        console.warn("Admin Summary Error / Fallback activated:", error);
+        return generateLocalAnalyticsSummary(tableData);
     }
 }

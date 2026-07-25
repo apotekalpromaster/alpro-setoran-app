@@ -323,8 +323,30 @@ export default function LaporanAnalitikPage() {
         setAiLoading(true);
         setAiSummary('');
         try {
-            // Pass the currently filtered table data to AI
-            const result = await generateAnalyticsSummary(tableData);
+            const totalSalesManual = tableData.reduce((s, r) => s + (Number(r.nominal_jual) || 0), 0);
+            const totalSetoran = tableData.reduce((s, r) => s + (Number(r.nominal_setoran) || 0), 0);
+            const totalPotongan = tableData.reduce((s, r) => s + (Number(r.potongan) || 0), 0);
+            const totalPosSales = tableData.reduce((s, r) => s + (Number(r.pos_sales) || 0), 0);
+            const totalAnomali = tableData.filter(r => Math.abs(Number(r.selisih_pos) || 0) > 50000).length;
+
+            const compactPayload = {
+                periode: periodOption,
+                total_records: tableData.length,
+                total_sales_manual: totalSalesManual,
+                total_setoran: totalSetoran,
+                total_potongan: totalPotongan,
+                total_pos_sales: totalPosSales,
+                total_anomali_selisih: totalAnomali,
+                sample_outlets: tableData.slice(0, 10).map(r => ({
+                    toko: r.nama_toko || r.kode_toko,
+                    sales: r.nominal_jual,
+                    setoran: r.nominal_setoran,
+                    potongan: r.potongan,
+                    selisih_pos: r.selisih_pos
+                }))
+            };
+
+            const result = await generateAnalyticsSummary(compactPayload);
             setAiSummary(result);
         } catch (err) {
             setAiSummary('Terjadi kesalahan saat memanggil asisten AI.');
