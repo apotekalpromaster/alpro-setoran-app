@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 export default function ProtectedRoute({ children, allowedRoles }) {
     const { user, profile, loading } = useAuth();
 
-    // If session or profile is still loading, show loading spinner
-    if (loading && !profile) {
+    // Show spinner ONLY when session is being resolved for the very first time without any cache
+    if (loading && (!user || !profile)) {
         return (
             <div className="flex h-screen items-center justify-center bg-gray-100 font-sans">
                 <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
@@ -16,8 +16,8 @@ export default function ProtectedRoute({ children, allowedRoles }) {
         );
     }
 
-    // If no authenticated user, redirect to login
-    if (!user) {
+    // If loading finished and there is no authenticated user, redirect to login
+    if (!loading && !user) {
         return <Navigate to="/login" replace />;
     }
 

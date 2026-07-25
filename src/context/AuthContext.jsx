@@ -3,30 +3,28 @@ import { supabase } from '../services/supabaseClient';
 
 const AuthContext = createContext();
 const PROFILE_CACHE_KEY = 'alpro_cached_profile';
+const USER_CACHE_KEY = 'alpro_cached_user';
 
 export function AuthProvider({ children }) {
-    // Read initial profile from localStorage cache synchronously
-    const getInitialProfile = () => {
+    const getCachedItem = (key) => {
         try {
-            const cached = localStorage.getItem(PROFILE_CACHE_KEY);
+            const cached = localStorage.getItem(key);
             return cached ? JSON.parse(cached) : null;
         } catch (e) {
             return null;
         }
     };
 
-    const initialProfile = getInitialProfile();
-    const [user, setUser] = useState(null);
+    const initialUser = getCachedItem(USER_CACHE_KEY);
+    const initialProfile = getCachedItem(PROFILE_CACHE_KEY);
+
+    const [user, setUser] = useState(initialUser);
     const [profile, setProfile] = useState(initialProfile);
-    // If profile is already cached in localStorage, start loading = false immediately!
-    const [loading, setLoading] = useState(!initialProfile);
+    // If both user and profile are in cache, initial loading is false! Otherwise true until session resolves.
+    const [loading, setLoading] = useState(!(initialUser && initialProfile));
 
     const fetchProfile = async (userId, isInitial = false) => {
         try {
-            // Set global loading to true ONLY if initial boot and profile is not cached yet
-            if ((isInitial && !initialProfile) || (!profile && !initialProfile)) {
-                setLoading(true);
-            }
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
@@ -38,15 +36,10 @@ export function AuthProvider({ children }) {
             setProfile(data);
             try {
                 localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data));
-            } catch (e) {
-                console.warn('Failed to cache profile in localStorage:', e);
-            }
+            } catch (e) {}
             return data;
         } catch (error) {
             console.error('Error fetching profile:', error.message);
-            if (isInitial && !initialProfile) {
-                setProfile(null);
-            }
             return null;
         } finally {
             setLoading(false);
@@ -58,25 +51,38 @@ export function AuthProvider({ children }) {
 
         supabase.auth.getSession().then(({ data: { session } }) => {
             if (!isMounted) return;
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                fetchProfile(session.user.id, true);
+            const currentUser = session?.user ?? null;
+            setUser(currentUser);
+
+            if (currentUser) {
+                try { localStorage.setItem(USER_CACHE_KEY, JSON.stringify(currentUser)); } catch (e) {}
+                fetchProfile(currentUser.id, false);
             } else {
+                setUser(null);
                 setProfile(null);
-                try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch (e) {}
+                try {
+                    localStorage.removeItem(USER_CACHE_KEY);
+                    localStorage.removeItem(PROFILE_CACHE_KEY);
+                } catch (e) {}
                 setLoading(false);
             }
         });
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!isMounted) return;
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                const isInitial = (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && !profile && !initialProfile;
-                await fetchProfile(session.user.id, isInitial);
+            const currentUser = session?.user ?? null;
+            setUser(currentUser);
+
+            if (currentUser) {
+                try { localStorage.setItem(USER_CACHE_KEY, JSON.stringify(currentUser)); } catch (e) {}
+                await fetchProfile(currentUser.id, false);
             } else {
+                setUser(null);
                 setProfile(null);
-                try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch (e) {}
+                try {
+                    localStorage.removeItem(USER_CACHE_KEY);
+                    localStorage.removeItem(PROFILE_CACHE_KEY);
+                } catch (e) {}
                 setLoading(false);
             }
         });
@@ -91,6 +97,8 @@ export function AuthProvider({ children }) {
         setLoading(true);
         const res = await supabase.auth.signInWithPassword({ email, password });
         if (res.data?.user) {
+            setUser(res.data.user);
+            try { localStorage.setItem(USER_CACHE_KEY, JSON.stringify(res.data.user)); } catch (e) {}
             await fetchProfile(res.data.user.id, true);
         } else {
             setLoading(false);
@@ -102,7 +110,10 @@ export function AuthProvider({ children }) {
         setLoading(true);
         setProfile(null);
         setUser(null);
-        try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch (e) {}
+        try {
+            localStorage.removeItem(USER_CACHE_KEY);
+            localStorage.removeItem(PROFILE_CACHE_KEY);
+        } catch (e) {}
         const res = await supabase.auth.signOut();
         setLoading(false);
         return res;
