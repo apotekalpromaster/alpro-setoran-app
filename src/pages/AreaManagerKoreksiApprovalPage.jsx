@@ -294,9 +294,19 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                             </button>
                                                         </div>
                                                     ) : item.status === 'Approved' ? (
-                                                        <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-green-50 text-green-700 border border-green-200">Disetujui</span>
+                                                        <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-green-50 text-green-700 border border-green-200 shadow-sm">Disetujui</span>
                                                     ) : (
-                                                        <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-red-50 text-red-700 border border-red-200">Ditolak</span>
+                                                        <div className="relative group inline-block">
+                                                            <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-red-50 text-red-700 border border-red-200 shadow-sm cursor-help inline-flex items-center gap-1">
+                                                                <span className="material-symbols-outlined text-xs">info</span> Ditolak
+                                                            </span>
+                                                            <div className="absolute right-0 top-full mt-1.5 hidden group-hover:block z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-xl shadow-xl border border-gray-700 text-left animate-fade-in">
+                                                                <p className="font-bold text-red-400 mb-1 flex items-center gap-1">
+                                                                    <span className="material-symbols-outlined text-xs">cancel</span> Alasan Penolakan:
+                                                                </p>
+                                                                <p className="text-gray-200 italic leading-relaxed">"{item.catatan_admin || item.catatan || 'Tidak ada catatan spesifik.'}"</p>
+                                                            </div>
+                                                        </div>
                                                     )}
                                                 </td>
                                             </tr>

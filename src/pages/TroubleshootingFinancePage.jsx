@@ -704,10 +704,20 @@ export default function TroubleshootingFinancePage() {
                                 <div><span className="font-bold text-blue-800">Action / Penjelasan:</span> <p className="mt-0.5 text-gray-800">{reviewIssue.action_outlet || '(Belum ada tanggapan)'}</p></div>
                                 <div><span className="font-bold text-blue-800">PIC Outlet:</span> {reviewIssue.pic_outlet || '-'}</div>
                                 {reviewIssue.bukti_url && (
-                                    <div>
-                                        <span className="font-bold text-blue-800">Bukti Upload / Drive:</span>{' '}
-                                        <a href={reviewIssue.bukti_url} target="_blank" rel="noreferrer" className="text-blue-600 underline font-semibold break-all">
-                                            Buka Bukti
+                                    <div className="pt-2 border-t border-blue-100 space-y-2">
+                                        <span className="font-bold text-blue-800 block text-xs">Pratinjau Bukti Upload Cabang:</span>
+                                        {typeof reviewIssue.bukti_url === 'string' && reviewIssue.bukti_url.toLowerCase().includes('.pdf') ? (
+                                            <div className="p-3 text-center bg-white rounded-lg border border-blue-200">
+                                                <span className="material-symbols-outlined text-3xl text-red-500 mb-1">picture_as_pdf</span>
+                                                <p className="text-xs font-bold text-gray-700">Dokumen PDF Terlampir</p>
+                                            </div>
+                                        ) : (
+                                            <div className="relative h-44 bg-gray-100 rounded-xl overflow-hidden border border-blue-200 shadow-sm flex items-center justify-center">
+                                                <img src={reviewIssue.bukti_url} alt="Bukti Respon" className="w-full h-full object-cover" />
+                                            </div>
+                                        )}
+                                        <a href={reviewIssue.bukti_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 font-bold bg-white px-3 py-1.5 rounded-lg border border-blue-300 shadow-sm">
+                                            <span className="material-symbols-outlined text-sm">open_in_new</span> Buka di Tab Baru
                                         </a>
                                     </div>
                                 )}

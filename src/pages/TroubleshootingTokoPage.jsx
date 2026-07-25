@@ -303,11 +303,23 @@ export default function TroubleshootingTokoPage() {
                                     </label>
                                     <input
                                         type="url"
-                                        placeholder="https://drive.google.com/..."
+                                        placeholder="https://drive.google.com/... atau tautan gambar"
                                         value={buktiUrl}
                                         onChange={(e) => setBuktiUrl(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500"
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 mb-2"
                                     />
+                                    {buktiUrl && (
+                                        <div className="p-2 bg-gray-50 rounded-xl border border-gray-200">
+                                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Pratinjau Bukti Foto:</p>
+                                            {buktiUrl.toLowerCase().includes('.pdf') ? (
+                                                <div className="p-2 text-center text-xs text-red-600 font-bold bg-white rounded border">Dokumen PDF Terlampir</div>
+                                            ) : (
+                                                <div className="h-36 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center border">
+                                                    <img src={buktiUrl} alt="Preview Bukti" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">

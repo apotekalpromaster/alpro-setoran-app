@@ -394,16 +394,28 @@ export default function AreaManagerTroubleshootingPage() {
 
                             {detailIssue.bukti_url && (
                                 <div>
-                                    <p className="text-gray-400 font-semibold text-[10px] uppercase mb-1">Lampiran Bukti Foto</p>
-                                    <a
-                                        href={detailIssue.bukti_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 text-blue-600 hover:underline font-bold bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200"
-                                    >
-                                        <span className="material-symbols-outlined text-sm">open_in_new</span>
-                                        Buka Bukti Foto
-                                    </a>
+                                    <p className="text-gray-400 font-semibold text-[10px] uppercase mb-1.5">Lampiran Bukti Foto Respon</p>
+                                    <div className="relative group rounded-xl border border-gray-200 overflow-hidden bg-gray-50 p-2 space-y-2">
+                                        {typeof detailIssue.bukti_url === 'string' && detailIssue.bukti_url.toLowerCase().includes('.pdf') ? (
+                                            <div className="p-4 text-center">
+                                                <span className="material-symbols-outlined text-4xl text-red-500 mb-1">picture_as_pdf</span>
+                                                <p className="text-xs font-bold text-gray-700">Dokumen PDF Terlampir</p>
+                                            </div>
+                                        ) : (
+                                            <div className="relative h-48 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                                                <img src={detailIssue.bukti_url} alt="Bukti Respon" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                            </div>
+                                        )}
+                                        <a
+                                            href={detailIssue.bukti_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="w-full inline-flex items-center justify-center gap-1.5 text-blue-600 hover:text-blue-800 font-bold bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg border border-blue-200 text-xs transition-colors"
+                                        >
+                                            <span className="material-symbols-outlined text-sm">open_in_new</span>
+                                            Buka Bukti Foto di Tab Baru
+                                        </a>
+                                    </div>
                                 </div>
                             )}
                         </div>

@@ -15,6 +15,8 @@ export default function DetailSetoranPage() {
 
     const [globalError, setGlobalError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [stagedLightboxImg, setStagedLightboxImg] = useState(null);
+    const [showCancelModal, setShowCancelModal] = useState(false);
 
     const jenis = formData.jenisPelaporan;
     const metode = formData.metodeSetoran;
@@ -234,7 +236,7 @@ export default function DetailSetoranPage() {
                                 </>
                             )}
                             <TextareaField label="Penjelasan" value={formData.penjelasan} onChange={(v) => updateField({ penjelasan: v.toUpperCase() })} placeholder="Kronologi kejadian..." />
-                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} />
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} onPreviewClick={setStagedLightboxImg} />
                         </>
                     )}
 
@@ -243,7 +245,7 @@ export default function DetailSetoranPage() {
                         <>
                             <CurrencyField label="Nominal Setoran" value={formData.nominalSetoran} onChange={(v) => updateField({ nominalSetoran: v })} />
                             <TextareaField label="Penjelasan" value={formData.penjelasan} onChange={(v) => updateField({ penjelasan: v.toUpperCase() })} placeholder="Jelaskan sumber uang lebih" />
-                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} />
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} onPreviewClick={setStagedLightboxImg} />
                         </>
                     )}
 
@@ -288,13 +290,24 @@ export default function DetailSetoranPage() {
                                 <InputField label="Nomor Referensi Bank" value={formData.nomorMesinAtm} onChange={(v) => updateField({ nomorMesinAtm: v.toUpperCase() })} placeholder="Masukkan nomor referensi" />
                             )}
 
-                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} />
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} onPreviewClick={setStagedLightboxImg} />
                         </>
                     )}
 
                     {/* Nav buttons */}
                     <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-6 border-t border-gray-100">
-                        <button type="button" onClick={() => navigate('/setoran')} className="w-full sm:w-auto btn-secondary">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const hasData = stagedFiles.some(Boolean) || !!formData.totalPenjualan || !!formData.nominalSetoran;
+                                if (hasData) {
+                                    setShowCancelModal(true);
+                                } else {
+                                    navigate('/setoran');
+                                }
+                            }}
+                            className="w-full sm:w-auto btn-secondary"
+                        >
                             <span className="material-symbols-outlined text-base">arrow_back</span> Kembali
                         </button>
                         <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto btn-primary">
@@ -303,6 +316,58 @@ export default function DetailSetoranPage() {
                     </div>
                 </form>
             </div>
+
+            {/* Modal Konfirmasi Batal */}
+            {showCancelModal && (
+                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 text-center">
+                        <div className="h-14 w-14 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+                            <span className="material-symbols-outlined text-3xl">warning</span>
+                        </div>
+                        <div className="space-y-1">
+                            <h3 className="text-lg font-bold text-gray-900">Batalkan Input Setoran?</h3>
+                            <p className="text-xs text-gray-500 leading-relaxed">
+                                Data nominal dan berkas bukti yang sudah diisi akan hilang jika Anda kembali. Yakin ingin membatalkan?
+                            </p>
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowCancelModal(false)}
+                                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                                Lanjutkan Pengisian
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => navigate('/setoran')}
+                                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
+                            >
+                                Ya, Batalkan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Lightbox Modal Staged Preview */}
+            {stagedLightboxImg && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setStagedLightboxImg(null)}>
+                    <div className="relative max-w-3xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl space-y-3 p-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                            <h4 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                                <span className="material-symbols-outlined text-primary-600">image</span> Pratinjau Foto Berkas Staged
+                            </h4>
+                            <button onClick={() => setStagedLightboxImg(null)} className="h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors">
+                                <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                        </div>
+                        <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-gray-900/5 rounded-xl p-2">
+                            <img src={stagedLightboxImg} alt="Detail Staged" className="max-w-full max-h-[65vh] object-contain rounded-lg shadow-md" />
+                        </div>
+                    </div>
+                </div>
+            )}
         </UserLayout>
     );
 }
@@ -364,7 +429,7 @@ function TextareaField({ label, value, onChange, placeholder }) {
     );
 }
 
-function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis }) {
+function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis, onPreviewClick }) {
     const isSingleProofType = ['Setoran Uang Lebih', 'Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
 
     const slots = isSingleProofType
@@ -414,18 +479,28 @@ function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis }) {
                                 </h4>
                                 
                                 {sf ? (
-                                    <div className="flex items-center gap-2 text-xs text-gray-800 pt-1.5">
+                                    <div className="flex items-center gap-3 text-xs text-gray-800 pt-2">
                                         {sf.isImage && sf.preview ? (
-                                            <img src={sf.preview} alt="preview" className="h-9 w-9 object-cover rounded border border-gray-200 shadow-sm" />
+                                            <div
+                                                className="relative group h-16 w-16 rounded-xl border border-gray-200 overflow-hidden shadow-sm flex-shrink-0 cursor-pointer"
+                                                onClick={() => onPreviewClick && onPreviewClick(sf.preview)}
+                                                title="Klik untuk pratinjau penuh"
+                                            >
+                                                <img src={sf.preview} alt="preview" className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                                    <span className="material-symbols-outlined text-base">zoom_in</span>
+                                                </div>
+                                            </div>
                                         ) : (
-                                            <div className="h-9 w-9 flex items-center justify-center bg-gray-50 text-gray-400 rounded border border-gray-200 shadow-sm">
-                                                <span className="material-symbols-outlined text-lg">description</span>
+                                            <div className="h-16 w-16 flex flex-col items-center justify-center bg-red-50 text-red-600 rounded-xl border border-red-200 shadow-sm flex-shrink-0">
+                                                <span className="material-symbols-outlined text-2xl">picture_as_pdf</span>
+                                                <span className="text-[9px] font-bold">PDF</span>
                                             </div>
                                         )}
-                                        <div className="min-w-0">
-                                            <span className="block font-medium truncate max-w-[200px]" title={sf.name}>{sf.name}</span>
-                                            <span className="text-[10px] text-green-600 font-bold flex items-center gap-0.5 mt-0.5">
-                                                <span className="material-symbols-outlined text-[10px]">check_circle</span> Siap Diupload
+                                        <div className="min-w-0 flex-1">
+                                            <span className="block font-bold text-gray-900 truncate max-w-[220px]" title={sf.name}>{sf.name}</span>
+                                            <span className="text-[10px] text-green-600 font-bold flex items-center gap-1 mt-0.5 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 w-fit">
+                                                <span className="material-symbols-outlined text-[11px]">check_circle</span> Siap Diupload
                                             </span>
                                         </div>
                                     </div>

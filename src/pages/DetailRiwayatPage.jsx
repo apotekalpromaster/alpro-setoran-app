@@ -12,6 +12,7 @@ function formatDate(isoDate) {
 }
 
 export default function DetailRiwayatPage() {
+    const [lightboxImg, setLightboxImg] = useState(null);
     const { id } = useParams();
     const navigate = useNavigate();
     const [data, setData] = useState(null);
@@ -168,33 +169,90 @@ export default function DetailRiwayatPage() {
                                 <span className="material-symbols-outlined text-3xl text-gray-300">cloud_off</span>
                             </div>
                             <p className="text-sm font-medium text-gray-500">Belum Ada Bukti Terlampir</p>
-                            <p className="text-xs text-gray-400 mt-1">Mesin upload ke Google Drive akan aktif di pembaruan berikutnya.</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {buktiUrls.map((url, index) => (
-                                <a
-                                    key={index}
-                                    href={url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="group block relative rounded-lg border border-gray-200 overflow-hidden hover:shadow-md hover:border-primary-300 transition-all"
-                                >
-                                    <div className="bg-gray-50 h-32 flex items-center justify-center text-gray-400 group-hover:bg-orange-50 transition-colors">
-                                        <div className="text-center">
-                                            <span className="material-symbols-outlined text-4xl mb-1 group-hover:text-primary-500 transition-colors">description</span>
-                                            <p className="text-xs font-medium">Lihat Lampiran #{index + 1}</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {buktiUrls.map((url, index) => {
+                                const isPdf = typeof url === 'string' && url.toLowerCase().includes('.pdf');
+                                return (
+                                    <div
+                                        key={index}
+                                        className="group relative rounded-xl border border-gray-200 overflow-hidden bg-white shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                                    >
+                                        <div
+                                            className="relative h-44 bg-gray-100 flex items-center justify-center overflow-hidden cursor-pointer"
+                                            onClick={() => !isPdf && setLightboxImg(url)}
+                                        >
+                                            {isPdf ? (
+                                                <div className="text-center p-4">
+                                                    <span className="material-symbols-outlined text-5xl text-red-500 mb-1">picture_as_pdf</span>
+                                                    <p className="text-xs font-bold text-gray-700">Dokumen PDF #{index + 1}</p>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <img
+                                                        src={url}
+                                                        alt={`Bukti #${index + 1}`}
+                                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                        onError={(e) => {
+                                                            e.target.style.display = 'none';
+                                                            if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                                                        }}
+                                                    />
+                                                    <div className="hidden absolute inset-0 bg-gray-50 flex-col items-center justify-center text-gray-400">
+                                                        <span className="material-symbols-outlined text-4xl mb-1">description</span>
+                                                        <p className="text-xs font-medium">Lampiran #{index + 1}</p>
+                                                    </div>
+                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white">
+                                                        <span className="material-symbols-outlined text-xl">zoom_in</span>
+                                                        <span className="text-xs font-bold">Klik Pratinjau</span>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                        <div className="p-3 bg-white border-t border-gray-100 flex items-center justify-between">
+                                            <span className="text-xs font-bold text-gray-700">Bukti #{index + 1}</span>
+                                            <a
+                                                href={url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1 bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-100 transition-colors"
+                                                title="Buka di tab baru"
+                                            >
+                                                <span>Tab Baru</span>
+                                                <span className="material-symbols-outlined text-sm">open_in_new</span>
+                                            </a>
                                         </div>
                                     </div>
-                                    <div className="p-3 bg-white border-t border-gray-100 flex items-center justify-between">
-                                        <span className="text-xs font-bold text-gray-700">Bukti #{index + 1}</span>
-                                        <span className="material-symbols-outlined text-gray-400 text-sm">open_in_new</span>
-                                    </div>
-                                </a>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </SectionCard>
+
+                {/* Lightbox Modal */}
+                {lightboxImg && (
+                    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setLightboxImg(null)}>
+                        <div className="relative max-w-4xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl space-y-3 p-4" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                                <h4 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary-600">image</span> Pratinjau Bukti Setoran
+                                </h4>
+                                <div className="flex items-center gap-2">
+                                    <a href={lightboxImg} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors">
+                                        <span className="material-symbols-outlined text-sm">open_in_new</span> Buka di Tab Baru
+                                    </a>
+                                    <button onClick={() => setLightboxImg(null)} className="h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors">
+                                        <span className="material-symbols-outlined text-sm">close</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-gray-900/5 rounded-xl p-2">
+                                <img src={lightboxImg} alt="Detail Pratinjau" className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md" />
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* 5. RIWAYAT KOREKSI */}
                 {corrections.length > 0 && (
