@@ -87,31 +87,32 @@ export default function RiwayatPage() {
         setLoading(true);
         setError('');
         try {
-            // Fetch all reports for this user (up to 5000 rows) without arbitrary cap limit
-            const { data, error: err } = await supabase
+            const reportsPromise = supabase
                 .from('laporan')
                 .select('*')
                 .eq('user_id', profile.id)
                 .order('tanggal_jual', { ascending: false })
                 .limit(5000);
 
-            if (err) throw err;
-            setReports(data || []);
-
-            // Fetch POS sales data for lookup
-            if (profile?.username) {
-                const { data: posData, error: posErr } = await supabase
+            const posPromise = profile?.username
+                ? supabase
                     .from('pos_sales_data')
                     .select('tanggal_jual, sales_pos')
-                    .eq('kode_cabang', profile.username);
+                    .eq('kode_cabang', profile.username)
+                : Promise.resolve({ data: [], error: null });
 
-                if (!posErr && posData) {
-                    const map = {};
-                    posData.forEach(item => {
-                        map[item.tanggal_jual] = item.sales_pos;
-                    });
-                    setPosSalesMap(map);
-                }
+            const [reportsRes, posRes] = await Promise.all([reportsPromise, posPromise]);
+
+            if (reportsRes.error) throw reportsRes.error;
+
+            setReports(reportsRes.data || []);
+
+            if (!posRes.error && posRes.data) {
+                const map = {};
+                posRes.data.forEach(item => {
+                    map[item.tanggal_jual] = item.sales_pos;
+                });
+                setPosSalesMap(map);
             }
         } catch (e) {
             setError('Gagal memuat riwayat: ' + e.message);
@@ -561,7 +562,7 @@ export default function RiwayatPage() {
                     )}
 
                     {/* Pagination */}
-                    {totalPages > 1 && (
+                    {!loading && totalPages > 1 && (
                         <div className="mt-6 flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-200">
                             <button
                                 disabled={currentPage === 1}
