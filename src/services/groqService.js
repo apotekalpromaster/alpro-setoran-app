@@ -67,8 +67,7 @@ export async function sendChatMessages(messages, username = '') {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-            const errJson = await response.json().catch(() => ({}));
-            console.warn("Groq Edge Function error status:", response.status, errJson);
+            console.warn("Groq Edge Function error status:", response.status);
             return getLocalFallbackAnswer(lastUserMsg);
         }
 

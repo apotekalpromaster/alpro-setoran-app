@@ -330,7 +330,7 @@ export default function LaporanAnalitikPage() {
             const totalAnomali = tableData.filter(r => Math.abs(Number(r.selisih_pos) || 0) > 50000).length;
 
             const compactPayload = {
-                periode: periodOption,
+                periode: period,
                 total_records: tableData.length,
                 total_sales_manual: totalSalesManual,
                 total_setoran: totalSetoran,
