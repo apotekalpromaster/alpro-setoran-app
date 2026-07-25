@@ -69,7 +69,10 @@ export default function RiwayatPage() {
     const [selectedJenis, setSelectedJenis] = useState([]);
     const [activeFilters, setActiveFilters] = useState({ search: '', startDate: '', endDate: '', methode: '', jenis: [] });
 
+    const isMounted = useRef(true);
+
     useEffect(() => {
+        isMounted.current = true;
         if (!authLoading) {
             if (profile?.id) {
                 fetchReports();
@@ -77,15 +80,20 @@ export default function RiwayatPage() {
                 setLoading(false);
             }
         }
+        return () => {
+            isMounted.current = false;
+        };
     }, [profile?.id, authLoading]);
 
     const fetchReports = async () => {
         if (!profile?.id) {
-            setLoading(false);
+            if (isMounted.current) setLoading(false);
             return;
         }
-        setLoading(true);
-        setError('');
+        if (isMounted.current) {
+            setLoading(true);
+            setError('');
+        }
         try {
             const reportsPromise = supabase
                 .from('laporan')
@@ -103,6 +111,8 @@ export default function RiwayatPage() {
 
             const [reportsRes, posRes] = await Promise.all([reportsPromise, posPromise]);
 
+            if (!isMounted.current) return;
+
             if (reportsRes.error) throw reportsRes.error;
 
             setReports(reportsRes.data || []);
@@ -115,9 +125,13 @@ export default function RiwayatPage() {
                 setPosSalesMap(map);
             }
         } catch (e) {
-            setError('Gagal memuat riwayat: ' + e.message);
+            if (isMounted.current) {
+                setError('Gagal memuat riwayat: ' + e.message);
+            }
         } finally {
-            setLoading(false);
+            if (isMounted.current) {
+                setLoading(false);
+            }
         }
     };
     // 1. Cari tanggal duplikat untuk tipe pelaporan utama
@@ -182,34 +196,42 @@ export default function RiwayatPage() {
             if (startStr <= endStr) {
                 const start = new Date(startStr);
                 const end = new Date(endStr);
-                let cur = new Date(start);
+                if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                    let cur = new Date(start);
+                    let maxLoops = 365;
 
-                while (cur <= end) {
-                    const dateStr = cur.toLocaleDateString('sv-SE');
-                    const hasPrimaryReport = reports.some(r => 
-                        r.tanggal_jual === dateStr &&
-                        ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
-                    );
+                    while (cur <= end && maxLoops > 0) {
+                        maxLoops--;
+                        const yyyy = cur.getFullYear();
+                        const mm = String(cur.getMonth() + 1).padStart(2, '0');
+                        const dd = String(cur.getDate()).padStart(2, '0');
+                        const dateStr = `${yyyy}-${mm}-${dd}`;
 
-                    if (!hasPrimaryReport) {
-                        const cleanSearch = activeFilters.search.toLowerCase();
-                        const matchSearch = !cleanSearch || 'belum dilaporkan'.includes(cleanSearch);
-                        const matchMethode = !activeFilters.methode;
+                        const hasPrimaryReport = reports.some(r => 
+                            r.tanggal_jual === dateStr &&
+                            ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                        );
 
-                        if (matchSearch && matchMethode) {
-                            unreportedList.push({
-                                id: 'unreported_' + dateStr,
-                                tanggal_jual: dateStr,
-                                isUnreported: true,
-                                jenis_pelaporan: 'Belum Dilaporkan',
-                                metode_setoran: '-',
-                                nominal_jual: 0,
-                                potongan: 0,
-                                nominal_setoran: 0
-                            });
+                        if (!hasPrimaryReport) {
+                            const cleanSearch = activeFilters.search.toLowerCase();
+                            const matchSearch = !cleanSearch || 'belum dilaporkan'.includes(cleanSearch);
+                            const matchMethode = !activeFilters.methode;
+
+                            if (matchSearch && matchMethode) {
+                                unreportedList.push({
+                                    id: 'unreported_' + dateStr,
+                                    tanggal_jual: dateStr,
+                                    isUnreported: true,
+                                    jenis_pelaporan: 'Belum Dilaporkan',
+                                    metode_setoran: '-',
+                                    nominal_jual: 0,
+                                    potongan: 0,
+                                    nominal_setoran: 0
+                                });
+                            }
                         }
+                        cur.setDate(cur.getDate() + 1);
                     }
-                    cur.setDate(cur.getDate() + 1);
                 }
             }
         }
