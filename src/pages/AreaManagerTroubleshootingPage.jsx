@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import UserLayout from '../components/UserLayout';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { formatRupiah } from '../lib/validators';
+import { formatRupiah, formatDriveImageUrl } from '../lib/validators';
 
 export default function AreaManagerTroubleshootingPage() {
     const { profile } = useAuth();
@@ -403,7 +403,7 @@ export default function AreaManagerTroubleshootingPage() {
                                             </div>
                                         ) : (
                                             <div className="relative h-48 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
-                                                <img src={detailIssue.bukti_url} alt="Bukti Respon" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                                <img src={formatDriveImageUrl(detailIssue.bukti_url)} alt="Bukti Respon" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                             </div>
                                         )}
                                         <a

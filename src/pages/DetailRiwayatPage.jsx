@@ -191,7 +191,7 @@ export default function DetailRiwayatPage() {
                                             ) : (
                                                 <>
                                                     <img
-                                                        src={url}
+                                                        src={formatDriveImageUrl(url)}
                                                         alt={`Bukti #${index + 1}`}
                                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                                         onError={(e) => {
@@ -199,9 +199,9 @@ export default function DetailRiwayatPage() {
                                                             if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
                                                         }}
                                                     />
-                                                    <div className="hidden absolute inset-0 bg-gray-50 flex-col items-center justify-center text-gray-400">
-                                                        <span className="material-symbols-outlined text-4xl mb-1">description</span>
-                                                        <p className="text-xs font-medium">Lampiran #{index + 1}</p>
+                                                    <div className="hidden absolute inset-0 bg-gray-100 flex-col items-center justify-center text-gray-400">
+                                                        <span className="material-symbols-outlined text-4xl mb-1 text-primary-500">description</span>
+                                                        <p className="text-xs font-bold text-gray-700">Lampiran #{index + 1}</p>
                                                     </div>
                                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white">
                                                         <span className="material-symbols-outlined text-xl">zoom_in</span>
@@ -248,7 +248,7 @@ export default function DetailRiwayatPage() {
                                 </div>
                             </div>
                             <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-gray-900/5 rounded-xl p-2">
-                                <img src={lightboxImg} alt="Detail Pratinjau" className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md" />
+                                <img src={formatDriveImageUrl(lightboxImg)} alt="Detail Pratinjau" className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md" onError={(e) => { e.target.src = lightboxImg; }} />
                             </div>
                         </div>
                     </div>

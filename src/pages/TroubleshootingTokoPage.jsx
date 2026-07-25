@@ -315,7 +315,7 @@ export default function TroubleshootingTokoPage() {
                                                 <div className="p-2 text-center text-xs text-red-600 font-bold bg-white rounded border">Dokumen PDF Terlampir</div>
                                             ) : (
                                                 <div className="h-36 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center border">
-                                                    <img src={buktiUrl} alt="Preview Bukti" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+                                                    <img src={formatDriveImageUrl(buktiUrl)} alt="Preview Bukti" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
                                                 </div>
                                             )}
                                         </div>

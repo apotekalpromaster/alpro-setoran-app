@@ -152,9 +152,22 @@ export default function DetailSetoranPage() {
         setIsSubmitting(true);
 
         try {
-            // Wajib Lampirkan Bukti
-            if (!stagedFiles || stagedFiles.length === 0) {
-                throw new Error('Anda wajib mengunggah minimal 1 file Bukti Setoran/Lampiran sebelum melanjutkan.');
+            // Wajib Lampirkan Bukti Wajib pada Slot 1, 2, dan 3
+            const isSingleProofType = ['Setoran Uang Lebih', 'Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
+
+            if (isSingleProofType) {
+                if (!stagedFiles[0]) {
+                    throw new Error('Anda wajib mengunggah Bukti 1 (Dokumentasi Utama) sebelum melanjutkan.');
+                }
+            } else {
+                const missingSlots = [];
+                if (!stagedFiles[0]) missingSlots.push('Bukti 1 (Kutipan Harian Toko)');
+                if (!stagedFiles[1]) missingSlots.push('Bukti 2 (Settlement EDC)');
+                if (!stagedFiles[2]) missingSlots.push('Bukti 3 (Bukti Setoran Teller/ATM)');
+
+                if (missingSlots.length > 0) {
+                    throw new Error(`Anda belum melengkapi seluruh bukti wajib! Harap unggah: ${missingSlots.join(', ')}.`);
+                }
             }
 
             // Combine form data for validation

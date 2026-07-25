@@ -713,7 +713,7 @@ export default function TroubleshootingFinancePage() {
                                             </div>
                                         ) : (
                                             <div className="relative h-44 bg-gray-100 rounded-xl overflow-hidden border border-blue-200 shadow-sm flex items-center justify-center">
-                                                <img src={reviewIssue.bukti_url} alt="Bukti Respon" className="w-full h-full object-cover" />
+                                                <img src={formatDriveImageUrl(reviewIssue.bukti_url)} alt="Bukti Respon" className="w-full h-full object-cover" />
                                             </div>
                                         )}
                                         <a href={reviewIssue.bukti_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 font-bold bg-white px-3 py-1.5 rounded-lg border border-blue-300 shadow-sm">

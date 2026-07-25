@@ -1,4 +1,21 @@
 /**
+ * Formats a Google Drive URL into a direct thumbnail binary URL for <img> tags.
+ * Converts /file/d/FILE_ID/view -> https://drive.google.com/thumbnail?id=FILE_ID&sz=w1000
+ */
+export function formatDriveImageUrl(url) {
+    if (!url || typeof url !== 'string') return url;
+    const trimmed = url.trim();
+    if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
+
+    const match = trimmed.match(/\/file\/d\/([^\/]+)/) || trimmed.match(/[?&]id=([^&]+)/);
+    if (match && match[1]) {
+        const fileId = match[1];
+        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+    }
+    return trimmed;
+}
+
+/**
  * @file validators.js
  * @description Port presisi dari fungsi validateSetoranData() di FormHandler.gs
  * DISCREPANCY_THRESHOLD dipertahankan dari Constants.gs
@@ -77,7 +94,7 @@ export function validateSetoranData(data) {
         const nominalSetoran = parseRupiah(data.nominalSetoran);
         const potongan = parseRupiah(data.potonganPenjualan);
 
-        if (nominalSetoran <= 0) throw new Error('Nominal setoran harus lebih besar dari 0.');
+        if (nominalSetoran < 0) throw new Error('Nominal setoran tidak boleh negatif.');
         if (potongan < 0) throw new Error('Potongan tidak boleh negatif.');
 
         let totalPenjualan = 0;
