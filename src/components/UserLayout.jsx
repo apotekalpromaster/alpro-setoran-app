@@ -102,7 +102,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                                 onClick={() => {
     setMobileOpen(false);
     if (location.pathname !== item.path) {
-        window.location.href = item.path;
+        navigate(item.path);
     }
 }}
                                 title={item.label}

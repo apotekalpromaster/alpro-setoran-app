@@ -99,7 +99,7 @@ export default function AdminLayout({ children, title, activePath }) {
                                 onClick={() => {
     setMobileOpen(false);
     if (location.pathname !== item.path) {
-        window.location.href = item.path;
+        navigate(item.path);
     }
 }}
                                 title={item.label}
