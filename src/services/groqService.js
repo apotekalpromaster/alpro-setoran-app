@@ -8,17 +8,25 @@ import { supabase } from './supabaseClient';
  */
 export async function sendChatMessages(messages, username = '') {
     try {
+        // Abort controller dengan batas waktu 12 detik agar UI tidak stuck
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
         const { data, error } = await supabase.functions.invoke('groq-ai-service', {
-            body: { action: 'chat_history', messages, username }
+            body: { action: 'chat_history', messages, username },
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
         if (error) throw error;
 
-        // Asumsi Edge function mengembalikan { reply: "teks balasan..." }
-        return data.reply || "Maaf, AI tidak memberikan respon.";
+        return data?.reply || "Maaf, Asisten AI tidak memberikan respon.";
     } catch (error) {
         console.error("Assistant Error:", error);
-        return "Layanan AI sedang sibuk atau terjadi kesalahan jaringan.";
+        if (error.name === 'AbortError') {
+            return "⚠️ Koneksi AI mengalami batas waktu (timeout). Silakan coba kirim ulang pertanyaan Anda.";
+        }
+        return "⚠️ Layanan AI sedang tidak dapat dijangkau atau sedang sibuk. Silakan coba beberapa saat lagi.";
     }
 }
 
@@ -28,12 +36,17 @@ export async function askAssistant(userQuery, username) {
 
 export async function generateAnalyticsSummary(tableData) {
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+
         const { data, error } = await supabase.functions.invoke('groq-ai-service', {
-            body: { action: 'admin_summary', prompt: JSON.stringify(tableData) }
+            body: { action: 'admin_summary', prompt: JSON.stringify(tableData) },
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
         if (error) throw error;
-        return data.reply || "Gagal membuat analisis AI.";
+        return data?.reply || "Gagal membuat analisis AI.";
     } catch (error) {
         console.error("Admin Summary Error:", error);
         return "Gagal mendapatkan analisis AI. Edge function mungkin tidak merespons.";

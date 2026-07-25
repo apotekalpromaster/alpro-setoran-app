@@ -14,8 +14,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL_ADMIN = 'llama-3.3-70b-versatile';
-const MODEL_CHAT = 'llama-3.3-70b-versatile';
-const TIMEOUT_MS = 30_000;
+const MODEL_CHAT = 'llama-3.1-8b-instant';
+const TIMEOUT_MS = 12_000;
 
 const CORS = {
     'Access-Control-Allow-Origin': '*',
