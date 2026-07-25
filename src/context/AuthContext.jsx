@@ -8,9 +8,12 @@ export function AuthProvider({ children }) {
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    const fetchProfile = async (userId) => {
+    const fetchProfile = async (userId, isInitial = false) => {
         try {
-            setLoading(true);
+            // Set global loading to true ONLY if initial boot or profile is not available yet
+            if (isInitial || !profile) {
+                setLoading(true);
+            }
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
@@ -22,7 +25,9 @@ export function AuthProvider({ children }) {
             return data;
         } catch (error) {
             console.error('Error fetching profile:', error.message);
-            setProfile(null);
+            if (isInitial || !profile) {
+                setProfile(null);
+            }
             return null;
         } finally {
             setLoading(false);
@@ -36,18 +41,20 @@ export function AuthProvider({ children }) {
             if (!isMounted) return;
             setUser(session?.user ?? null);
             if (session?.user) {
-                fetchProfile(session.user.id);
+                fetchProfile(session.user.id, true);
             } else {
                 setProfile(null);
                 setLoading(false);
             }
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!isMounted) return;
             setUser(session?.user ?? null);
             if (session?.user) {
-                await fetchProfile(session.user.id);
+                // Background refresh token / tab focus: silent update without toggling global loading
+                const isInitial = event === 'INITIAL_SESSION' || event === 'SIGNED_IN';
+                await fetchProfile(session.user.id, isInitial);
             } else {
                 setProfile(null);
                 setLoading(false);
@@ -64,7 +71,7 @@ export function AuthProvider({ children }) {
         setLoading(true);
         const res = await supabase.auth.signInWithPassword({ email, password });
         if (res.data?.user) {
-            await fetchProfile(res.data.user.id);
+            await fetchProfile(res.data.user.id, true);
         } else {
             setLoading(false);
         }
