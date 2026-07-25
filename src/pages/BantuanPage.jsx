@@ -2,335 +2,534 @@ import React, { useState } from 'react';
 import UserLayout from '../components/UserLayout';
 
 /* ==========================================================================
-   Comprehensive FAQ & User Manual Data organized by Role & Module
+   EXHAUSTIVE USER MANUAL DATA (COMPREHENSIVE MULTI-ROLE GUIDE V2.0)
    ========================================================================== */
-const FAQ_CATEGORIES = [
+
+const PANDUAN_JENIS_PELAPORAN = [
     {
-        id: 'role-toko-laporan',
-        role: 'user',
+        nama: 'Normal (Harian)',
+        badge: 'bg-green-100 text-green-800 border-green-200',
+        deskripsi: 'Setoran tunai / transfer harian rutin sesuai 100% dengan total penjualan kasir tanpa selisih.',
+        instruksi: 'Masukkan nominal penjualan, upload struk ATM/transfer, lalu kirim.',
+    },
+    {
+        nama: 'Setoran 3x Seminggu',
+        badge: 'bg-blue-100 text-blue-800 border-blue-200',
+        deskripsi: 'Pelaporan setoran khusus bagi outlet yang memiliki jadwal setoran 3 kali dalam seminggu.',
+        instruksi: 'Pastikan tanggal penjualan yang disetorkan sesuai dengan jadwal periode yang ditentukan.',
+    },
+    {
+        nama: 'Setoran Uang Kurang',
+        badge: 'bg-amber-100 text-amber-800 border-amber-200',
+        deskripsi: 'Terdapat selisih minus antara nominal penjualan kasir dengan nominal setoran aktual.',
+        instruksi: 'Isi nominal penjualan asli dan nominal setoran aktual. Sistem akan menghitung selisih otomatis. Tuliskan penyebab selisih di kolom keterangan.',
+    },
+    {
+        nama: 'Setoran Uang Lebih',
+        badge: 'bg-purple-100 text-purple-800 border-purple-200',
+        deskripsi: 'Terdapat selisih surplus di mana nominal fisik yang disetor lebih besar dari penjualan kasir.',
+        instruksi: 'Masukkan nominal penjualan dan nominal setoran aktual. Tuliskan sumber kelebihan dana pada catatan.',
+    },
+    {
+        nama: 'Deposit Card Terblokir (Salah PIN 3x)',
+        badge: 'bg-red-100 text-red-800 border-red-200',
+        deskripsi: 'Kartu Deposit ATM terblokir akibat salah memasukkan PIN sebanyak 3 kali berturut-turut.',
+        instruksi: 'Penting! Masukkan nomor kartu dan KCP bank terdekat. Sistem akan otomatis mengirimkan Email Notifikasi Darurat ke tim Finance secara instant.',
+    },
+    {
+        nama: 'Deposit Card Tertelan Mesin ATM',
+        badge: 'bg-rose-100 text-rose-800 border-rose-200',
+        deskripsi: 'Kartu Deposit tertelan di dalam mesin ATM bank saat hendak melakukan transaksi setoran.',
+        instruksi: 'Isi nomor mesin ATM, lokasi KCP, dan nomor pengaduan bank. Notifikasi darurat akan langsung terkirim ke Finance.',
+    },
+    {
+        nama: 'Mesin ATM Rusak / Out of Service',
+        badge: 'bg-orange-100 text-orange-800 border-orange-200',
+        deskripsi: 'Mesin ATM di lokasi/KCP terdekat mengalami kerusakan atau mati listrik sehingga setoran tertunda.',
+        instruksi: 'Pilih jenis ini dan berikan keterangan lokasi ATM yang rusak serta estimasi waktu setoran susulan.',
+    },
+    {
+        nama: 'Setoran Gabungan (2 Hari / Libur)',
+        badge: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        deskripsi: 'Setoran akumulasi dana penjualan untuk 2 hari berturut-turut (misalnya akibat hari libur nasional).',
+        instruksi: 'Gunakan fitur Multi-Tanggal (+ Tambah Tanggal) agar setiap hari penjualan memiliki rincian tersendiri.',
+    },
+    {
+        nama: 'Pencairan QRIS / EDC Belum Masuk Rekening',
+        badge: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+        deskripsi: 'Transaksi non-tunai (QRIS/EDC) tercatat di POS tetapi dana settlement belum masuk mutasi bank.',
+        instruksi: 'Lampirkan rekap settlement EDC/QRIS dan beri catatan nama penyedia layanan (MDR/Bank).',
+    },
+    {
+        nama: 'Lain-lain (Kasus Khusus)',
+        badge: 'bg-gray-100 text-gray-800 border-gray-200',
+        deskripsi: 'Pelaporan kendala spesifik lainnya yang tidak tercakup pada kategori di atas.',
+        instruksi: 'Wajib memberikan penjelasan kronologi yang lengkap dan melampirkan dokumen pendukung.',
+    },
+];
+const PANDUAN_ROLE_TOKO = [
+    {
+        modul: 'Formulir Pelaporan Setoran Harian (3-Step Form)',
         icon: 'edit_note',
-        color: 'text-blue-600',
-        bg: 'bg-blue-50',
-        title: '🛒 Toko (User) - Pengisian Laporan Setoran',
-        items: [
-            {
-                q: 'Bagaimana alur lengkap pengisian laporan setoran harian toko?',
-                a: 'Pengisian laporan setoran dilakukan dalam 3 langkah intuitif:\n1. **Step 1: Pilih Tanggal & Jenis Pelaporan** - Tentukan jenis pelaporan (Setoran Normal, Selisih Kurang, dsb.), tanggal penjualan, dan metode setoran (Bank, Setor Tunai ATM, dsb.).\n2. **Step 2: Isi Nominal & Upload Bukti** - Masukkan nominal penjualan kasir, potongan (jika ada), nominal setoran aktual, dan unggah foto struk ATM/transfer.\n3. **Step 3: Ringkasan & Submit** - Periksa ulang rincian kalkulasi setoran lalu tekan **Kirim Laporan**.',
-            },
-            {
-                q: 'Apakah bisa mengisi laporan untuk beberapa tanggal penjualan sekaligus (Multi-Tanggal)?',
-                a: 'Bisa! Pada **Step 1**, Anda dapat menekan tombol **"+ Tambah Tanggal Penjualan"** untuk menyisipkan tanggal penjualan lain. Sistem akan otomatis memisahkan baris laporan per tanggal penjualan sehingga Anda tidak perlu keluar-masuk formulir.',
-            },
-            {
-                q: 'Ketentuan file bukti setoran foto apa saja yang didukung?',
-                a: 'Foto bukti setoran harus jelas, tidak buram, dan menampilkan nomor referensi/nominal secara utuh.\n- **Ukuran Maksimal**: 10 MB per file.\n- **Format**: JPG, PNG, atau HEIC.\n- **Tips**: Pastikan pencahayaan cukup dan foto tegak lurus.',
-            },
-            {
-                q: 'Bagaimana jika ada selisih kurang atau lebih pada setoran?',
-                a: 'Pilih jenis pelaporan **"Setoran Uang Kurang"** atau **"Setoran Uang Lebih"**. Masukkan nominal penjualan sesungguhnya dan nominal yang berhasil disetor. Jelaskan kronologi selisih di kolom keterangan agar tim Finance dan Area Manager dapat melakukan audit.',
-            },
+        penjelasan: 'Menu utama bagi kasir/staf toko untuk menginput data penjualan dan bukti setoran harian.',
+        langkah: [
+            'Langkah 1 (Tanggal & Jenis): Buka menu "Buat Laporan". Pilih Jenis Pelaporan yang sesuai dari 10 pilihan, pilih Tanggal Penjualan, dan tentukan Metode Setoran (Bank/ATM). Jika melaporkan > 1 hari, klik "+ Tambah Tanggal Penjualan".',
+            'Langkah 2 (Nominal & Bukti Foto): Masukkan Total Penjualan Kasir, Potongan Admin (jika ada), dan Nominal Setoran. Unggah bukti foto struk ATM/transfer (max 10 MB, format JPG/PNG/HEIC).',
+            'Langkah 3 (Verifikasi & Kirim): Periksa ringkasan kalkulasi otomatis dari sistem. Jika sudah tepat, tekan tombol "Kirim Laporan".',
         ],
+        tips: 'Nominal setoran akan dihitung secara otomatis oleh sistem (Penjualan - Potongan). Selalu pastikan foto struk tidak buram.',
     },
     {
-        id: 'role-toko-anomali-koreksi',
-        role: 'user',
-        icon: 'warning',
-        color: 'text-amber-600',
-        bg: 'bg-amber-50',
-        title: '🛒 Toko (User) - Anomali, Darurat & Koreksi Laporan',
-        items: [
-            {
-                q: 'Apa yang harus dilakukan jika Deposit Card Terblokir atau Tertelan ATM?',
-                a: 'Segera pilih Jenis Pelaporan Khusus:\n- **Deposit Card Terblokir (PIN Salah 3x)**: Isi nomor kartu & KCP terdekat. Sistem akan **otomatis mengirimkan email darurat** ke tim Finance untuk proses reset.\n- **Deposit Card Tertelan Mesin ATM**: Isi nomor mesin ATM dan lokasi kejadian. Notifikasi darurat akan langsung terkirim ke Finance.',
-            },
-            {
-                q: 'Bagaimana cara mengajukan Koreksi Laporan jika ada salah input?',
-                a: 'Jika laporan yang sudah terkirim memiliki kesalahan angka atau bukti foto:\n1. Buka menu **Koreksi Laporan** di sidebar.\n2. Cari tanggal laporan yang ingin dikoreksi lalu tekan **"Ajukan Koreksi"**.\n3. Masukkan nominal/bukti foto perbaikan beserta alasan koreksi.\n4. Pengajuan Anda akan masuk ke antrean **Persetujuan Area Manager (AM)**.',
-            },
-            {
-                q: 'Bagaimana menanggapi Isu Troubleshooting Bank dari Tim Finance?',
-                a: 'Jika tim Finance menemukan ketidakcocokan setoran bank di toko Anda:\n1. Anda akan menerima notifikasi lonceng & badge di menu **Troubleshooting Bank**.\n2. Buka menu **Troubleshooting Bank**, klik **"Tanggapi Isu"** pada baris laporan.\n3. Tuliskan penjelasan/klarifikasi toko dan lampirkan bukti foto tambahan (jika ada).\n4. Setelah dikirim, status akan berubah dan Finance akan memverifikasi ulang.',
-            },
+        modul: 'Riwayat Laporan Setoran',
+        icon: 'history',
+        penjelasan: 'Tempat memantau status seluruh laporan setoran yang pernah dikirimkan oleh toko Anda.',
+        langkah: [
+            'Filter Rentang Tanggal: Gunakan pemilih tanggal untuk mencari laporan periode lalu.',
+            'Status Pelaporan: Perhatikan badge warna status (Hijau = Verifikasi Matched, Oranye = Pending Review, Merah = Anomali/Selisih).',
+            'Detail & Unduh: Klik ikon mata untuk melihat rincian formulir atau mengunduh ulang bukti foto struk.',
         ],
+        tips: 'Gunakan fitur pencarian untuk menemukan laporan spesifik berdasarkan nomor transaksi atau tanggal.',
     },
     {
-        id: 'role-am-monitoring',
-        role: 'areamanager',
-        icon: 'dashboard',
-        color: 'text-indigo-600',
-        bg: 'bg-indigo-50',
-        title: '👔 Area Manager - Monitoring & Dashboard Area',
-        items: [
-            {
-                q: 'Fitur apa saja yang tersedia di Dashboard Area Manager?',
-                a: 'Dashboard AM memberikan visibilitas penuh terhadap toko binaan di wilayahnya:\n- **Ringkasan Outlet**: Total jumlah outlet, persentase kepatuhan setoran, dan total nominal setoran.\n- **Filter Jenis Pelaporan**: Memfilter laporan Normal, Selisih, hingga toko yang **"Belum Dilaporkan"**.\n- **Filter Kasus Khusus**: Menampilkan toko dengan kasus terblokir, tertelan, atau selisih audit.',
-            },
-            {
-                q: 'Bagaimana cara memproses Persetujuan Koreksi Laporan (Approval)?',
-                a: '1. Buka menu **Persetujuan Koreksi** di sidebar.\n2. Tinjau rincian angka awal toko vs angka koreksi yang diajukan serta alasannya.\n3. Tekan **"Setujui (Approve)"** jika sesuai, atau **"Tolak (Reject)"** dengan memberikan catatan revisi.\n4. Toko dan Finance akan menerima notifikasi otomatis atas keputusan Anda.',
-            },
-            {
-                q: 'Bagaimana cara kerja monitoring Troubleshooting Bank di role Area Manager?',
-                a: '1. Buka menu **Troubleshooting Bank** di sidebar AM.\n2. Anda dapat melihat seluruh isu perbankan outlet binaan beserta statusnya (*Need Info*, *In Progress*, *Resolved*).\n3. Gunakan tombol **"Ingatkan Toko via WA"** untuk mengirim pesan pengingat otomatis ke toko yang belum merespon isu dari Finance.',
-            },
+        modul: 'Pengajuan Koreksi Laporan',
+        icon: 'edit_document',
+        penjelasan: 'Fasilitas resmi untuk mengajukan perbaikan angka atau bukti foto pada laporan yang sudah terkirim.',
+        langkah: [
+            'Langkah 1: Masuk ke menu "Koreksi Laporan" di sidebar.',
+            'Langkah 2: Pilih laporan yang hendak dikoreksi, lalu klik "Ajukan Koreksi".',
+            'Langkah 3: Masukkan nominal perbaikan, unggah bukti foto baru (jika ada), dan tuliskan alasan koreksi secara rinci.',
+            'Langkah 4: Pantau status pengajuan. Koreksi akan diproses oleh Area Manager (AM) terlebih dahulu sebelum diteruskan ke Finance.',
         ],
+        tips: 'Anda akan menerima notifikasi lonceng saat pengajuan koreksi Anda disetujui atau ditolak oleh Area Manager.',
     },
     {
-        id: 'role-admin-finance',
-        role: 'admin',
-        icon: 'account_balance_wallet',
-        color: 'text-emerald-600',
-        bg: 'bg-emerald-50',
-        title: '💳 Admin / Finance - Rekap, POS Sync & Audit Bank',
-        items: [
-            {
-                q: 'Bagaimana alur kerja Rekap Setoran & Auto-Sync Sales POS Xilnex?',
-                a: 'Sistem secara otomatis mengsinkronkan data penjualan POS Xilnex dari Google Drive setiap harinya via Edge Function (`sync-pos-sales-from-drive`). Tim Finance dapat membandingkan data penjualan POS dengan setoran aktual toko di menu **Rekap Setoran**.',
-            },
-            {
-                q: 'Bagaimana cara membuat Isu Troubleshooting Bank baru untuk toko?',
-                a: '1. Buka menu **Troubleshooting Bank** (Admin Finance).\n2. Klik **"+ Buat Isu Baru"**.\n3. Pilih toko, tanggal penjualan, nama bank, nominal dispute, dan deskripsi kendala.\n4. Setelah disimpan, sistem otomatis mengirim notifikasi lonceng ke Toko dan Area Manager terkait.',
-            },
-            {
-                q: 'Bagaimana mengelola status isu Troubleshooting Bank hingga selesai?',
-                a: 'Finance dapat mengupdate status isu:\n- **Need Info**: Menunggu tindakan/bukti foto dari toko.\n- **In Progress**: Sedang dalam pengurusan dengan pihak bank.\n- **Resolved**: Kendala tuntas diselesaikan. Finance dapat memberikan catatan penjelasan final.',
-            },
-            {
-                q: 'Bagaimana alur pemrosesan final Koreksi Laporan di sisi Finance?',
-                a: 'Setelah pengajuan koreksi disetujui oleh Area Manager, data koreksi akan masuk ke antrean Finance untuk penyesuaian saldo/rekapitulasi akhir.',
-            },
+        modul: 'Troubleshooting Bank Toko',
+        icon: 'troubleshoot',
+        penjelasan: 'Pusat penanganan isu dispute perbankan / selisih audit bank yang diterbitkan oleh Tim Finance.',
+        langkah: [
+            'Langkah 1: Jika ada kendala bank pada toko Anda, angka indikator lonceng & badge sidebar menu ini akan menyala.',
+            'Langkah 2: Buka menu "Troubleshooting Bank", cari isu yang berstatus "Need Info" atau "Pending".',
+            'Langkah 3: Klik tombol "Tanggapi Isu" / "Detail". Tuliskan klarifikasi toko pada kolom Respon Cabang dan unggah foto bukti pendukung.',
+            'Langkah 4: Klik "Kirim Respon". Status akan otomatis ter-update dan Tim Finance & AM akan menerima notifikasi.',
         ],
-    },
-    {
-        id: 'fitur-notifikasi-ai',
-        role: 'all',
-        icon: 'notifications_active',
-        color: 'text-purple-600',
-        bg: 'bg-purple-50',
-        title: '🔔 Pusat Notifikasi & Asisten AI (Alpro Assistant)',
-        items: [
-            {
-                q: 'Bagaimana cara kerja Pusat Notifikasi (Header Lonceng & Sidebar Badge)?',
-                a: 'Sistem dilengkapi notifikasi real-time via Supabase Channel:\n- **Lonceng Header**: Menampilkan popover daftar notifikasi terbaru (koreksi disetujui/ditolak, isu bank baru, respon toko).\n- **Badge Sidebar**: Menampilkan jumlah angka bulatan oranye (*unread counter*) pada menu spesifik jika ada item yang membutuhkan perhatian Anda.',
-            },
-            {
-                q: 'Apa itu Alpro Assistant dan pertanyaan apa saja yang bisa dijawab?',
-                a: 'Alpro Assistant adalah AI berbasis Groq Llama-3 di sudut kanan bawah Beranda yang siap membantu 24/7 menjawab pertanyaan SOP setoran, penanganan kartu terblokir, hingga alur pelaporan.',
-            },
-        ],
-    },
-    {
-        id: 'pengaturan-keamanan',
-        role: 'all',
-        icon: 'settings',
-        color: 'text-slate-600',
-        bg: 'bg-slate-100',
-        title: '⚙️ Pengaturan Akun & Keamanan',
-        items: [
-            {
-                q: 'Bagaimana cara memperbarui kata sandi atau profil Deposit Card?',
-                a: 'Buka menu **Pengaturan** di sidebar:\n- **Keamanan**: Masukkan password lama dan password baru (minimal 8 karakter).\n- **Profil Deposit Card**: Perbarui nomor deposit card atau KCP terdekat agar tersimpan sebagai nilai default di formulir berikutnya.',
-            },
-        ],
+        tips: 'Segera tanggapi isu bank agar proses rekonsiliasi keuangan cabang Anda tidak tertunda.',
     },
 ];
 
-/* Accordion Component */
-function AccordionItem({ item, isOpen, onToggle }) {
+const PANDUAN_ROLE_AM = [
+    {
+        modul: 'Dashboard Area Manager (Monitoring Wilayah)',
+        icon: 'dashboard',
+        penjelasan: 'Pusat kendali bagi Area Manager untuk memantau kepatuhan setoran seluruh toko binaannya secara real-time.',
+        langkah: [
+            'Kartu KPI Utama: Memantau Total Jumlah Outlet Binaan, Persentase Outlet Patuh Setor, dan Total Nominal Setoran Wilayah.',
+            'Filter Jenis Pelaporan: Memfilter tampilan tabel berdasarkan jenis laporan, termasuk pilihan khusus "Belum Dilaporkan" untuk mendeteksi toko yang terlambat mengisi setoran.',
+            'Filter Kasus Khusus (Audit): Menyaring toko dengan kendala Terblokir, Tertelan, Uang Kurang, atau Mesin ATM Rusak.',
+            'Detail Outlet: Klik nama toko untuk melihat rincian historis laporan setoran cabang tersebut.',
+        ],
+        tips: 'Gunakan filter "Belum Dilaporkan" pada pukul 10:00 WIB setiap pagi untuk langsung menindaklanjuti toko yang belum menyetorkan laporan.',
+    },
+    {
+        modul: 'Persetujuan Koreksi Laporan (Approval)',
+        icon: 'task_alt',
+        penjelasan: 'Halaman khusus untuk mengevaluasi dan menyetujui/menolak pengajuan koreksi laporan dari toko binaan.',
+        langkah: [
+            'Langkah 1: Buka menu "Persetujuan Koreksi". Antrean pengajuan yang membutuhkan persetujuan Anda akan tampil di atas.',
+            'Langkah 2: Bandingkan data awal laporan vs data koreksi yang diajukan toko, serta baca alasan koreksinya.',
+            'Langkah 3: Klik "Setujui (Approve)" untuk mengesahkan koreksi, atau "Tolak (Reject)" jika koreksi tidak valid.',
+            'Langkah 4: Tuliskan catatan persetujuan/penolakan agar toko memahami alasan keputusan Anda.',
+        ],
+        tips: 'Koreksi yang Anda setujui akan otomatis diteruskan ke sistem Finance untuk penyesuaian rekapitulasi akhir.',
+    },
+    {
+        modul: 'Troubleshooting Bank Area Manager',
+        icon: 'troubleshoot',
+        penjelasan: 'Menu pemantauan seluruh isu dispute perbankan pada toko-toko binaan di wilayah Area Manager.',
+        langkah: [
+            'Stat Cards Wilayah: Melihat ringkasan total isu di area, berapa yang butuh respon toko, diproses finance, dan selesai.',
+            'Filter Cabang & Status: Memfilter isu berdasarkan cabang binaan tertentu atau status kendala.',
+            'Fitur Ingatkan via WA: Klik tombol "Ingatkan Toko via WA" pada baris toko yang belum merespon. Sistem akan otomatis menyalin pesan pengingat standar dan membuka aplikasi WhatsApp.',
+            'Modal Detail: Klik "Detail" untuk melihat klarifikasi toko, bukti foto terlampir, dan catatan dari tim Finance.',
+        ],
+        tips: 'Gunakan fitur pengingat WA untuk mempercepat komunikasi dua arah antara toko binaan dan tim Finance.',
+    },
+];
+const PANDUAN_ROLE_FINANCE = [
+    {
+        modul: 'Dashboard Admin & Rekap Setoran',
+        icon: 'admin_panel_settings',
+        penjelasan: 'Dashboard konsolidasi nasional untuk memantau rekapitulasi setoran dari seluruh cabang di Indonesia.',
+        langkah: [
+            'Matching POS Auto-Sync: Membandingkan data setoran toko dengan data penjualan POS Xilnex yang disinkronkan otomatis dari Google Drive setiap harinya.',
+            'Export Excel: Mengunduh rekapitulasi data setoran seluruh toko ke format spreadsheet untuk keperluan audit.',
+            'Verifikasi Laporan: Memverifikasi dan menandai laporan toko yang telah cocok dengan mutasi rekening bank perusahaan.',
+        ],
+        tips: 'Edge function `sync-pos-sales-from-drive` berjalan secara otomatis untuk menyinkronkan berkas POS Xilnex dari folder Google Drive.',
+    },
+    {
+        modul: 'Manajemen Troubleshooting Bank (Finance)',
+        icon: 'account_balance',
+        penjelasan: 'Fasilitas bagi Tim Finance untuk menerbitkan dan mengelola isu selisih / dispute perbankan cabang.',
+        langkah: [
+            'Langkah 1 (Buat Isu Baru): Klik "+ Buat Isu Baru". Pilih Toko, Tanggal Penjualan, Nama Bank, Nominal Dispute, dan jelaskan deskripsi kendala.',
+            'Langkah 2 (Notifikasi Automatis): Begitu disimpan, sistem otomatis menembakkan notifikasi lonceng ke Toko dan Area Manager terkait.',
+            'Langkah 3 (Update Status): Setelah toko mengirimkan respon & bukti foto, Finance dapat memperbarui status menjadi "In Progress" atau "Resolved" serta memberikan Catatan Admin.',
+        ],
+        tips: 'Status "Resolved" menandakan bahwa isu audit perbankan tersebut telah tuntas diselesaikan.',
+    },
+];
+
+/* Component for Accordion Items */
+function AccordionGuideItem({ title, icon, penjelasan, langkah, tips, isOpen, onToggle }) {
     return (
-        <div className="border border-gray-200 rounded-xl overflow-hidden transition-all duration-150">
+        <div className="border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm transition-all">
             <button
                 onClick={onToggle}
-                className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white hover:bg-gray-50 transition-colors cursor-pointer"
+                className="w-full flex items-center justify-between gap-4 px-6 py-4 text-left bg-white hover:bg-gray-50 transition-colors cursor-pointer"
             >
-                <span className="font-bold text-gray-800 text-sm leading-snug">{item.q}</span>
+                <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center flex-shrink-0 font-bold">
+                        <span className="material-symbols-outlined text-xl">{icon}</span>
+                    </div>
+                    <span className="font-extrabold text-gray-900 text-sm md:text-base">{title}</span>
+                </div>
                 <span className={`material-symbols-outlined text-gray-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-primary-600' : ''}`}>
                     expand_more
                 </span>
             </button>
 
             {isOpen && (
-                <div className="px-5 pb-5 bg-white border-t border-gray-100">
-                    <div className="pt-3 text-xs md:text-sm text-gray-600 leading-relaxed space-y-2">
-                        {item.a.split('\n').map((line, i) => {
-                            if (!line.trim()) return null;
-                            const parts = line.split(/(\*\*[^*]+\*\*)/g).map((p, j) =>
-                                p.startsWith('**') && p.endsWith('**')
-                                    ? <strong key={j} className="text-gray-900 font-bold">{p.slice(2, -2)}</strong>
-                                    : p
-                            );
-                            const isList = line.match(/^\d+\./);
-                            return isList
-                                ? <p key={i} className="ml-3 font-medium text-gray-700">{parts}</p>
-                                : <p key={i}>{parts}</p>;
-                        })}
-                    </div>
+                <div className="px-6 pb-6 pt-2 bg-white border-t border-gray-100 space-y-4">
+                    <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-medium">
+                        {penjelasan}
+                    </p>
+
+                    {langkah && langkah.length > 0 && (
+                        <div className="space-y-2 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                            <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-sm text-primary-600">format_list_numbered</span>
+                                Langkah-Langkah Penggunaan:
+                            </h4>
+                            <ul className="space-y-2 text-xs md:text-sm text-gray-700">
+                                {langkah.map((l, idx) => (
+                                    <li key={idx} className="flex items-start gap-2 leading-relaxed">
+                                        <span className="h-5 w-5 rounded-full bg-primary-100 text-primary-700 font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">
+                                            {idx + 1}
+                                        </span>
+                                        <span>{l}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {tips && (
+                        <div className="flex items-start gap-2.5 bg-amber-50/80 border border-amber-200/80 p-3.5 rounded-xl text-amber-900 text-xs md:text-sm">
+                            <span className="material-symbols-outlined text-amber-600 text-lg flex-shrink-0">lightbulb</span>
+                            <div>
+                                <strong className="font-bold">Tips Operasional: </strong>
+                                <span>{tips}</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
     );
 }
-
-/* Category Section */
-function FaqCategory({ category }) {
-    const [openIdx, setOpenIdx] = useState(null);
-    const toggle = (i) => setOpenIdx(prev => prev === i ? null : i);
-
-    return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className={`px-6 py-4 border-b border-gray-100 flex items-center gap-3 ${category.bg}`}>
-                <span className={`material-symbols-outlined text-2xl ${category.color}`}>{category.icon}</span>
-                <h2 className="text-base font-extrabold text-gray-900">{category.title}</h2>
-            </div>
-
-            <div className="p-4 space-y-2.5">
-                {category.items.map((item, i) => (
-                    <AccordionItem
-                        key={i}
-                        item={item}
-                        isOpen={openIdx === i}
-                        onToggle={() => toggle(i)}
-                    />
-                ))}
-            </div>
-        </div>
-    );
-}
-
 export default function BantuanPage() {
-    const [search, setSearch] = useState('');
-    const [activeRoleTab, setActiveRoleTab] = useState('all');
+    const [activeTab, setActiveTab] = useState('jenis-pelaporan');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [openIdx, setOpenIdx] = useState(0);
 
-    // Filter by role tab and search text
-    const filteredCats = FAQ_CATEGORIES
-        .filter(cat => {
-            if (activeRoleTab === 'all') return true;
-            return cat.role === activeRoleTab || cat.role === 'all';
-        })
-        .map(cat => ({
-            ...cat,
-            items: cat.items.filter(item =>
-                !search.trim() ||
-                item.q.toLowerCase().includes(search.toLowerCase()) ||
-                item.a.toLowerCase().includes(search.toLowerCase())
-            ),
-        }))
-        .filter(cat => cat.items.length > 0);
+    const toggleAccordion = (idx) => {
+        setOpenIdx(prev => prev === idx ? null : idx);
+    };
 
     return (
-        <UserLayout title="Panduan Pengguna" activeRoute="/bantuan">
-            <div className="max-w-4xl mx-auto space-y-6">
+        <UserLayout title="Panduan Pengguna Komprehensif" activeRoute="/bantuan">
+            <div className="max-w-5xl mx-auto space-y-6">
 
                 {/* Hero Header */}
                 <div className="relative bg-gradient-to-r from-primary-600 via-orange-600 to-indigo-700 rounded-2xl p-6 md:p-8 text-white overflow-hidden shadow-lg">
-                    <div className="absolute -top-6 -right-6 w-36 h-36 bg-white/10 rounded-full blur-xl" />
-                    <div className="absolute bottom-0 left-1/2 w-48 h-48 bg-black/10 rounded-full blur-lg" />
-                    <div className="relative z-10">
-                        <div className="flex items-center gap-3 mb-2">
-                            <span className="material-symbols-outlined text-3xl md:text-4xl">menu_book</span>
-                            <h1 className="text-2xl md:text-3xl font-black">Pusat Panduan & Dokumentasi</h1>
+                    <div className="absolute -top-10 -right-10 w-44 h-44 bg-white/10 rounded-full blur-xl" />
+                    <div className="relative z-10 space-y-2">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-bold text-white border border-white/20">
+                            <span className="material-symbols-outlined text-sm">verified</span> Version 2.0 Updated
                         </div>
-                        <p className="text-xs md:text-sm text-white/90 max-w-xl leading-relaxed">
-                            Panduan operasional lengkap untuk role **Toko (User)**, **Area Manager (AM)**, dan **Admin Finance**.
+                        <h1 className="text-2xl md:text-3xl font-black">Pusat Panduan & SOP Operasional</h1>
+                        <p className="text-xs md:text-sm text-white/90 max-w-2xl leading-relaxed">
+                            Buku petunjuk komprehensif pelaporan setoran harian, penanganan kasus khusus, persetujuan koreksi, dan audit perbankan untuk seluruh peran pengguna.
                         </p>
                     </div>
                 </div>
 
-                {/* Role Tabs & Search */}
-                <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm space-y-4">
-                    {/* Role Filter Buttons */}
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            onClick={() => setActiveRoleTab('all')}
-                            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                                activeRoleTab === 'all'
-                                    ? 'bg-gray-900 text-white shadow-sm'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">apps</span> Semua Panduan
-                        </button>
-                        <button
-                            onClick={() => setActiveRoleTab('user')}
-                            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                                activeRoleTab === 'user'
-                                    ? 'bg-blue-600 text-white shadow-sm'
-                                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">storefront</span> Toko (User)
-                        </button>
-                        <button
-                            onClick={() => setActiveRoleTab('areamanager')}
-                            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                                activeRoleTab === 'areamanager'
-                                    ? 'bg-indigo-600 text-white shadow-sm'
-                                    : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">badge</span> Area Manager
-                        </button>
-                        <button
-                            onClick={() => setActiveRoleTab('admin')}
-                            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                                activeRoleTab === 'admin'
-                                    ? 'bg-emerald-600 text-white shadow-sm'
-                                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                            }`}
-                        >
-                            <span className="material-symbols-outlined text-sm">account_balance</span> Admin Finance
-                        </button>
-                    </div>
+                {/* Main Tab Navigation */}
+                <div className="bg-white rounded-2xl p-3 border border-gray-200 shadow-sm flex flex-wrap gap-2">
+                    <button
+                        onClick={() => { setActiveTab('jenis-pelaporan'); setOpenIdx(null); }}
+                        className={`px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                            activeTab === 'jenis-pelaporan'
+                                ? 'bg-primary-600 text-white shadow-md'
+                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                        <span className="material-symbols-outlined text-base">category</span> 10 Jenis Pelaporan
+                    </button>
 
-                    {/* Search Bar */}
-                    <div className="relative">
-                        <span className="absolute inset-y-0 left-3.5 flex items-center pointer-events-none">
-                            <span className="material-symbols-outlined text-gray-400">search</span>
-                        </span>
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Cari panduan, kata kunci, atau fitur..."
-                            className="form-input pl-11 py-2.5 text-xs md:text-sm w-full bg-gray-50 border-gray-200"
-                        />
-                        {search && (
-                            <button onClick={() => setSearch('')} className="absolute inset-y-0 right-3.5 flex items-center text-gray-400 hover:text-gray-600">
-                                <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                        )}
-                    </div>
+                    <button
+                        onClick={() => { setActiveTab('toko'); setOpenIdx(0); }}
+                        className={`px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                            activeTab === 'toko'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                        <span className="material-symbols-outlined text-base">storefront</span> Role Toko (User)
+                    </button>
+
+                    <button
+                        onClick={() => { setActiveTab('am'); setOpenIdx(0); }}
+                        className={`px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                            activeTab === 'am'
+                                ? 'bg-indigo-600 text-white shadow-md'
+                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                        <span className="material-symbols-outlined text-base">badge</span> Role Area Manager
+                    </button>
+
+                    <button
+                        onClick={() => { setActiveTab('finance'); setOpenIdx(0); }}
+                        className={`px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                            activeTab === 'finance'
+                                ? 'bg-emerald-600 text-white shadow-md'
+                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                        <span className="material-symbols-outlined text-base">account_balance</span> Role Admin Finance
+                    </button>
+
+                    <button
+                        onClick={() => { setActiveTab('notifikasi'); setOpenIdx(null); }}
+                        className={`px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                            activeTab === 'notifikasi'
+                                ? 'bg-purple-600 text-white shadow-md'
+                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                        <span className="material-symbols-outlined text-base">notifications_active</span> Notifikasi & AI
+                    </button>
                 </div>
 
-                {/* FAQ Categories Grid */}
-                {filteredCats.length > 0 ? (
+                {/* Search Bar */}
+                <div className="relative">
+                    <span className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                        <span className="material-symbols-outlined text-gray-400">search</span>
+                    </span>
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Cari kata kunci panduan (misal: 'terblokir', 'koreksi', 'multi-tanggal', 'selisih')..."
+                        className="form-input pl-12 py-3 text-xs md:text-sm w-full bg-white border-gray-200 rounded-2xl shadow-sm"
+                    />
+                    {searchTerm && (
+                        <button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-gray-600">
+                            <span className="material-symbols-outlined text-sm">close</span>
+                        </button>
+                    )}
+                </div>
+
+                {/* CONTENT AREA BASED ON TAB */}
+
+                {/* TAB 1: 10 JENIS PELAPORAN */}
+                {activeTab === 'jenis-pelaporan' && (
                     <div className="space-y-4">
-                        {filteredCats.map(cat => (
-                            <FaqCategory key={cat.id} category={cat} />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="bg-white rounded-2xl p-12 text-center border border-gray-200 text-gray-500">
-                        <span className="material-symbols-outlined text-5xl text-gray-300 mb-2">search_off</span>
-                        <p className="font-bold text-sm">Tidak ada panduan ditemukan untuk "{search}".</p>
-                        <p className="text-xs text-gray-400 mt-1">Coba gunakan kata kunci lain atau pilih tab role yang sesuai.</p>
+                        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-3">
+                            <span className="material-symbols-outlined text-3xl text-primary-600">view_list</span>
+                            <div>
+                                <h3 className="font-extrabold text-gray-900 text-base">Katalog 10 Jenis Pelaporan Setoran</h3>
+                                <p className="text-xs text-gray-500">Setiap jenis pelaporan memiliki perlakuan dan alur verifikasi khusus pada sistem.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {PANDUAN_JENIS_PELAPORAN
+                                .filter(item => !searchTerm || item.nama.toLowerCase().includes(searchTerm.toLowerCase()) || item.deskripsi.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .map((item, idx) => (
+                                    <div key={idx} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-3 flex flex-col justify-between">
+                                        <div>
+                                            <div className="flex items-center justify-between gap-2 mb-2">
+                                                <h4 className="font-extrabold text-gray-900 text-sm">{item.nama}</h4>
+                                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${item.badge}`}>
+                                                    Kategori #{idx + 1}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-gray-600 leading-relaxed font-medium">{item.deskripsi}</p>
+                                        </div>
+
+                                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-xs text-gray-700">
+                                            <span className="font-bold text-gray-900">SOP Pengisian: </span>
+                                            {item.instruksi}
+                                        </div>
+                                    </div>
+                                ))}
+                        </div>
                     </div>
                 )}
 
-                {/* Support Card */}
+                {/* TAB 2: ROLE TOKO */}
+                {activeTab === 'toko' && (
+                    <div className="space-y-4">
+                        <div className="bg-blue-50/70 p-5 rounded-2xl border border-blue-100 flex items-center gap-3">
+                            <span className="material-symbols-outlined text-3xl text-blue-600">storefront</span>
+                            <div>
+                                <h3 className="font-extrabold text-blue-900 text-base">Panduan Pengguna - Role Toko / User (Kasir)</h3>
+                                <p className="text-xs text-blue-700">Petunjuk komprehensif mengoperasikan formulir setoran, pengajuan koreksi, dan tanggapan isu perbankan.</p>
+                            </div>
+                        </div>
+
+                        {PANDUAN_ROLE_TOKO
+                            .filter(item => !searchTerm || item.modul.toLowerCase().includes(searchTerm.toLowerCase()) || item.penjelasan.toLowerCase().includes(searchTerm.toLowerCase()))
+                            .map((item, idx) => (
+                                <AccordionGuideItem
+                                    key={idx}
+                                    title={item.modul}
+                                    icon={item.icon}
+                                    penjelasan={item.penjelasan}
+                                    langkah={item.langkah}
+                                    tips={item.tips}
+                                    isOpen={openIdx === idx}
+                                    onToggle={() => toggleAccordion(idx)}
+                                />
+                            ))}
+                    </div>
+                )}
+
+                {/* TAB 3: ROLE AREA MANAGER */}
+                {activeTab === 'am' && (
+                    <div className="space-y-4">
+                        <div className="bg-indigo-50/70 p-5 rounded-2xl border border-indigo-100 flex items-center gap-3">
+                            <span className="material-symbols-outlined text-3xl text-indigo-600">badge</span>
+                            <div>
+                                <h3 className="font-extrabold text-indigo-900 text-base">Panduan Pengguna - Role Area Manager (AM)</h3>
+                                <p className="text-xs text-indigo-700">Petunjuk supervisi outlet binaan, evaluasi pengajuan koreksi, dan monitoring troubleshooting perbankan.</p>
+                            </div>
+                        </div>
+
+                        {PANDUAN_ROLE_AM
+                            .filter(item => !searchTerm || item.modul.toLowerCase().includes(searchTerm.toLowerCase()) || item.penjelasan.toLowerCase().includes(searchTerm.toLowerCase()))
+                            .map((item, idx) => (
+                                <AccordionGuideItem
+                                    key={idx}
+                                    title={item.modul}
+                                    icon={item.icon}
+                                    penjelasan={item.penjelasan}
+                                    langkah={item.langkah}
+                                    tips={item.tips}
+                                    isOpen={openIdx === idx}
+                                    onToggle={() => toggleAccordion(idx)}
+                                />
+                            ))}
+                    </div>
+                )}
+
+                {/* TAB 4: ROLE ADMIN FINANCE */}
+                {activeTab === 'finance' && (
+                    <div className="space-y-4">
+                        <div className="bg-emerald-50/70 p-5 rounded-2xl border border-emerald-100 flex items-center gap-3">
+                            <span className="material-symbols-outlined text-3xl text-emerald-600">account_balance</span>
+                            <div>
+                                <h3 className="font-extrabold text-emerald-900 text-base">Panduan Pengguna - Role Admin Finance</h3>
+                                <p className="text-xs text-emerald-700">Petunjuk rekonsiliasi data setoran nasional, penerbitan isu troubleshooting bank, dan POS sync.</p>
+                            </div>
+                        </div>
+
+                        {PANDUAN_ROLE_FINANCE
+                            .filter(item => !searchTerm || item.modul.toLowerCase().includes(searchTerm.toLowerCase()) || item.penjelasan.toLowerCase().includes(searchTerm.toLowerCase()))
+                            .map((item, idx) => (
+                                <AccordionGuideItem
+                                    key={idx}
+                                    title={item.modul}
+                                    icon={item.icon}
+                                    penjelasan={item.penjelasan}
+                                    langkah={item.langkah}
+                                    tips={item.tips}
+                                    isOpen={openIdx === idx}
+                                    onToggle={() => toggleAccordion(idx)}
+                                />
+                            ))}
+                    </div>
+                )}
+
+                {/* TAB 5: NOTIFIKASI & AI */}
+                {activeTab === 'notifikasi' && (
+                    <div className="space-y-4">
+                        <div className="bg-purple-50/70 p-5 rounded-2xl border border-purple-100 flex items-center gap-3">
+                            <span className="material-symbols-outlined text-3xl text-purple-600">notifications_active</span>
+                            <div>
+                                <h3 className="font-extrabold text-purple-900 text-base">Sistem Notifikasi Real-time & Alpro Assistant AI</h3>
+                                <p className="text-xs text-purple-700">Cara kerja lonceng notifikasi, indikator sidebar badge, dan asisten kecerdasan buatan 24/7.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
+                                <div className="flex items-center gap-2 text-purple-600 font-extrabold text-sm">
+                                    <span className="material-symbols-outlined">notifications</span> Lonceng Header & Sidebar Badges
+                                </div>
+                                <p className="text-xs text-gray-600 leading-relaxed">
+                                    Sistem memantau perubahan data secara real-time via WebSocket Supabase.
+                                </p>
+                                <ul className="text-xs text-gray-700 space-y-2">
+                                    <li className="flex items-start gap-1.5">
+                                        <span className="text-purple-600 font-bold">•</span>
+                                        <span><strong>Lonceng Header:</strong> Menampilkan popover pesan teratas saat ada update persetujuan koreksi atau isu bank baru.</span>
+                                    </li>
+                                    <li className="flex items-start gap-1.5">
+                                        <span className="text-purple-600 font-bold">•</span>
+                                        <span><strong>Badge Sidebar:</strong> Menampilkan bulatan indikator oranye pada menu spesifik jika ada tugas yang membutuhkan tindakan Anda.</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-3">
+                                <div className="flex items-center gap-2 text-indigo-600 font-extrabold text-sm">
+                                    <span className="material-symbols-outlined">smart_toy</span> Alpro Assistant AI Chatbot
+                                </div>
+                                <p className="text-xs text-gray-600 leading-relaxed">
+                                    Asisten cerdas berbasis Groq Llama-3 yang dapat diakses dari widget kanan bawah Beranda.
+                                </p>
+                                <ul className="text-xs text-gray-700 space-y-2">
+                                    <li className="flex items-start gap-1.5">
+                                        <span className="text-indigo-600 font-bold">•</span>
+                                        <span><strong>Fungsi:</strong> Menjawab pertanyaan SOP setoran, jenis pelaporan, dan solusi penanganan deposit card.</span>
+                                    </li>
+                                    <li className="flex items-start gap-1.5">
+                                        <span className="text-indigo-600 font-bold">•</span>
+                                        <span><strong>Kerahasiaan:</strong> Chat bersifat stateless dan tidak menyimpan data sensitif perusahaan.</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Footer Help */}
                 <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-3 text-left">
                         <div className="h-12 w-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
                             <span className="material-symbols-outlined text-2xl">support_agent</span>
                         </div>
                         <div>
-                            <h3 className="font-bold text-gray-900 text-sm">Butuh bantuan lebih lanjut?</h3>
-                            <p className="text-xs text-gray-500">Gunakan Alpro Assistant AI di Beranda atau hubungi tim Finance cabang Anda.</p>
+                            <h3 className="font-bold text-gray-900 text-sm">Butuh Bantuan Langsung?</h3>
+                            <p className="text-xs text-gray-500">Tanyakan pada Alpro Assistant AI di Beranda atau hubungi tim Finance cabang Anda.</p>
                         </div>
                     </div>
                     <a
                         href="/beranda"
-                        className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5 flex-shrink-0"
+                        className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5 flex-shrink-0 cursor-pointer"
                     >
                         <span className="material-symbols-outlined text-sm">smart_toy</span> Buka Alpro Assistant
                     </a>
