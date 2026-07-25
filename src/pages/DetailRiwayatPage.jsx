@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
-import { formatRupiah, NON_FINANCIAL_TYPES } from '../lib/validators';
+import { formatRupiah, NON_FINANCIAL_TYPES, formatDriveImageUrl } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
 
 function formatDate(isoDate) {
