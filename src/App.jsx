@@ -41,7 +41,7 @@ import BantuanPage from './pages/BantuanPage';
 function RootRedirect() {
   const { user, profile, loading } = useAuth();
 
-  if (loading || (user && !profile)) {
+  if (loading && !profile) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 font-sans">
         <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-sm border border-gray-100">

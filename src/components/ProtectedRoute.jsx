@@ -5,7 +5,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     const { user, profile, loading } = useAuth();
 
     // If session or profile is still loading, show loading spinner
-    if (loading || (user && !profile)) {
+    if (loading && !profile) {
         return (
             <div className="flex h-screen items-center justify-center bg-gray-100 font-sans">
                 <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-sm border border-gray-100">

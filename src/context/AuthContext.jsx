@@ -53,7 +53,7 @@ export function AuthProvider({ children }) {
             setUser(session?.user ?? null);
             if (session?.user) {
                 // Background refresh token / tab focus: silent update without toggling global loading
-                const isInitial = event === 'INITIAL_SESSION' || event === 'SIGNED_IN';
+                const isInitial = (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && !profile;
                 await fetchProfile(session.user.id, isInitial);
             } else {
                 setProfile(null);
