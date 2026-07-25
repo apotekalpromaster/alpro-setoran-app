@@ -41,12 +41,14 @@ Dokumen ini adalah acuan resmi operasional Aplikasi Pelaporan Setoran Harian Apo
 - **Langkah 2 (Nominal & Upload Bukti)**: Input Total Penjualan Kasir, Potongan Admin (jika ada), dan Nominal Setoran. Unggah bukti foto struk ATM/transfer (maksimal 10 MB, format JPG/PNG/HEIC).
 - **Langkah 3 (Verifikasi & Kirim)**: Periksa ringkasan kalkulasi otomatis (Penjualan - Potongan = Setoran), lalu klik **Kirim Laporan**.
 
-### B. Pengajuan Koreksi Laporan
-- Jika ada kesalahan nominal/foto pada laporan yang sudah terkirim:
-  1. Buka menu **Koreksi Laporan** di sidebar.
-  2. Klik **Ajukan Koreksi** pada baris laporan terkait.
-  3. Masukkan nominal/bukti foto perbaikan dan jelaskan alasan koreksi.
-  4. Pengajuan akan diproses oleh Area Manager terlebih dahulu. Toko akan menerima notifikasi lonceng saat disetujui/ditolak.
+### B. Pengajuan Koreksi Laporan (Salah Input / Salah Lapor / Edit / Memperbaiki Setoran)
+- **Apa yang dilakukan jika salah input setoran / salah angka / salah foto / ingin mengedit / memperbaiki setoran yang telah dikirim?**:
+  Toko TIDAK perlu panik atau menghubungi manual. Aplikasi memiliki fasilitas resmi **Koreksi Laporan**:
+  1. Buka menu **Koreksi Laporan** di sidebar navigasi sebelah kiri.
+  2. Cari tanggal laporan setoran yang mengalami salah input, lalu klik tombol **Ajukan Koreksi**.
+  3. Masukkan angka nominal perbaikan, unggah bukti foto struk/transfer baru (jika ada), dan berikan penjelasan alasan koreksi secara jelas.
+  4. Klik **Kirim Pengajuan Koreksi**. Pengajuan ini akan otomatis masuk ke antrean **Persetujuan Area Manager (AM)**.
+  5. Toko akan menerima notifikasi lonceng & badge saat pengajuan koreksi disetujui atau ditolak oleh Area Manager.
 
 ### C. Troubleshooting Bank Toko
 - Jika Finance menemukan dispute/selisih audit bank:
