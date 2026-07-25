@@ -109,19 +109,48 @@ serve(async (req: Request) => {
 
     // 3. Query Google Drive API for files in folder 1lreZQGF8F-3sFdPkQ1jzcQpVanz8ovY0
     const queryStr = `('${TARGET_FOLDER_ID}' in parents or name contains 'Cash & Card Automation') and trashed = false`;
-    const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
+    const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
 
-    const listResp = await fetch(driveSearchUrl, {
+    let listResp = await fetch(driveSearchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    const listData = await listResp.json();
+    let listData = await listResp.json();
     if (!listResp.ok) {
-      throw new Error(`Gagal membaca daftar file dari Google Drive: ${JSON.stringify(listData)}`);
+      console.warn(`[sync-pos-sales-from-drive] Warning: Initial search with corpora=allDrives returned status ${listResp.status}: ${JSON.stringify(listData)}`);
+      // Fallback query without corpora=allDrives if corpora=allDrives is rejected by API scope
+      const fallbackUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
+      listResp = await fetch(fallbackUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+      listData = await listResp.json();
     }
 
-    const allFiles: any[] = listData.files || [];
-    console.log(`[sync-pos-sales-from-drive] Total files in folder: ${allFiles.length}`);
+    let allFiles: any[] = listData.files || [];
+    console.log(`[sync-pos-sales-from-drive] Total files found in primary query: ${allFiles.length}`);
+
+    // If 0 files found, perform fallback search and diagnostic user info lookup
+    if (allFiles.length === 0) {
+      console.log('[sync-pos-sales-from-drive] Initial query returned 0 files. Running broad diagnostic search for Cash & Card Automation files...');
+      const broadQuery = `name contains 'Cash & Card Automation' and trashed = false`;
+      const broadUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(broadQuery)}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
+      const broadResp = await fetch(broadUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const broadData = await broadResp.json();
+      const broadFiles = broadData.files || [];
+      console.log(`[sync-pos-sales-from-drive] Broad search files count: ${broadFiles.length}`);
+      if (broadFiles.length > 0) {
+        allFiles = broadFiles;
+      }
+
+      // Check authenticated Google Account info
+      try {
+        const aboutResp = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const aboutData = await aboutResp.json();
+        console.log(`[sync-pos-sales-from-drive] Authenticated Google Account: ${JSON.stringify(aboutData.user)}`);
+      } catch (e) {
+        console.error('[sync-pos-sales-from-drive] Could not fetch Google about info:', e);
+      }
+    }
 
     // Filter files modified on same day (or fallback to top 1 latest file if today's check is empty)
     let targetFiles = allFiles.filter((f) => new Date(f.modifiedTime) >= new Date(searchCutoffIso));
