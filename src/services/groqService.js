@@ -92,33 +92,33 @@ function generateLocalAnalyticsSummary(payload) {
         return "Data laporan tidak cukup untuk dianalisis.";
     }
 
-    const formatRp = (num) => 'Rp ' + (Number(num) || 0).toLocaleString('id-ID');
-
-    const totalSales = formatRp(payload.total_sales_manual);
-    const totalSetoran = formatRp(payload.total_setoran);
-    const totalPotongan = formatRp(payload.total_potongan);
-    const totalPos = formatRp(payload.total_pos_sales);
-    const countAnomali = payload.total_anomali_selisih || 0;
-    const totalRecords = payload.total_records || 0;
+    const sc = payload.scorecard_keseluruhan || {};
+    const sampleToko = payload.performa_per_toko || [];
 
     let narrative = `### 📊 Analisis Keuangan Virtual (Senior Financial Analyst)\n\n`;
     narrative += `**1. Ringkasan Konsolidasi Penjualan & Setoran**:\n`;
-    narrative += `- **Total Omzet Sales Manual**: ${totalSales}\n`;
-    narrative += `- **Total Dana Disetorkan (Bank/ATM)**: ${totalSetoran}\n`;
-    narrative += `- **Total Potongan Operational Expense**: ${totalPotongan}\n`;
-    narrative += `- **Total Penjualan POS Xilnex**: ${totalPos}\n\n`;
+    narrative += `- **Total Sales Xilnex (POS)**: ${sc.total_sales_xilnex_pos || 'Rp 0'}\n`;
+    narrative += `- **Total Sales Manual**: ${sc.total_sales_manual || 'Rp 0'}\n`;
+    narrative += `- **Total Potongan (Expense)**: ${sc.total_potongan_expense || 'Rp 0'}\n`;
+    narrative += `- **Total Dana Disetorkan**: ${sc.total_setoran_bank || 'Rp 0'}\n`;
+    narrative += `- **Total Selisih Rekonsiliasi**: ${sc.total_selisih_rekonsiliasi || 'Rp 0'}\n\n`;
 
     narrative += `**2. Audit Anomali & Rekonsiliasi**:\n`;
-    if (countAnomali > 0) {
-        narrative += `- ⚠️ Terdeteksi **${countAnomali} transaksi** dengan selisih penjualan vs POS Xilnex melebihi ambang batas Rp 50.000.\n`;
+    if (sc.jumlah_kasus_anomali > 0) {
+        narrative += `- ⚠️ Terdeteksi **${sc.jumlah_kasus_anomali} kasus anomali** selisih besar yang membutuhkan audit lanjut.\n`;
     } else {
-        narrative += `- ✅ Seluruh **${totalRecords} transaksi** setoran cabang berada dalam batas aman selisih rekonsiliasi.\n`;
+        narrative += `- ✅ Seluruh transaksi cabang berada dalam batas toleransi aman rekonsiliasi (0 kasus anomali kritis).\n`;
+    }
+
+    if (sampleToko.length > 0) {
+        const topStore = sampleToko[0];
+        narrative += `- 🏆 **Cabang Sales POS Tertinggi**: ${topStore.nama_toko} (${topStore.sales_xilnex})\n`;
     }
 
     narrative += `\n**3. Saran Rekomendasi Strategis**:\n`;
-    narrative += `1. **Prioritas Audit**: Lakukan pengecekan khusus pada toko yang memiliki catatan selisih POS terbesar.\n`;
-    narrative += `2. **Disiplin Harian**: Imbau Area Manager (AM) untuk mengawasi ketepatan waktu penginputan setoran sebelum closing harian.\n`;
-    narrative += `3. **Sinkronisasi POS**: Pastikan data POS Xilnex di Google Drive disinkronkan harian agar matching otomatis berjalan presisi.`;
+    narrative += `1. **Pengawasan Disiplin Closing**: Dorong Area Manager (AM) untuk memastikan seluruh toko menyetorkan kas harian tepat waktu.\n`;
+    narrative += `2. **Evaluasi Potongan (Expense)**: Lakukan audit berkala pada klaim potongan operasional agar tidak menggerus margin cabang.\n`;
+    narrative += `3. **Sinkronisasi Otomatis**: Pertahankan integrasi sinkronisasi POS Xilnex harian untuk akurasi rekonsiliasi real-time.`;
 
     return narrative;
 }

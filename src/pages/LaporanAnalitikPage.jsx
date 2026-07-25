@@ -319,36 +319,34 @@ export default function LaporanAnalitikPage() {
     const currentPeriodLabel = useChronological => useChronological ? 'Total Setoran Harian' : 'Rata-rata per Hari';
 
     const handleAiAnalysis = async () => {
-        if (!tableData.length) return;
+        if (!tableData.length || !analytics.scorecard) return;
         setAiLoading(true);
         setAiSummary('');
         try {
-            const totalSalesManual = tableData.reduce((s, r) => s + (Number(r.nominal_jual) || 0), 0);
-            const totalSetoran = tableData.reduce((s, r) => s + (Number(r.nominal_setoran) || 0), 0);
-            const totalPotongan = tableData.reduce((s, r) => s + (Number(r.potongan) || 0), 0);
-            const totalPosSales = tableData.reduce((s, r) => s + (Number(r.pos_sales) || 0), 0);
-            const totalAnomali = tableData.filter(r => Math.abs(Number(r.selisih_pos) || 0) > 50000).length;
-
             const compactPayload = {
                 periode: period,
-                total_records: tableData.length,
-                total_sales_manual: totalSalesManual,
-                total_setoran: totalSetoran,
-                total_potongan: totalPotongan,
-                total_pos_sales: totalPosSales,
-                total_anomali_selisih: totalAnomali,
-                sample_outlets: tableData.slice(0, 10).map(r => ({
-                    toko: r.nama_toko || r.kode_toko,
-                    sales: r.nominal_jual,
-                    setoran: r.nominal_setoran,
-                    potongan: r.potongan,
-                    selisih_pos: r.selisih_pos
+                scorecard_keseluruhan: {
+                    total_sales_xilnex_pos: formatRupiah(analytics.scorecard.totalXilnex),
+                    total_sales_manual: formatRupiah(analytics.scorecard.totalPenjualan),
+                    total_potongan_expense: formatRupiah(analytics.scorecard.totalPotongan),
+                    total_setoran_bank: formatRupiah(analytics.scorecard.totalSetoran),
+                    total_selisih_rekonsiliasi: formatRupiah(analytics.scorecard.totalSelisih),
+                    jumlah_kasus_anomali: analytics.scorecard.kasusAnomali
+                },
+                performa_per_toko: tableData.slice(0, 15).map(r => ({
+                    nama_toko: r.namaApotek,
+                    sales_xilnex: formatRupiah(r.xilnexSales),
+                    sales_manual: formatRupiah(r.reportSales),
+                    nominal_setor: formatRupiah(r.nominalSetor),
+                    potongan: formatRupiah(r.potongan),
+                    selisih_pos: formatRupiah(r.delta2)
                 }))
             };
 
             const result = await generateAnalyticsSummary(compactPayload);
             setAiSummary(result);
         } catch (err) {
+            console.error("handleAiAnalysis error:", err);
             setAiSummary('Terjadi kesalahan saat memanggil asisten AI.');
         } finally {
             setAiLoading(false);
