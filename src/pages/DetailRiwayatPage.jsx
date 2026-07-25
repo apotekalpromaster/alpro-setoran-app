@@ -27,28 +27,39 @@ export default function DetailRiwayatPage() {
 
     const fetchDetail = async () => {
         setLoading(true);
+        setNotFound(false);
+
+        if (id && id.startsWith('unreported_')) {
+            setNotFound(true);
+            setLoading(false);
+            return;
+        }
+
         try {
-            // Fetch original report
-            const { data: row, error } = await supabase
+            const reportPromise = supabase
                 .from('laporan')
                 .select('*')
                 .eq('id', id)
                 .single();
 
-            if (error || !row) throw error || new Error('Not found');
-            setData(row);
-
-            // Fetch related correction requests
-            const { data: corrData, error: corrErr } = await supabase
+            const corrPromise = supabase
                 .from('koreksi_requests')
                 .select('id, nominal_jual_baru, nominal_setoran_baru, potongan_baru, penjelasan_koreksi, status, created_at, processed_at, bukti_urls_baru')
                 .eq('laporan_id', id)
                 .order('created_at', { ascending: false });
 
-            if (!corrErr) {
-                setCorrections(corrData || []);
+            const [reportRes, corrRes] = await Promise.all([reportPromise, corrPromise]);
+
+            if (reportRes.error || !reportRes.data) {
+                setNotFound(true);
+            } else {
+                setData(reportRes.data);
+                if (!corrRes.error && corrRes.data) {
+                    setCorrections(corrRes.data);
+                }
             }
         } catch (e) {
+            console.error("DetailRiwayatPage fetchDetail error:", e);
             setNotFound(true);
         } finally {
             setLoading(false);
