@@ -5,7 +5,7 @@ import { formatRupiah } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
 
 export default function AreaManagerKoreksiApprovalPage() {
-    const { profile } = useAuth();
+    const { profile, loading: authLoading } = useAuth();
     
     // UI states
     const [loading, setLoading] = useState(false);
@@ -18,12 +18,20 @@ export default function AreaManagerKoreksiApprovalPage() {
     const [statusFilter, setStatusFilter] = useState('Pending'); // 'All' | 'Pending' | 'Approved' | 'Rejected'
 
     useEffect(() => {
-        if (profile?.id) {
-            fetchRequests();
+        if (!authLoading) {
+            if (profile?.id) {
+                fetchRequests();
+            } else {
+                setLoading(false);
+            }
         }
-    }, [profile?.id, statusFilter]);
+    }, [profile?.id, statusFilter, authLoading]);
 
     const fetchRequests = async () => {
+        if (!profile?.id) {
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError('');
         try {

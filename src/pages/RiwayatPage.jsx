@@ -40,7 +40,7 @@ function formatDisplayDate(isoDate) {
 }
 
 export default function RiwayatPage() {
-    const { profile } = useAuth();
+    const { profile, loading: authLoading } = useAuth();
     const navigate = useNavigate();
 
     const [reports, setReports] = useState([]);
@@ -70,11 +70,20 @@ export default function RiwayatPage() {
     const [activeFilters, setActiveFilters] = useState({ search: '', startDate: '', endDate: '', methode: '', jenis: [] });
 
     useEffect(() => {
-        if (!profile?.id) return;
-        fetchReports();
-    }, [profile?.id]);
+        if (!authLoading) {
+            if (profile?.id) {
+                fetchReports();
+            } else {
+                setLoading(false);
+            }
+        }
+    }, [profile?.id, authLoading]);
 
     const fetchReports = async () => {
+        if (!profile?.id) {
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError('');
         try {

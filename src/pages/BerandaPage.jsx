@@ -5,7 +5,7 @@ import UserLayout from '../components/UserLayout';
 import { supabase } from '../services/supabaseClient';
 
 export default function BerandaPage() {
-    const { profile } = useAuth();
+    const { profile, loading: authLoading } = useAuth();
     const navigate = useNavigate();
 
     const [recentReports, setRecentReports] = useState([]);
@@ -15,10 +15,11 @@ export default function BerandaPage() {
     const [tunggakanDates, setTunggakanDates] = useState([]);
     const [duplikatDates, setDuplikatDates] = useState([]);
 
-    useEffect(() => {
-        if (!profile?.id) return;
-
-        const fetchData = async () => {
+    const fetchData = async () => {
+        if (!profile?.id) {
+            setLoading(false);
+            return;
+        }
             setLoading(true);
             try {
                 // Fetch ALL reports for this user to calculate total missed working dates accurately
@@ -100,8 +101,15 @@ export default function BerandaPage() {
             }
         };
 
-        fetchData();
-    }, [profile?.id, profile?.frekuensi_setoran]);
+    useEffect(() => {
+        if (!authLoading) {
+            if (profile?.id) {
+                fetchData();
+            } else {
+                setLoading(false);
+            }
+        }
+    }, [profile?.id, profile?.frekuensi_setoran, authLoading]);
 
     // Format date string (YYYY-MM-DD -> DD MMM YYYY)
     const formatDate = (dateString) => {

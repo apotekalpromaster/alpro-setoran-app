@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatRupiah, formatDriveImageUrl } from '../lib/validators';
 
 export default function AreaManagerTroubleshootingPage() {
-    const { profile } = useAuth();
+    const { profile, loading: authLoading } = useAuth();
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState(null);
     const [issues, setIssues] = useState([]);
@@ -20,8 +20,14 @@ export default function AreaManagerTroubleshootingPage() {
     const [copiedId, setCopiedId] = useState(null);
 
     useEffect(() => {
-        if (profile) fetchData();
-    }, [profile]);
+        if (!authLoading) {
+            if (profile) {
+                fetchData();
+            } else {
+                setLoading(false);
+            }
+        }
+    }, [profile, authLoading]);
 
     const fetchData = async () => {
         try {
