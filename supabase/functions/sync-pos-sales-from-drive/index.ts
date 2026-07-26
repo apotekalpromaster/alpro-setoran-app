@@ -144,7 +144,6 @@ serve(async (req: Request) => {
     ];
 
     let allFiles: any[] = [];
-    let usedQuery = '';
 
     for (const qStr of queryCandidates) {
       const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qStr)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=modifiedTime%20desc&pageSize=100`;
@@ -156,7 +155,6 @@ serve(async (req: Request) => {
 
       if (resp.ok && resData.files && resData.files.length > 0) {
         allFiles = resData.files;
-        usedQuery = qStr;
         console.log(`[sync-pos-sales-from-drive] Found ${allFiles.length} files using query: ${qStr}`);
         break;
       }
@@ -170,12 +168,6 @@ serve(async (req: Request) => {
         { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Log diagnostic list of files
-    allFiles.forEach(f => {
-      const fileDate = extractDateFromFilename(f.name);
-      console.log(`[sync-pos-sales-from-drive] Drive Item: "${f.name}" | dateExtracted: ${fileDate} | modifiedTime: ${f.modifiedTime}`);
-    });
 
     // 4. Select Target Files (Strategy A: Filename Date Match, Strategy B: Today Modified, Strategy C: Latest)
     let targetFiles: any[] = [];
