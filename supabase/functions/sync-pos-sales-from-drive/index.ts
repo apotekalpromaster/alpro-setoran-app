@@ -30,19 +30,22 @@ function parseFormattedDate(rawVal: any): string {
   if (!rawVal) return '';
   const strVal = rawVal.toString().trim();
 
-  // Excel Serial Number (e.g. 46223)
-  if (/^d+(.d+)?$/.test(strVal)) {
+  // Excel Serial Number (e.g. 46223) - must be pure number
+  if (/^\d+(\.\d+)?$/.test(strVal)) {
     const excelDateNum = parseFloat(strVal);
-    const d = new Date((excelDateNum - 25569) * 86400 * 1000);
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    // Sanity: Excel serial dates range approx 40000-50000 for 2009-2036
+    if (excelDateNum > 40000 && excelDateNum < 60000) {
+      const d = new Date((excelDateNum - 25569) * 86400 * 1000);
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    }
   }
 
   // YYYY-MM-DD format (including timestamp YYYY-MM-DD HH:mm:ss)
-  const isoMatch = strVal.match(/^(d{4}-d{2}-d{2})/);
+  const isoMatch = strVal.match(/^(\d{4}-\d{2}-\d{2})/);
   if (isoMatch) return isoMatch[1];
 
   // DD/MM/YYYY or DD-MM-YYYY format
-  const ddmmyyyyMatch = strVal.match(/^(d{1,2})[/-](d{1,2})[/-](d{4})/);
+  const ddmmyyyyMatch = strVal.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if (ddmmyyyyMatch) {
     const day = ddmmyyyyMatch[1].padStart(2, '0');
     const month = ddmmyyyyMatch[2].padStart(2, '0');
@@ -54,6 +57,33 @@ function parseFormattedDate(rawVal: any): string {
   const d = new Date(strVal);
   if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
 
+  return '';
+}
+
+/**
+ * Extract DDMMYYYY pattern from filename.
+ * e.g. "Cash & Card Automation_00000726072026.xlsx" -> "26072026"
+ * Pattern: 8 consecutive digits where last 4 are a plausible year (2020-2035)
+ */
+function extractDateFromFilename(filename: string): string {
+  // Match 8 consecutive digits in filename
+  const matches = filename.match(/\d{8}/g);
+  if (!matches) return '';
+
+  for (const match of matches) {
+    const dd = match.substring(0, 2);
+    const mm = match.substring(2, 4);
+    const yyyy = match.substring(4, 8);
+
+    const day = parseInt(dd, 10);
+    const month = parseInt(mm, 10);
+    const year = parseInt(yyyy, 10);
+
+    if (year >= 2020 && year <= 2035 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      // Valid DDMMYYYY — return as YYYY-MM-DD for comparison
+      return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+    }
+  }
   return '';
 }
 
@@ -97,66 +127,97 @@ serve(async (req: Request) => {
 
     const accessToken = tokenData.access_token;
 
-    // 2. Compute today 00:00:00 WIB timestamp (Asia/Jakarta = UTC+7)
+    // 2. Compute today's date in WIB (Asia/Jakarta = UTC+7)
     const nowUtc = new Date();
     const wibOffsetMs = 7 * 60 * 60 * 1000;
     const nowWib = new Date(nowUtc.getTime() + wibOffsetMs);
-    const todayWibStart = new Date(Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate(), 0, 0, 0));
-    // Convert back to UTC for Drive API query comparison
-    const searchCutoffIso = new Date(todayWibStart.getTime() - wibOffsetMs).toISOString();
+    const todayWibStr = `${nowWib.getUTCFullYear()}-${String(nowWib.getUTCMonth() + 1).padStart(2, '0')}-${String(nowWib.getUTCDate()).padStart(2, '0')}`;
 
-    console.log(`[sync-pos-sales-from-drive] Search cutoff (Modified >=): ${searchCutoffIso}`);
+    // Build today as DDMMYYYY string for filename matching
+    const todayDD = String(nowWib.getUTCDate()).padStart(2, '0');
+    const todayMM = String(nowWib.getUTCMonth() + 1).padStart(2, '0');
+    const todayYYYY = String(nowWib.getUTCFullYear());
+    const todayDDMMYYYY = `${todayDD}${todayMM}${todayYYYY}`; // e.g. "26072026"
 
-    // 3. Query Google Drive API for files in folder 1lreZQGF8F-3sFdPkQ1jzcQpVanz8ovY0
-    const queryStr = `('${TARGET_FOLDER_ID}' in parents or name contains 'Cash & Card Automation') and trashed = false`;
-    const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
+    console.log(`[sync-pos-sales-from-drive] Today WIB: ${todayWibStr} | Filename date pattern: ${todayDDMMYYYY}`);
+
+    // 3. Query Google Drive: list ALL files in the target folder (no modifiedTime filter)
+    // Use only folder parent filter - no name filter to avoid & encoding issues
+    const queryStr = `'${TARGET_FOLDER_ID}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+    const driveFields = 'files(id,name,modifiedTime,mimeType)';
+    const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=modifiedTime%20desc&pageSize=50`;
+
+    console.log(`[sync-pos-sales-from-drive] Drive query: ${queryStr}`);
 
     let listResp = await fetch(driveSearchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     let listData = await listResp.json();
+
     if (!listResp.ok) {
-      console.warn(`[sync-pos-sales-from-drive] Warning: Initial search with corpora=allDrives returned status ${listResp.status}: ${JSON.stringify(listData)}`);
-      // Fallback query without corpora=allDrives if corpora=allDrives is rejected by API scope
-      const fallbackUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
+      console.warn(`[sync-pos-sales-from-drive] Primary query failed (${listResp.status}): ${JSON.stringify(listData)}`);
+      // Fallback: try without corpora restriction
+      const fallbackUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryStr)}&fields=${encodeURIComponent(driveFields)}&orderBy=modifiedTime%20desc&pageSize=50`;
       listResp = await fetch(fallbackUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
       listData = await listResp.json();
+      if (!listResp.ok) {
+        throw new Error(`Gagal query Google Drive: ${JSON.stringify(listData)}`);
+      }
     }
 
-    let allFiles: any[] = listData.files || [];
-    console.log(`[sync-pos-sales-from-drive] Total files found in primary query: ${allFiles.length}`);
+    const allFiles: any[] = listData.files || [];
+    console.log(`[sync-pos-sales-from-drive] Total files in folder: ${allFiles.length}`);
 
-    // If 0 files found, perform fallback search and diagnostic user info lookup
     if (allFiles.length === 0) {
-      console.log('[sync-pos-sales-from-drive] Initial query returned 0 files. Running broad diagnostic search for Cash & Card Automation files...');
-      const broadQuery = `name contains 'Cash & Card Automation' and trashed = false`;
-      const broadUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(broadQuery)}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime,mimeType)&orderBy=modifiedTime desc`;
-      const broadResp = await fetch(broadUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
-      const broadData = await broadResp.json();
-      const broadFiles = broadData.files || [];
-      console.log(`[sync-pos-sales-from-drive] Broad search files count: ${broadFiles.length}`);
-      if (broadFiles.length > 0) {
-        allFiles = broadFiles;
-      }
-
-      // Check authenticated Google Account info
+      // Diagnostic: check which Google Account is authenticated
       try {
         const aboutResp = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
         const aboutData = await aboutResp.json();
-        console.log(`[sync-pos-sales-from-drive] Authenticated Google Account: ${JSON.stringify(aboutData.user)}`);
+        console.log(`[sync-pos-sales-from-drive] Authenticated as: ${JSON.stringify(aboutData.user)}`);
+        console.log('[sync-pos-sales-from-drive] Folder might not be accessible by this account. Check folder sharing settings.');
       } catch (e) {
         console.error('[sync-pos-sales-from-drive] Could not fetch Google about info:', e);
       }
+      return new Response(
+        JSON.stringify({ success: true, message: 'Tidak ada berkas di folder Drive. Periksa sharing folder ke akun yang terkonfigurasi.', processedFiles: 0, totalUpserted: 0 }),
+        { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Filter files modified on same day (or fallback to top 1 latest file if today's check is empty)
-    let targetFiles = allFiles.filter((f) => new Date(f.modifiedTime) >= new Date(searchCutoffIso));
+    // Log all found files for diagnostic
+    allFiles.forEach(f => {
+      const fileDate = extractDateFromFilename(f.name);
+      console.log(`[sync-pos-sales-from-drive] Found: ${f.name} | modifiedTime: ${f.modifiedTime} | filenameDate: ${fileDate}`);
+    });
+
+    // 4. Select target files using FILENAME DATE MATCHING (primary strategy)
+    //    Falls back to modifiedTime-based filter, then to latest file.
+    let targetFiles: any[] = [];
+
+    // Strategy A: Match by DDMMYYYY in filename = today
+    const byFilenameDate = allFiles.filter(f => f.name.includes(todayDDMMYYYY));
+    if (byFilenameDate.length > 0) {
+      targetFiles = byFilenameDate;
+      console.log(`[sync-pos-sales-from-drive] Strategy A (filename date match '${todayDDMMYYYY}'): ${targetFiles.length} file(s)`);
+    }
+
+    // Strategy B: Match by modifiedTime today in WIB
+    if (targetFiles.length === 0) {
+      const todayWibStartUtc = new Date(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate(), -7, 0, 0, 0).toISOString();
+      const byModified = allFiles.filter(f => f.modifiedTime >= todayWibStartUtc);
+      if (byModified.length > 0) {
+        targetFiles = byModified;
+        console.log(`[sync-pos-sales-from-drive] Strategy B (modifiedTime today): ${targetFiles.length} file(s)`);
+      }
+    }
+
+    // Strategy C: Fallback to the latest file in folder
     if (targetFiles.length === 0 && allFiles.length > 0) {
-      console.log('[sync-pos-sales-from-drive] No files modified today found, processing latest modified file as fallback...');
       targetFiles = [allFiles[0]];
+      console.log(`[sync-pos-sales-from-drive] Strategy C (latest file fallback): ${targetFiles[0].name}`);
     }
 
     if (targetFiles.length === 0) {
@@ -167,7 +228,7 @@ serve(async (req: Request) => {
       );
     }
 
-    // 4. Fetch profiles for store lookup
+    // 5. Fetch profiles for store lookup
     const { data: profData, error: profErr } = await supabase
       .from('profiles')
       .select('id, username, kode_toko')
@@ -184,9 +245,9 @@ serve(async (req: Request) => {
     let totalUpserted = 0;
     const processedReport: any[] = [];
 
-    // 5. Process each target file
+    // 6. Process each target file
     for (const fileItem of targetFiles) {
-      console.log(`[sync-pos-sales-from-drive] Downloading & parsing file: ${fileItem.name} (${fileItem.id})`);
+      console.log(`[sync-pos-sales-from-drive] Downloading & parsing: ${fileItem.name} (id: ${fileItem.id})`);
 
       const fileDownloadUrl = `https://www.googleapis.com/drive/v3/files/${fileItem.id}?alt=media&supportsAllDrives=true`;
       const dlResp = await fetch(fileDownloadUrl, {
@@ -194,28 +255,36 @@ serve(async (req: Request) => {
       });
 
       if (!dlResp.ok) {
-        console.error(`Gagal download file ${fileItem.name}:`, dlResp.statusText);
+        console.error(`Gagal download file ${fileItem.name}:`, dlResp.status, dlResp.statusText);
         continue;
       }
 
       const fileBuffer = await dlResp.arrayBuffer();
       const workbook = XLSX.read(new Uint8Array(fileBuffer), { type: 'array' });
 
-      if (workbook.SheetNames.length === 0) continue;
+      if (workbook.SheetNames.length === 0) {
+        console.warn(`File ${fileItem.name} tidak memiliki sheet.`);
+        continue;
+      }
 
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
+      console.log(`[sync-pos-sales-from-drive] ${fileItem.name}: ${rawRows.length} rows total in sheet`);
+
       if (rawRows.length < 14) {
-        console.warn(`File ${fileItem.name} tidak memiliki cukup baris data (minimum 14 baris).`);
+        console.warn(`File ${fileItem.name} tidak memiliki cukup baris data (minimum 14 baris, ditemukan ${rawRows.length}).`);
         continue;
       }
 
-      // Detect header row 14 (Index 13)
+      // Detect header row at index 13 (row 14)
       const row14Str = (rawRows[13] || []).map((c) => (c || '').toString().toLowerCase()).join(' ');
+      console.log(`[sync-pos-sales-from-drive] Row14 header sample: ${row14Str.substring(0, 120)}`);
+
       const isNewTemplate = row14Str.includes('date') && row14Str.includes('store') && row14Str.includes('cash amount');
       const startRowIndex = isNewTemplate ? 14 : 13;
+      console.log(`[sync-pos-sales-from-drive] Template: ${isNewTemplate ? 'New (Cash & Card Automation)' : 'Legacy'}, data starts at row index ${startRowIndex}`);
 
       const rowsToUpsert: { kode_cabang: string; tanggal_jual: string; sales_pos: number }[] = [];
 
@@ -230,32 +299,23 @@ serve(async (req: Request) => {
         if (!rawDateVal || !rawStoreVal) continue;
 
         if (isNewTemplate) {
-          // New Template "Cash & Card Automation"
           const lowerA = rawDateVal.toLowerCase();
           const lowerB = rawStoreVal.toLowerCase();
           const lowerC = rawColCVal.toLowerCase();
 
-          // Filter out rows with "total" in Col A, B, or C
-          if (lowerA.includes('total') || lowerB.includes('total') || lowerC.includes('total')) {
-            continue;
-          }
+          if (lowerA.includes('total') || lowerB.includes('total') || lowerC.includes('total')) continue;
 
           // Cash Amount from Col E (Index 4)
           const rawCashVal = (row[4] || '').toString().trim();
-          const cleanSales = parseInt(rawCashVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
+          const cleanSales = parseInt(rawCashVal.toString().replace(/[^0-9\-]/g, ''), 10) || 0;
           if (cleanSales === 0) continue;
 
           const matchedUsername = getMatchedUsername(rawStoreVal, storeMap);
           if (!matchedUsername) continue;
 
           const formattedDate = parseFormattedDate(rawDateVal);
-
           if (matchedUsername && formattedDate) {
-            rowsToUpsert.push({
-              kode_cabang: matchedUsername,
-              tanggal_jual: formattedDate,
-              sales_pos: cleanSales,
-            });
+            rowsToUpsert.push({ kode_cabang: matchedUsername, tanggal_jual: formattedDate, sales_pos: cleanSales });
           }
         } else {
           // Legacy Template
@@ -267,20 +327,17 @@ serve(async (req: Request) => {
           if (!matchedUsername) continue;
 
           const formattedDate = parseFormattedDate(rawDateVal);
-          const cleanSales = parseInt(rawSalesVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
+          const cleanSales = parseInt(rawSalesVal.toString().replace(/[^0-9\-]/g, ''), 10) || 0;
 
           if (matchedUsername && formattedDate) {
-            rowsToUpsert.push({
-              kode_cabang: matchedUsername,
-              tanggal_jual: formattedDate,
-              sales_pos: cleanSales,
-            });
+            rowsToUpsert.push({ kode_cabang: matchedUsername, tanggal_jual: formattedDate, sales_pos: cleanSales });
           }
         }
       }
 
+      console.log(`[sync-pos-sales-from-drive] ${fileItem.name}: ${rowsToUpsert.length} rows to upsert`);
+
       if (rowsToUpsert.length > 0) {
-        // Batch Upsert to pos_sales_data with onConflict resolution
         const chunkSize = 500;
         for (let j = 0; j < rowsToUpsert.length; j += chunkSize) {
           const chunk = rowsToUpsert.slice(j, j + chunkSize);
@@ -298,19 +355,22 @@ serve(async (req: Request) => {
         processedReport.push({
           fileName: fileItem.name,
           modifiedTime: fileItem.modifiedTime,
+          strategy: byFilenameDate.includes(fileItem) ? 'filename_date_match' : 'fallback',
           rowsCount: rowsToUpsert.length,
         });
 
-        console.log(`[sync-pos-sales-from-drive] Successfully upserted ${rowsToUpsert.length} rows from file ${fileItem.name}.`);
+        console.log(`[sync-pos-sales-from-drive] Upserted ${rowsToUpsert.length} rows from ${fileItem.name}`);
       }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Berhasil memproses ${targetFiles.length} berkas dan melakukan upsert ${totalUpserted} data sales ke pos_sales_data.`,
+        message: `Berhasil memproses ${processedReport.length} berkas dan melakukan upsert ${totalUpserted} data sales ke pos_sales_data.`,
         processedFiles: targetFiles.length,
         totalUpserted,
+        todayWib: todayWibStr,
+        filenameDatePattern: todayDDMMYYYY,
         details: processedReport,
       }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
