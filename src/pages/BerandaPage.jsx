@@ -5,7 +5,7 @@ import UserLayout from '../components/UserLayout';
 import { supabase } from '../services/supabaseClient';
 
 export default function BerandaPage() {
-    const { profile, loading: authLoading } = useAuth();
+    const { profile } = useAuth();
     const navigate = useNavigate();
 
     const [recentReports, setRecentReports] = useState([]);
@@ -102,14 +102,12 @@ export default function BerandaPage() {
         };
 
     useEffect(() => {
-        if (!authLoading) {
-            if (profile?.id) {
-                fetchData();
-            } else {
-                setLoading(false);
-            }
+        if (profile?.id) {
+            fetchData();
+        } else {
+            setLoading(false);
         }
-    }, [profile?.id, profile?.frekuensi_setoran, authLoading]);
+    }, [profile?.id, profile?.frekuensi_setoran]);
 
     // Format date string (YYYY-MM-DD -> DD MMM YYYY)
     const formatDate = (dateString) => {

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatRupiah, formatDriveImageUrl } from '../lib/validators';
 
 export default function AreaManagerTroubleshootingPage() {
-    const { profile, loading: authLoading } = useAuth();
+    const { profile } = useAuth();
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState(null);
     const [issues, setIssues] = useState([]);

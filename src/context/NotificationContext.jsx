@@ -1,19 +1,23 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from './AuthContext';
 
 const NotificationContext = createContext();
 
 export function NotificationProvider({ children }) {
-    const { user, profile } = useAuth();
+    const { user, profile, authReady } = useAuth();
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [unreadKoreksiCount, setUnreadKoreksiCount] = useState(0);
     const [unreadTroubleshootingCount, setUnreadTroubleshootingCount] = useState(0);
     const [loading, setLoading] = useState(false);
 
-    const storeCode = profile?.kode_toko || profile?.username || '';
-    const userId = user?.id;
+    // Use stable IDs only after authReady to prevent double-subscribe
+    const storeCode = authReady ? (profile?.kode_toko || profile?.username || '') : '';
+    const userId = authReady ? user?.id : null;
+
+    // Track active channel to prevent duplicate WebSocket subscriptions
+    const channelRef = useRef(null);
 
     const fetchNotifications = useCallback(async () => {
         if (!userId && !storeCode) return;
@@ -53,40 +57,42 @@ export function NotificationProvider({ children }) {
         }
     }, [userId, storeCode]);
 
-    // Initial fetch & Real-time subscription
+    // Only subscribe after authReady is true — prevents double-subscribe from cache+server update
     useEffect(() => {
-        if (!userId && !storeCode) return;
+        if (!authReady || (!userId && !storeCode)) return;
 
         fetchNotifications();
 
+        // Remove any existing channel before creating a new one
+        if (channelRef.current) {
+            supabase.removeChannel(channelRef.current);
+            channelRef.current = null;
+        }
+
         const channel = supabase
-            .channel('public:user_notifications')
+            .channel(`user_notifications_${userId}_${storeCode}`)
             .on(
                 'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'user_notifications',
-                },
-                () => {
-                    fetchNotifications();
-                }
+                { event: '*', schema: 'public', table: 'user_notifications' },
+                () => { fetchNotifications(); }
             )
             .subscribe();
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [userId, storeCode, fetchNotifications]);
+        channelRef.current = channel;
 
-    // Mark single notification as read
+        return () => {
+            if (channelRef.current) {
+                supabase.removeChannel(channelRef.current);
+                channelRef.current = null;
+            }
+        };
+    }, [authReady, userId, storeCode]);
+
     const markAsRead = async (notifId) => {
         try {
             setNotifications(prev =>
                 prev.map(n => (n.id === notifId ? { ...n, is_read: true } : n))
             );
-
-            // Recalculate local counts
             setUnreadCount(prev => Math.max(0, prev - 1));
 
             await supabase
@@ -100,7 +106,6 @@ export function NotificationProvider({ children }) {
         }
     };
 
-    // Mark all notifications as read
     const markAllAsRead = async () => {
         try {
             setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
