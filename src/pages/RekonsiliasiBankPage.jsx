@@ -35,7 +35,7 @@ export default function RekonsiliasiBankPage() {
     });
     const [endDate, setEndDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
     const [selectedBranch, setSelectedBranch] = useState('');
-    const [selectedBank, setSelectedBank] = useState('All');
+    const [selectedBank, setSelectedBank] = useState('All'); // 'All' | 'BCA' | 'BRI'
     const [statusFilter, setStatusFilter] = useState('All');
     const [toleranceH1, setToleranceH1] = useState(true);
 
@@ -44,7 +44,7 @@ export default function RekonsiliasiBankPage() {
     const [storeProfiles, setStoreProfiles] = useState([]);
     const [masterMappings, setMasterMappings] = useState(() => getStoredMasterMappings());
 
-    // File selection states & parsed previews
+    // Daily upload file states
     const [fileXilnex, setFileXilnex] = useState(null);
     const [parsedXilnex, setParsedXilnex] = useState([]);
 
@@ -110,6 +110,7 @@ export default function RekonsiliasiBankPage() {
         });
     }, [rawXilnexSales, rawBankMutations, storeProfiles, toleranceH1]);
 
+    // Filter grid and compute stats
     const filteredGrid = useMemo(() => {
         return reconGrid.filter(row => {
             if (startDate && row.date < startDate) return false;
@@ -121,8 +122,6 @@ export default function RekonsiliasiBankPage() {
                 if (!matchStore) return false;
             }
 
-            if (selectedBank !== 'All' && row.bank !== selectedBank) return false;
-
             if (statusFilter !== 'All') {
                 if (statusFilter === 'Cocok' && row.status !== 'Cocok') return false;
                 if (statusFilter === 'Selisih' && !row.status.includes('Selisih')) return false;
@@ -132,36 +131,69 @@ export default function RekonsiliasiBankPage() {
 
             return true;
         });
-    }, [reconGrid, startDate, endDate, selectedBranch, selectedBank, statusFilter]);
+    }, [reconGrid, startDate, endDate, selectedBranch, statusFilter]);
 
+    // Computed Stats depending on Bank Filter selection
     const stats = useMemo(() => {
-        let totalXilnex = 0;
-        let totalBankNet = 0;
+        let totalCashless = 0;
+        let bcaGross = 0, bcaMdr = 0, bcaNet = 0;
+        let briGross = 0, briMdr = 0, briNet = 0;
+        let totalBankGross = 0;
         let totalBankMdr = 0;
+        let totalBankNet = 0;
         let totalSelisih = 0;
         let countCocok = 0;
         let countSelisih = 0;
 
         filteredGrid.forEach(row => {
-            totalXilnex += row.xilnexTotal;
-            totalBankNet += row.bankNet;
-            totalBankMdr += row.bankMdr;
-            totalSelisih += Math.abs(row.selisihNet);
+            totalCashless += row.cashlessXilnex;
 
-            if (row.status === 'Cocok') countCocok++;
+            bcaGross += row.bcaGross;
+            bcaMdr += row.bcaMdr;
+            bcaNet += row.bcaNet;
+
+            briGross += row.briGross;
+            briMdr += row.briMdr;
+            briNet += row.briNet;
+
+            let rowBankGross = row.totalBankGross;
+            let rowBankMdr = row.totalBankMdr;
+            let rowBankNet = row.totalBankNet;
+
+            if (selectedBank === 'BCA') {
+                rowBankGross = row.bcaGross;
+                rowBankMdr = row.bcaMdr;
+                rowBankNet = row.bcaNet;
+            } else if (selectedBank === 'BRI') {
+                rowBankGross = row.briGross;
+                rowBankMdr = row.briMdr;
+                rowBankNet = row.briNet;
+            }
+
+            totalBankGross += rowBankGross;
+            totalBankMdr += rowBankMdr;
+            totalBankNet += rowBankNet;
+
+            const rowSelisih = row.cashlessXilnex - rowBankGross;
+            totalSelisih += Math.abs(rowSelisih);
+
+            if (rowSelisih === 0) countCocok++;
             else countSelisih++;
         });
 
         return {
             totalRows: filteredGrid.length,
-            totalXilnex,
-            totalBankNet,
+            totalCashless,
+            bcaGross, bcaMdr, bcaNet,
+            briGross, briMdr, briNet,
+            totalBankGross,
             totalBankMdr,
+            totalBankNet,
             totalSelisih,
             countCocok,
             countSelisih
         };
-    }, [filteredGrid]);
+    }, [filteredGrid, selectedBank]);
 
     const handleSelectXilnex = (e) => {
         const file = e.target.files[0];
@@ -393,21 +425,25 @@ export default function RekonsiliasiBankPage() {
 
                 {activeTab === 'tabel' && (
                     <>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Total Penjualan Xilnex</span>
-                                <span className="text-2xl font-black text-gray-800 mt-1 block font-mono">
-                                    {formatRupiah(stats.totalXilnex)}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-blue-500 relative overflow-hidden">
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Total Cashless Xilnex</span>
+                                <span className="text-2xl font-black text-blue-900 mt-1 block font-mono">
+                                    {formatRupiah(stats.totalCashless)}
                                 </span>
-                                <span className="text-[11px] text-gray-500 mt-1 block">Kartu Kredit/Debit & QRIS</span>
+                                <span className="text-[11px] text-gray-500 mt-1 block">Ref 1 Kolom F (Debit/Kredit/QRIS)</span>
                             </div>
 
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-emerald-500">
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Mutasi Net Bank (Riil)</span>
-                                <span className="text-2xl font-black text-emerald-600 mt-1 block font-mono">
-                                    {formatRupiah(stats.totalBankNet)}
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-purple-500">
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Mutasi Bank Gross (Riil)</span>
+                                <span className="text-2xl font-black text-purple-900 mt-1 block font-mono">
+                                    {formatRupiah(stats.totalBankGross)}
                                 </span>
-                                <span className="text-[11px] text-gray-500 mt-1 block">Total uang masuk rekening</span>
+                                <div className="text-[11px] text-gray-600 mt-1 flex items-center gap-2 font-mono">
+                                    <span className="text-blue-700 font-bold">BCA: {formatRupiah(stats.bcaGross)}</span>
+                                    <span>|</span>
+                                    <span className="text-orange-700 font-bold">BRI: {formatRupiah(stats.briGross)}</span>
+                                </div>
                             </div>
 
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-amber-500">
@@ -415,7 +451,11 @@ export default function RekonsiliasiBankPage() {
                                 <span className="text-2xl font-black text-amber-600 mt-1 block font-mono">
                                     {formatRupiah(stats.totalBankMdr)}
                                 </span>
-                                <span className="text-[11px] text-gray-500 mt-1 block">Biaya MDR / ADM Bank</span>
+                                <div className="text-[11px] text-gray-600 mt-1 flex items-center gap-2 font-mono">
+                                    <span className="text-blue-700 font-bold">BCA: {formatRupiah(stats.bcaMdr)}</span>
+                                    <span>|</span>
+                                    <span className="text-orange-700 font-bold">BRI: {formatRupiah(stats.briMdr)}</span>
+                                </div>
                             </div>
 
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-red-500">
@@ -520,85 +560,105 @@ export default function RekonsiliasiBankPage() {
                             </div>
 
                             <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200 text-left">
+                                <table className="min-w-full divide-y divide-gray-200 text-left text-xs">
                                     <thead className="bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                                         <tr>
-                                            <th className="py-3 px-4 whitespace-nowrap">Tanggal</th>
-                                            <th className="py-3 px-4 whitespace-nowrap">Toko / Outcode</th>
-                                            <th className="py-3 px-4 whitespace-nowrap">Cabang PKU</th>
-                                            <th className="py-3 px-4 whitespace-nowrap text-center">Bank</th>
-                                            <th className="py-3 px-4 text-right bg-blue-50/50 text-blue-700 whitespace-nowrap">Penjualan Xilnex</th>
-                                            <th className="py-3 px-4 text-right bg-emerald-50/50 text-emerald-700 whitespace-nowrap">Mutasi Net Bank</th>
-                                            <th className="py-3 px-4 text-right bg-amber-50/50 text-amber-700 whitespace-nowrap">MDR Bank</th>
-                                            <th className="py-3 px-4 text-right whitespace-nowrap">Selisih (Net)</th>
-                                            <th className="py-3 px-4 text-center whitespace-nowrap">Status Matching</th>
-                                            <th className="py-3 px-4 text-center whitespace-nowrap">Aksi</th>
+                                            <th className="py-3 px-3 whitespace-nowrap">Tanggal</th>
+                                            <th className="py-3 px-3 whitespace-nowrap">Toko / Outcode</th>
+                                            <th className="py-3 px-3 whitespace-nowrap">Cabang PKU</th>
+                                            <th className="py-3 px-3 text-right bg-blue-50/70 text-blue-900 whitespace-nowrap">Cashless Xilnex (Col F)</th>
+                                            <th className="py-3 px-3 text-right bg-blue-100/50 text-blue-900 whitespace-nowrap">BCA Gross</th>
+                                            <th className="py-3 px-3 text-right bg-amber-50/50 text-amber-800 whitespace-nowrap">BCA MDR</th>
+                                            <th className="py-3 px-3 text-right bg-emerald-50/50 text-emerald-800 whitespace-nowrap">BCA Net</th>
+                                            <th className="py-3 px-3 text-right bg-orange-100/50 text-orange-900 whitespace-nowrap">BRI Gross</th>
+                                            <th className="py-3 px-3 text-right bg-amber-50/50 text-amber-800 whitespace-nowrap">BRI MDR</th>
+                                            <th className="py-3 px-3 text-right bg-emerald-50/50 text-emerald-800 whitespace-nowrap">BRI Net</th>
+                                            <th className="py-3 px-3 text-right bg-purple-100/50 text-purple-900 whitespace-nowrap">Total Bank Gross</th>
+                                            <th className="py-3 px-3 text-right whitespace-nowrap">Selisih (Net)</th>
+                                            <th className="py-3 px-3 text-center whitespace-nowrap">Status Matching</th>
+                                            <th className="py-3 px-3 text-center whitespace-nowrap">Aksi</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
                                         {filteredGrid.length === 0 ? (
                                             <tr>
-                                                <td colSpan="10" className="py-12 text-center text-gray-400">
+                                                <td colSpan="14" className="py-12 text-center text-gray-400">
                                                     Tidak ada data rekonsiliasi yang sesuai dengan kriteria filter.
                                                 </td>
                                             </tr>
                                         ) : (
-                                            filteredGrid.map((row, idx) => (
-                                                <tr
-                                                    key={idx}
-                                                    className="hover:bg-gray-50/80 transition-colors cursor-pointer"
-                                                    onClick={() => setSelectedRowDetail(row)}
-                                                >
-                                                    <td className="py-3 px-4 font-semibold text-gray-900 whitespace-nowrap">
-                                                        {row.date}
-                                                    </td>
-                                                    <td className="py-3 px-4 font-bold text-gray-800">
-                                                        {row.outcode}
-                                                    </td>
-                                                    <td className="py-3 px-4 font-mono text-gray-500">
-                                                        {row.cabang_pku || '-'}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-center">
-                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                                            row.bank === 'BCA' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'
-                                                        }`}>
-                                                            {row.bank}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-3 px-4 text-right font-mono font-bold bg-blue-50/20 text-blue-900">
-                                                        {formatRupiah(row.xilnexTotal)}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-right font-mono font-bold bg-emerald-50/20 text-emerald-900">
-                                                        {formatRupiah(row.bankNet)}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-right font-mono text-amber-800 bg-amber-50/20">
-                                                        {formatRupiah(row.bankMdr)}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-right font-mono font-bold">
-                                                        {row.selisihNet === 0 ? (
-                                                            <span className="text-gray-400">Rp 0</span>
-                                                        ) : (
-                                                            <span className={row.selisihNet > 0 ? 'text-red-600' : 'text-blue-600'}>
-                                                                {(row.selisihNet > 0 ? '+' : '') + formatRupiah(row.selisihNet)}
+                                            filteredGrid.map((row, idx) => {
+                                                let targetBankGross = row.totalBankGross;
+                                                if (selectedBank === 'BCA') targetBankGross = row.bcaGross;
+                                                if (selectedBank === 'BRI') targetBankGross = row.briGross;
+
+                                                const rowSelisih = row.cashlessXilnex - targetBankGross;
+
+                                                return (
+                                                    <tr
+                                                        key={idx}
+                                                        className="hover:bg-gray-50/80 transition-colors cursor-pointer"
+                                                        onClick={() => setSelectedRowDetail(row)}
+                                                    >
+                                                        <td className="py-3 px-3 font-semibold text-gray-900 whitespace-nowrap">
+                                                            {row.date}
+                                                        </td>
+                                                        <td className="py-3 px-3 font-bold text-gray-800">
+                                                            {row.outcode}
+                                                        </td>
+                                                        <td className="py-3 px-3 font-mono text-gray-500">
+                                                            {row.cabang_pku || '-'}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-right font-mono font-bold bg-blue-50/30 text-blue-900">
+                                                            {formatRupiah(row.cashlessXilnex)}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-right font-mono font-bold bg-blue-50/20 text-blue-900">
+                                                            {formatRupiah(row.bcaGross)}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-right font-mono text-amber-700 bg-amber-50/20">
+                                                            {formatRupiah(row.bcaMdr)}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-right font-mono text-emerald-800 bg-emerald-50/20">
+                                                            {formatRupiah(row.bcaNet)}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-right font-mono font-bold bg-orange-50/20 text-orange-900">
+                                                            {formatRupiah(row.briGross)}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-right font-mono text-amber-700 bg-amber-50/20">
+                                                            {formatRupiah(row.briMdr)}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-right font-mono text-emerald-800 bg-emerald-50/20">
+                                                            {formatRupiah(row.briNet)}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-right font-mono font-bold bg-purple-50/20 text-purple-900">
+                                                            {formatRupiah(row.totalBankGross)}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-right font-mono font-bold">
+                                                            {rowSelisih === 0 ? (
+                                                                <span className="text-gray-400">Rp 0</span>
+                                                            ) : (
+                                                                <span className={rowSelisih > 0 ? 'text-red-600' : 'text-blue-600'}>
+                                                                    {(rowSelisih > 0 ? '+' : '') + formatRupiah(rowSelisih)}
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                                                            <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full border ${row.badgeColor}`}>
+                                                                {rowSelisih === 0 ? 'Cocok (Rp 0)' : ('Selisih Rp ' + rowSelisih)}
                                                             </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-center whitespace-nowrap">
-                                                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full border ${row.badgeColor}`}>
-                                                            {row.statusLabel}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-3 px-4 text-center">
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedRowDetail(row); }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 rounded transition-colors cursor-pointer"
-                                                            title="Lihat Detail Transaksi"
-                                                        >
-                                                            <span className="material-symbols-outlined text-base">visibility</span>
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))
+                                                        </td>
+                                                        <td className="py-3 px-3 text-center">
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); setSelectedRowDetail(row); }}
+                                                                className="p-1 text-gray-400 hover:text-primary-600 rounded transition-colors cursor-pointer"
+                                                                title="Lihat Detail Transaksi"
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">visibility</span>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
                                         )}
                                     </tbody>
                                 </table>
@@ -625,7 +685,7 @@ export default function RekonsiliasiBankPage() {
                                         <h4 className="font-bold text-sm text-gray-800">1. Data Xilnex Sales</h4>
                                     </div>
                                     <p className="text-xs text-gray-500">
-                                        File Excel Cash & Card Automation_...xlsx (Ref 1).
+                                        File Excel Cash & Card Automation_...xlsx (Ref 1 - Kolom F).
                                     </p>
                                 </div>
                                 <div className="space-y-2">
@@ -910,13 +970,13 @@ export default function RekonsiliasiBankPage() {
 
                 {selectedRowDetail && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-xs p-4">
-                        <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                        <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
                             <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                                 <div>
                                     <h3 className="font-bold text-sm text-gray-800">
-                                        Rincian Transaksi: {selectedRowDetail.outcode} ({selectedRowDetail.bank}) - {selectedRowDetail.date}
+                                        Rincian Transaksi: {selectedRowDetail.outcode} ({selectedRowDetail.storeName}) - {selectedRowDetail.date}
                                     </h3>
-                                    <span className="text-xs text-gray-500">Status: {selectedRowDetail.statusLabel}</span>
+                                    <span className="text-xs text-gray-500">Cabang PKU: {selectedRowDetail.cabang_pku || '-'}</span>
                                 </div>
                                 <button
                                     onClick={() => setSelectedRowDetail(null)}
@@ -927,18 +987,45 @@ export default function RekonsiliasiBankPage() {
                             </div>
 
                             <div className="p-6 overflow-y-auto space-y-6 text-xs">
-                                <div className="grid grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
                                     <div>
-                                        <span className="text-gray-500 block">Total Xilnex</span>
-                                        <span className="font-bold font-mono text-blue-700 text-sm">{formatRupiah(selectedRowDetail.xilnexTotal)}</span>
+                                        <span className="text-gray-500 block">Cashless Xilnex (Col F)</span>
+                                        <span className="font-bold font-mono text-blue-800 text-sm">{formatRupiah(selectedRowDetail.cashlessXilnex)}</span>
                                     </div>
                                     <div>
-                                        <span className="text-gray-500 block">Total Mutasi Bank (Net)</span>
-                                        <span className="font-bold font-mono text-emerald-700 text-sm">{formatRupiah(selectedRowDetail.bankNet)}</span>
+                                        <span className="text-gray-500 block">Total Bank Gross</span>
+                                        <span className="font-bold font-mono text-purple-800 text-sm">{formatRupiah(selectedRowDetail.totalBankGross)}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-500 block">Total Bank MDR</span>
+                                        <span className="font-bold font-mono text-amber-700 text-sm">{formatRupiah(selectedRowDetail.totalBankMdr)}</span>
                                     </div>
                                     <div>
                                         <span className="text-gray-500 block">Selisih Net</span>
                                         <span className="font-bold font-mono text-red-600 text-sm">{formatRupiah(selectedRowDetail.selisihNet)}</span>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h4 className="font-bold text-gray-700">Rincian Bank BCA & BRI:</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="p-3 bg-blue-50/40 rounded-xl border border-blue-100">
+                                            <span className="font-bold text-blue-900 block mb-1">🏦 Bank BCA</span>
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between"><span>Gross:</span><span className="font-mono font-bold text-blue-900">{formatRupiah(selectedRowDetail.bcaGross)}</span></div>
+                                                <div className="flex justify-between"><span>MDR:</span><span className="font-mono text-amber-700">{formatRupiah(selectedRowDetail.bcaMdr)}</span></div>
+                                                <div className="flex justify-between"><span>Net:</span><span className="font-mono font-bold text-emerald-800">{formatRupiah(selectedRowDetail.bcaNet)}</span></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-3 bg-orange-50/40 rounded-xl border border-orange-100">
+                                            <span className="font-bold text-orange-900 block mb-1">🏦 Bank BRI</span>
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between"><span>Gross:</span><span className="font-mono font-bold text-orange-900">{formatRupiah(selectedRowDetail.briGross)}</span></div>
+                                                <div className="flex justify-between"><span>MDR:</span><span className="font-mono text-amber-700">{formatRupiah(selectedRowDetail.briMdr)}</span></div>
+                                                <div className="flex justify-between"><span>Net:</span><span className="font-mono font-bold text-emerald-800">{formatRupiah(selectedRowDetail.briNet)}</span></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -951,6 +1038,7 @@ export default function RekonsiliasiBankPage() {
                                             <table className="min-w-full text-left divide-y divide-gray-200">
                                                 <thead className="bg-gray-50 font-bold text-gray-600">
                                                     <tr>
+                                                        <th className="p-2">Bank</th>
                                                         <th className="p-2">Tgl</th>
                                                         <th className="p-2">MID</th>
                                                         <th className="p-2">Tag</th>
@@ -962,12 +1050,13 @@ export default function RekonsiliasiBankPage() {
                                                 <tbody className="divide-y divide-gray-100">
                                                     {selectedRowDetail.rawBank.map((b, i) => (
                                                         <tr key={i}>
+                                                            <td className="p-2 font-bold">{b.bank_name}</td>
                                                             <td className="p-2">{b.tanggal_mutasi}</td>
                                                             <td className="p-2 font-mono">{b.mid}</td>
                                                             <td className="p-2">{b.category_tag}</td>
-                                                            <td className="p-2 text-right font-mono">{formatRupiah(b.gross_amount)}</td>
+                                                            <td className="p-2 text-right font-mono font-bold text-purple-900">{formatRupiah(b.gross_amount)}</td>
                                                             <td className="p-2 text-right font-mono text-amber-700">{formatRupiah(b.mdr_amount)}</td>
-                                                            <td className="p-2 text-right font-mono font-bold text-emerald-700">{formatRupiah(b.net_amount)}</td>
+                                                            <td className="p-2 text-right font-mono text-emerald-700">{formatRupiah(b.net_amount)}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>

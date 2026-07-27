@@ -141,45 +141,59 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
         }
     });
 
+    // 1. Map Xilnex Cashless Sales (Ref 1 Column F: card_amount) by (date, outcode)
     const xilnexMap = {};
     (xilnexSales || []).forEach(item => {
         const outcode = (item.outcode || '').toUpperCase();
-        const date = item.tanggal;
-        const bank = item.bank_type; // 'BCA' | 'BRI'
-        const key = date + "__" + outcode + "__" + bank;
+        const date = item.tanggal_jual || item.tanggal;
+        if (!date || !outcode) return;
+        const key = date + "__" + outcode;
 
         if (!xilnexMap[key]) {
             xilnexMap[key] = {
                 date,
                 outcode,
-                bank,
-                xilnexTotal: 0,
+                cashlessXilnex: 0,
                 items: []
             };
         }
-        xilnexMap[key].xilnexTotal += item.amount || 0;
+        // Column F (card_amount) represents Cashless Xilnex
+        xilnexMap[key].cashlessXilnex += (item.card_amount || item.amount || 0);
         xilnexMap[key].items.push(item);
     });
 
+    // 2. Map Bank Mutations (BCA & BRI) by (date, outcode)
     const bankMap = {};
     (bankMutations || []).forEach(b => {
         const date = b.tanggal_mutasi;
         const outcode = (b.outcode || 'UNMAPPED').toUpperCase();
-        const bank = b.bank_name; // 'BCA' | 'BRI'
-        const key = date + "__" + outcode + "__" + bank;
+        if (!date) return;
+        const key = date + "__" + outcode;
 
         if (!bankMap[key]) {
             bankMap[key] = {
                 date,
                 outcode,
-                bank,
-                bankNet: 0,
-                bankMdr: 0,
+                bcaGross: 0,
+                bcaMdr: 0,
+                bcaNet: 0,
+                briGross: 0,
+                briMdr: 0,
+                briNet: 0,
                 items: []
             };
         }
-        bankMap[key].bankNet += b.net_amount || 0;
-        bankMap[key].bankMdr += b.mdr_amount || 0;
+
+        const isBca = (b.bank_name || '').toUpperCase() === 'BCA';
+        if (isBca) {
+            bankMap[key].bcaGross += b.gross_amount || 0;
+            bankMap[key].bcaMdr += b.mdr_amount || 0;
+            bankMap[key].bcaNet += b.net_amount || 0;
+        } else {
+            bankMap[key].briGross += b.gross_amount || 0;
+            bankMap[key].briMdr += b.mdr_amount || 0;
+            bankMap[key].briNet += b.net_amount || 0;
+        }
         bankMap[key].items.push(b);
     });
 
@@ -187,25 +201,43 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
     const results = [];
 
     allKeys.forEach(key => {
-        const [date, outcode, bank] = key.split('_');
-        const xRecord = xilnexMap[key] || { xilnexTotal: 0, items: [] };
-        let bRecord = bankMap[key] || { bankNet: 0, bankMdr: 0, items: [] };
+        const [date, outcode] = key.split('__');
+        const xRecord = xilnexMap[key] || { cashlessXilnex: 0, items: [] };
+        let bRecord = bankMap[key] || {
+            bcaGross: 0, bcaMdr: 0, bcaNet: 0,
+            briGross: 0, briMdr: 0, briNet: 0,
+            items: []
+        };
 
-        if (xRecord.xilnexTotal > 0 && bRecord.bankNet === 0 && toleranceH1) {
+        const currentBankGross = bRecord.bcaGross + bRecord.briGross;
+
+        // Tolerance H+1 (T+1 settlement check)
+        if (xRecord.cashlessXilnex > 0 && currentBankGross === 0 && toleranceH1) {
             const dateObj = new Date(date);
             dateObj.setDate(dateObj.getDate() + 1);
             const h1Date = dateObj.toLocaleDateString('sv-SE');
-            const h1Key = h1Date + "__" + outcode + "__" + bank;
+            const h1Key = h1Date + "__" + outcode;
 
-            if (bankMap[h1Key] && bankMap[h1Key].bankNet > 0) {
+            if (bankMap[h1Key] && (bankMap[h1Key].bcaGross + bankMap[h1Key].briGross) > 0) {
                 bRecord = bankMap[h1Key];
             }
         }
 
-        const xilnexTotal = xRecord.xilnexTotal;
-        const bankNet = bRecord.bankNet;
-        const bankMdr = bRecord.bankMdr;
-        const selisihNet = xilnexTotal - bankNet;
+        const cashlessXilnex = xRecord.cashlessXilnex;
+        const bcaGross = bRecord.bcaGross;
+        const bcaMdr = bRecord.bcaMdr;
+        const bcaNet = bRecord.bcaNet;
+
+        const briGross = bRecord.briGross;
+        const briMdr = bRecord.briMdr;
+        const briNet = bRecord.briNet;
+
+        const totalBankGross = bcaGross + briGross;
+        const totalBankMdr = bcaMdr + briMdr;
+        const totalBankNet = bcaNet + briNet;
+
+        // Selisih Net = Cashless Xilnex - sum(MDR Gross BCA + BRI)
+        const selisihNet = cashlessXilnex - totalBankGross;
 
         let status = 'Cocok';
         let statusLabel = 'Cocok (Rp 0)';
@@ -215,7 +247,7 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
             status = 'Unmapped';
             statusLabel = 'MID Belum Terhubung';
             badgeColor = 'bg-amber-100 text-amber-800 border-amber-300';
-        } else if (xilnexTotal > 0 && bankNet === 0) {
+        } else if (cashlessXilnex > 0 && totalBankGross === 0) {
             status = 'BelumMutasi';
             statusLabel = 'Belum Ada Mutasi Bank';
             badgeColor = 'bg-orange-100 text-orange-800 border-orange-300';
@@ -233,10 +265,16 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
             outcode,
             storeName,
             cabang_pku: cabangPku,
-            bank,
-            xilnexTotal,
-            bankNet,
-            bankMdr,
+            cashlessXilnex,
+            bcaGross,
+            bcaMdr,
+            bcaNet,
+            briGross,
+            briMdr,
+            briNet,
+            totalBankGross,
+            totalBankMdr,
+            totalBankNet,
             selisihNet,
             status,
             statusLabel,
@@ -259,14 +297,18 @@ export async function syncSummariesToSupabase(reconGrid) {
         const rows = reconGrid.map(r => ({
             recon_date: r.date,
             outcode: r.outcode,
-            bank_name: r.bank,
-            xilnex_gross: r.xilnexTotal,
-            bank_net: r.bankNet,
-            bank_mdr: r.bankMdr,
+            xilnex_cashless: r.cashlessXilnex,
+            bca_gross: r.bcaGross,
+            bca_mdr: r.bcaMdr,
+            bca_net: r.bcaNet,
+            bri_gross: r.briGross,
+            bri_mdr: r.briMdr,
+            bri_net: r.briNet,
+            total_bank_gross: r.totalBankGross,
             selisih_net: r.selisihNet,
             status_matching: r.status
         }));
-        await supabase.from('recon_daily_summaries').upsert(rows, { onConflict: 'recon_date,outcode,bank_name' });
+        await supabase.from('recon_daily_summaries').upsert(rows, { onConflict: 'recon_date,outcode' });
     } catch (e) {
         // Silent fallback
     }
