@@ -1,187 +1,247 @@
 import { supabase } from './supabaseClient';
 
-const MASTER_CACHE_KEY = 'alpro_reconcile_master_mappings';
+const MASTER_STORAGE_KEY = 'alpro_recon_master_mappings_v1';
 
-/**
- * Get or load all Store Master Mappings (Deposit Card, MID BRI, MID BCA, Cabang PKU)
- */
+const defaultMasterMappings = {
+    deposit_cards: {}, // bca_deposit_card -> outcode
+    bri_mids: {},      // mid_bri (cleaned) -> outcode
+    bca_mids: {},      // mid_bca (7 digit) -> outcode
+    pku_cabang: {}     // outcode -> cabang_pku
+};
+
 export function getStoredMasterMappings() {
     try {
-        const raw = localStorage.getItem(MASTER_CACHE_KEY);
-        return raw ? JSON.parse(raw) : { bri_mids: {}, bca_mids: {}, deposit_cards: {}, pku_cabang: {} };
-    } catch (e) {
-        return { bri_mids: {}, bca_mids: {}, deposit_cards: {}, pku_cabang: {} };
-    }
-}
-
-export function saveMasterMappings(masters) {
-    try {
-        const current = getStoredMasterMappings();
-        const updated = {
-            bri_mids: { ...current.bri_mids, ...(masters.bri_mids || {}) },
-            bca_mids: { ...current.bca_mids, ...(masters.bca_mids || {}) },
-            deposit_cards: { ...current.deposit_cards, ...(masters.deposit_cards || {}) },
-            pku_cabang: { ...current.pku_cabang, ...(masters.pku_cabang || {}) }
+        const raw = localStorage.getItem(MASTER_STORAGE_KEY);
+        if (!raw) return defaultMasterMappings;
+        const parsed = JSON.parse(raw);
+        return {
+            deposit_cards: parsed.deposit_cards || {},
+            bri_mids: parsed.bri_mids || {},
+            bca_mids: parsed.bca_mids || {},
+            pku_cabang: parsed.pku_cabang || {}
         };
-        localStorage.setItem(MASTER_CACHE_KEY, JSON.stringify(updated));
-        return updated;
     } catch (e) {
-        console.error('Failed to save master mappings:', e);
-        return masters;
+        console.error('Gagal membaca master mappings dari LocalStorage:', e);
+        return defaultMasterMappings;
     }
 }
 
-/**
- * Reconcile Xilnex Sales against Bank Mutations (BRI & BCA)
- * Option: toleranceH1 (boolean) - match sales on date T against bank mutation on T or T+1
- */
-export function computeReconciliation({
-    xilnexSales = [],
-    bankMutations = [],
-    storeProfiles = [],
-    toleranceH1 = true
-}) {
-    const masters = getStoredMasterMappings();
-
-    // Map outcode -> Store Info
-    const storeMap = {};
-    storeProfiles.forEach(p => {
-        const outcode = (p.outcode || p.kode_toko || p.username || '').toString().trim().toUpperCase();
-        if (outcode) {
-            storeMap[outcode] = {
-                username: p.username || outcode,
-                kode_toko: p.kode_toko || outcode,
-                email: p.email || '',
-                cabang_pku: masters.pku_cabang[outcode] || ''
-            };
-        }
-    });
-
-    // Grouping Key: `${outcode}_${date}_${bank}`
-    const grid = {};
-
-    const getRow = (outcode, date, bank) => {
-        const key = `${outcode}_${date}_${bank}`;
-        if (!grid[key]) {
-            const storeInfo = storeMap[outcode] || { username: outcode, kode_toko: outcode, cabang_pku: masters.pku_cabang[outcode] || '' };
-            grid[key] = {
-                key,
-                outcode,
-                storeName: storeInfo.username,
-                cabang_pku: storeInfo.cabang_pku,
-                date,
-                bank, // 'BCA' | 'BRI'
-                xilnexCardSales: 0,
-                xilnexOtherSales: 0,
-                xilnexTotal: 0,
-                bankGross: 0,
-                bankMdr: 0,
-                bankNet: 0,
-                xilnexRowsCount: 0,
-                bankRowsCount: 0,
-                rawXilnex: [],
-                rawBank: [],
-                unmappedCount: 0
-            };
-        }
-        return grid[key];
+export function saveMasterMappings(newPartial) {
+    const current = getStoredMasterMappings();
+    const updated = {
+        deposit_cards: { ...current.deposit_cards, ...(newPartial.deposit_cards || {}) },
+        bri_mids: { ...current.bri_mids, ...(newPartial.bri_mids || {}) },
+        bca_mids: { ...current.bca_mids, ...(newPartial.bca_mids || {}) },
+        pku_cabang: { ...current.pku_cabang, ...(newPartial.pku_cabang || {}) }
     };
+    try {
+        localStorage.setItem(MASTER_STORAGE_KEY, JSON.stringify(updated));
+    } catch (e) {
+        console.error('Gagal menyimpan master mappings ke LocalStorage:', e);
+    }
 
-    // 1. Process Xilnex Sales
-    xilnexSales.forEach(item => {
-        const bank = item.merchant_bank.includes('BRI') ? 'BRI' : item.merchant_bank.includes('BCA') ? 'BCA' : item.merchant_bank || 'LAINNYA';
-        const row = getRow(item.outcode, item.tanggal_jual, bank);
-        row.xilnexCardSales += Number(item.card_amount || 0);
-        row.xilnexOtherSales += Number(item.other_amount || 0);
-        row.xilnexTotal += Number(item.total_xilnex || 0);
-        row.xilnexRowsCount += 1;
-        row.rawXilnex.push(item);
+    // Auto-sync to Supabase database if tables exist (background sync)
+    syncMasterMappingsToSupabase(newPartial).catch(err => {
+        console.warn('Persist Supabase info:', err.message);
     });
 
-    // 2. Process Bank Mutations (with H+1 tolerance support)
-    bankMutations.forEach(bm => {
-        let matchedOutcode = bm.outcode;
+    return updated;
+}
 
-        // If outcode not found directly on mutation, try master maps
-        if (!matchedOutcode) {
-            if (bm.bank_name === 'BRI' && masters.bri_mids[bm.mid]) {
-                matchedOutcode = masters.bri_mids[bm.mid];
-            } else if (bm.bank_name === 'BCA' && masters.bca_mids[bm.mid]) {
-                matchedOutcode = masters.bca_mids[bm.mid];
+export async function syncMasterMappingsToSupabase(newPartial) {
+    try {
+        const rowsToUpsert = [];
+        if (newPartial.deposit_cards) {
+            Object.entries(newPartial.deposit_cards).forEach(([card, outcode]) => {
+                rowsToUpsert.append ? rowsToUpsert.append({ mapping_type: 'deposit_card', key_code: card, outcode_target: outcode })
+                : rowsToUpsert.push({ mapping_type: 'deposit_card', key_code: card, outcode_target: outcode });
+            });
+        }
+        if (newPartial.bri_mids) {
+            Object.entries(newPartial.bri_mids).forEach(([mid, outcode]) => {
+                rowsToUpsert.push({ mapping_type: 'bri_mid', key_code: mid, outcode_target: outcode });
+            });
+        }
+        if (newPartial.bca_mids) {
+            Object.entries(newPartial.bca_mids).forEach(([mid, outcode]) => {
+                rowsToUpsert.push({ mapping_type: 'bca_mid', key_code: mid, outcode_target: outcode });
+            });
+        }
+        if (newPartial.pku_cabang) {
+            Object.entries(newPartial.pku_cabang).forEach(([outcode, cabang]) => {
+                rowsToUpsert.push({ mapping_type: 'pku_cabang', key_code: outcode, outcode_target: cabang });
+            });
+        }
+
+        if (rowsToUpsert.length > 0) {
+            const { error } = await supabase.from('recon_master_mids').upsert(rowsToUpsert, { onConflict: 'mapping_type,key_code' });
+            if (error) {
+                console.warn('Tabel recon_master_mids belum dibuat di Supabase (data tersimpan aman di browser LocalStorage).');
+            }
+        }
+    } catch (e) {
+        console.warn('Supabase sync warning:', e.message);
+    }
+}
+
+export async function fetchMasterMappingsFromSupabase() {
+    try {
+        const { data, error } = await supabase.from('recon_master_mids').select('*');
+        if (error || !data || data.length === 0) return null;
+
+        const mappings = { deposit_cards: {}, bri_mids: {}, bca_mids: {}, pku_cabang: {} };
+        data.forEach(item => {
+            if (item.mapping_type === 'deposit_card') mappings.deposit_cards[item.key_code] = item.outcode_target;
+            else if (item.mapping_type === 'bri_mid') mappings.bri_mids[item.key_code] = item.outcode_target;
+            else if (item.mapping_type === 'bca_mid') mappings.bca_mids[item.key_code] = item.outcode_target;
+            else if (item.mapping_type === 'pku_cabang') mappings.pku_cabang[item.key_code] = item.outcode_target;
+        });
+
+        // Save to local storage for caching
+        saveMasterMappings(mappings);
+        return mappings;
+    } catch (e) {
+        return null;
+    }
+}
+
+export function computeReconciliation({ xilnexSales, bankMutations, storeProfiles, toleranceH1 = true }) {
+    const masters = getStoredMasterMappings();
+    const profileMap = {};
+    (storeProfiles || []).forEach(p => {
+        if (p.kode_toko) {
+            profileMap[p.kode_toko.toUpperCase()] = p.username || p.kode_toko;
+        }
+    });
+
+    const xilnexMap = {};
+    (xilnexSales || []).forEach(item => {
+        const outcode = (item.outcode || '').toUpperCase();
+        const date = item.tanggal;
+        const bank = item.bank_type; // 'BCA' | 'BRI'
+        const key = `${date}_${outcode}_${bank}`;
+
+        if (!xilnexMap[key]) {
+            xilnexMap[key] = {
+                date,
+                outcode,
+                bank,
+                xilnexTotal: 0,
+                items: []
+            };
+        }
+        xilnexMap[key].xilnexTotal += item.amount || 0;
+        xilnexMap[key].items.push(item);
+    });
+
+    const bankMap = {};
+    (bankMutations || []).forEach(b => {
+        const date = b.tanggal_mutasi;
+        const outcode = (b.outcode || 'UNMAPPED').toUpperCase();
+        const bank = b.bank_name; // 'BCA' | 'BRI'
+        const key = `${date}_${outcode}_${bank}`;
+
+        if (!bankMap[key]) {
+            bankMap[key] = {
+                date,
+                outcode,
+                bank,
+                bankNet: 0,
+                bankMdr: 0,
+                items: []
+            };
+        }
+        bankMap[key].bankNet += b.net_amount || 0;
+        bankMap[key].bankMdr += b.mdr_amount || 0;
+        bankMap[key].items.push(b);
+    });
+
+    const allKeys = new Set([...Object.keys(xilnexMap), ...Object.keys(bankMap)]);
+    const results = [];
+
+    allKeys.forEach(key => {
+        const [date, outcode, bank] = key.split('_');
+        const xRecord = xilnexMap[key] || { xilnexTotal: 0, items: [] };
+        let bRecord = bankMap[key] || { bankNet: 0, bankMdr: 0, items: [] };
+
+        if (xRecord.xilnexTotal > 0 && bRecord.bankNet === 0 && toleranceH1) {
+            const dateObj = new Date(date);
+            dateObj.setDate(dateObj.getDate() + 1);
+            const h1Date = dateObj.toLocaleDateString('sv-SE');
+            const h1Key = `${h1Date}_${outcode}_${bank}`;
+
+            if (bankMap[h1Key] && bankMap[h1Key].bankNet > 0) {
+                bRecord = bankMap[h1Key];
             }
         }
 
-        const targetOutcode = matchedOutcode || 'UNMAPPED_' + bm.mid;
-
-        // Determine target date for matching (with H+1 tolerance check)
-        let targetDate = bm.tanggal_mutasi;
-
-        if (toleranceH1 && matchedOutcode) {
-            // Check if there is an existing Xilnex record on T-1 date
-            const d = new Date(bm.tanggal_mutasi);
-            d.setDate(d.getDate() - 1);
-            const prevDate = d.toISOString().split('T')[0];
-
-            const prevKey = `${matchedOutcode}_${prevDate}_${bm.bank_name}`;
-            const sameKey = `${matchedOutcode}_${bm.tanggal_mutasi}_${bm.bank_name}`;
-
-            if (grid[prevKey] && grid[prevKey].xilnexTotal > 0 && (!grid[sameKey] || grid[sameKey].xilnexTotal === 0)) {
-                targetDate = prevDate;
-            }
-        }
-
-        const row = getRow(targetOutcode, targetDate, bm.bank_name);
-        row.bankGross += Number(bm.gross_amount || 0);
-        row.bankMdr += Number(bm.mdr_amount || 0);
-        row.bankNet += Number(bm.net_amount || 0);
-        row.bankRowsCount += 1;
-        row.rawBank.push(bm);
-        if (!matchedOutcode) row.unmappedCount += 1;
-    });
-
-    // 3. Compute Differences & Status Badges
-    const result = Object.values(grid).map(row => {
-        const selisihNet = row.xilnexTotal - row.bankNet;
-        const selisihGross = row.xilnexTotal - row.bankGross;
+        const xilnexTotal = xRecord.xilnexTotal;
+        const bankNet = bRecord.bankNet;
+        const bankMdr = bRecord.bankMdr;
+        const selisihNet = xilnexTotal - bankNet;
 
         let status = 'Cocok';
-        let badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-        let statusLabel = 'Cocok (0)';
+        let statusLabel = 'Cocok (Rp 0)';
+        let badgeColor = 'bg-emerald-100 text-emerald-800 border-emerald-300';
 
-        if (row.outcode.startsWith('UNMAPPED_')) {
+        if (outcode === 'UNMAPPED') {
             status = 'Unmapped';
-            badgeColor = 'bg-purple-50 text-purple-700 border-purple-200';
             statusLabel = 'MID Belum Terhubung';
-        } else if (row.xilnexTotal > 0 && row.bankNet === 0) {
+            badgeColor = 'bg-amber-100 text-amber-800 border-amber-300';
+        } else if (xilnexTotal > 0 && bankNet === 0) {
             status = 'BelumMutasi';
-            badgeColor = 'bg-amber-50 text-amber-700 border-amber-200';
-            statusLabel = 'Belum Ada Mutasi';
-        } else if (Math.abs(selisihNet) > 100) { // Toleransi Rp 100 untuk pembulatan MDR
-            if (selisihNet > 0) {
-                status = 'SelisihXilnexTinggi';
-                badgeColor = 'bg-red-50 text-red-700 border-red-200';
-                statusLabel = `Xilnex > Bank (+${Math.round(selisihNet).toLocaleString('id-ID')})`;
-            } else {
-                status = 'SelisihBankTinggi';
-                badgeColor = 'bg-blue-50 text-blue-700 border-blue-200';
-                statusLabel = `Bank > Xilnex (${Math.round(selisihNet).toLocaleString('id-ID')})`;
-            }
+            statusLabel = 'Belum Ada Mutasi Bank';
+            badgeColor = 'bg-orange-100 text-orange-800 border-orange-300';
+        } else if (selisihNet !== 0) {
+            status = 'Selisih';
+            statusLabel = `Selisih Rp ${Math.abs(selisihNet).toLocaleString('id-ID')}`;
+            badgeColor = 'bg-red-100 text-red-800 border-red-300';
         }
 
-        return {
-            ...row,
+        const cabangPku = masters.pku_cabang[outcode] || '';
+        const storeName = profileMap[outcode] || outcode;
+
+        results.push({
+            date,
+            outcode,
+            storeName,
+            cabang_pku: cabangPku,
+            bank,
+            xilnexTotal,
+            bankNet,
+            bankMdr,
             selisihNet,
-            selisihGross,
             status,
+            statusLabel,
             badgeColor,
-            statusLabel
-        };
+            rawXilnex: xRecord.items,
+            rawBank: bRecord.items
+        });
     });
 
-    result.sort((a, b) => {
-        if (b.date !== a.date) return b.date.localeCompare(a.date);
-        return a.outcode.localeCompare(b.outcode);
-    });
+    results.sort((a, b) => b.date.localeCompare(a.date) || a.outcode.localeCompare(b.outcode));
 
-    return result;
+    // Auto sync summaries to Supabase if table exists
+    syncSummariesToSupabase(results).catch(() => {});
+
+    return results;
+}
+
+export async function syncSummariesToSupabase(reconGrid) {
+    try {
+        if (!reconGrid || reconGrid.length === 0) return;
+        const rows = reconGrid.map(r => ({
+            recon_date: r.date,
+            outcode: r.outcode,
+            bank_name: r.bank,
+            xilnex_gross: r.xilnexTotal,
+            bank_net: r.bankNet,
+            bank_mdr: r.bankMdr,
+            selisih_net: r.selisihNet,
+            status_matching: r.status
+        }));
+        await supabase.from('recon_daily_summaries').upsert(rows, { onConflict: 'recon_date,outcode,bank_name' });
+    } catch (e) {
+        // Silent fallback if table does not exist
+    }
 }

@@ -8,7 +8,8 @@ import NotificationDrawer from './NotificationDrawer';
 const NAV_ITEMS = [
     { label: 'Dashboard', icon: 'dashboard', path: '/admin/beranda' },
     { label: 'Manajemen Laporan', icon: 'table_view', path: '/admin/laporan' },
-    { label: 'Rekonsiliasi Xilnex', icon: 'compare', path: '/admin/rekonsiliasi' },
+    { label: 'Rekonsiliasi Setoran & Xilnex', icon: 'compare', path: '/admin/rekonsiliasi' },
+    { label: 'Rekonsiliasi Bank BCA & BRI', icon: 'account_balance', path: '/admin/rekonsiliasi-bank' },
     { label: 'Laporan Analitik', icon: 'bar_chart', path: '/admin/analitik' },
     { label: 'Laporan Pending', icon: 'pending_actions', path: '/admin/pending' },
     { label: 'Audit Input Backdate', icon: 'history_toggle_off', path: '/admin/backdate' },

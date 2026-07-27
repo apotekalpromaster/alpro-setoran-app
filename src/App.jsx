@@ -28,6 +28,7 @@ import LaporanBackdatePage from './pages/LaporanBackdatePage';
 
 // Phase 9 (Improvement V2)
 import RekonsiliasiPOSPage from './pages/RekonsiliasiPOSPage';
+import RekonsiliasiBankPage from './pages/RekonsiliasiBankPage';
 import KoreksiLaporanPage from './pages/KoreksiLaporanPage';
 import AreaManagerKoreksiApprovalPage from './pages/AreaManagerKoreksiApprovalPage';
 import AreaManagerTroubleshootingPage from './pages/AreaManagerTroubleshootingPage';
