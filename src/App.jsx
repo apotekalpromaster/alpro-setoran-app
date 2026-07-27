@@ -229,6 +229,14 @@ export default function App() {
             }
           />
           <Route
+            path="/admin/rekonsiliasi-bank"
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
+                <RekonsiliasiBankPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/troubleshooting"
             element={
               <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
