@@ -15,13 +15,15 @@ import {
 import {
     getStoredMasterMappings,
     saveMasterMappings,
+    syncMasterMappingsToSupabase,
+    fetchMasterMappingsFromSupabase,
     computeReconciliation
 } from '../services/reconciliationService';
 
 export default function RekonsiliasiBankPage() {
     const { profile } = useAuth();
 
-    const [activeTab, setActiveTab] = useState('tabel');
+    const [activeTab, setActiveTab] = useState('tabel'); // 'tabel' | 'upload' | 'masters'
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
@@ -42,15 +44,29 @@ export default function RekonsiliasiBankPage() {
     const [storeProfiles, setStoreProfiles] = useState([]);
     const [masterMappings, setMasterMappings] = useState(() => getStoredMasterMappings());
 
-    const [uploadedXilnexName, setUploadedXilnexName] = useState('');
-    const [uploadedBriName, setUploadedBriName] = useState('');
-    const [uploadedBcaName, setUploadedBcaName] = useState('');
-    const [masterUploadStatus, setMasterUploadStatus] = useState('');
+    // File selection states & parsed previews
+    const [fileXilnex, setFileXilnex] = useState(null);
+    const [parsedXilnex, setParsedXilnex] = useState([]);
+
+    const [fileBriMut, setFileBriMut] = useState(null);
+    const [parsedBriMut, setParsedBriMut] = useState([]);
+
+    const [fileBcaMut, setFileBcaMut] = useState(null);
+    const [parsedBcaMut, setParsedBcaMut] = useState([]);
+
+    // Master File states
+    const [masterFiles, setMasterFiles] = useState({
+        deposit_card: { file: null, parsed: [], count: 0, loading: false },
+        bri_mid: { file: null, parsed: [], count: 0, loading: false },
+        bca_mid: { file: null, parsed: [], count: 0, loading: false },
+        pku_cabang: { file: null, parsed: [], count: 0, loading: false }
+    });
 
     const [selectedRowDetail, setSelectedRowDetail] = useState(null);
 
     useEffect(() => {
         fetchStoreProfiles();
+        loadInitialMasters();
     }, []);
 
     const fetchStoreProfiles = async () => {
@@ -66,6 +82,24 @@ export default function RekonsiliasiBankPage() {
             console.error('Gagal memuat profil toko:', e.message);
         }
     };
+
+    const loadInitialMasters = async () => {
+        const dbMasters = await fetchMasterMappingsFromSupabase();
+        if (dbMasters) {
+            setMasterMappings(dbMasters);
+        } else {
+            setMasterMappings(getStoredMasterMappings());
+        }
+    };
+
+    const masterCounts = useMemo(() => {
+        return {
+            deposit_card: Object.keys(masterMappings.deposit_cards || {}).length,
+            bri_mid: Object.keys(masterMappings.bri_mids || {}).length,
+            bca_mid: Object.keys(masterMappings.bca_mids || {}).length,
+            pku_cabang: Object.keys(masterMappings.pku_cabang || {}).length
+        };
+    }, [masterMappings]);
 
     const reconGrid = useMemo(() => {
         return computeReconciliation({
@@ -129,19 +163,17 @@ export default function RekonsiliasiBankPage() {
         };
     }, [filteredGrid]);
 
-    const handleUploadXilnex = (e) => {
+    const handleSelectXilnex = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        setUploadedXilnexName(file.name);
+        setFileXilnex(file);
         setError('');
-        setSuccessMsg('');
 
         const reader = new FileReader();
         reader.onload = (evt) => {
             try {
                 const parsed = parseXilnexSalesExcel(evt.target.result);
-                setRawXilnexSales(parsed);
-                setSuccessMsg(`Berhasil membaca ${parsed.length} baris data penjualan non-tunai Xilnex.`);
+                setParsedXilnex(parsed);
             } catch (err) {
                 setError('Gagal membaca file Xilnex: ' + err.message);
             }
@@ -149,19 +181,17 @@ export default function RekonsiliasiBankPage() {
         reader.readAsArrayBuffer(file);
     };
 
-    const handleUploadBriMutation = (e) => {
+    const handleSelectBriMut = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        setUploadedBriName(file.name);
+        setFileBriMut(file);
         setError('');
-        setSuccessMsg('');
 
         const reader = new FileReader();
         reader.onload = (evt) => {
             try {
                 const parsed = parseBriMutationExcel(evt.target.result, masterMappings.bri_mids);
-                setRawBankMutations(prev => [...prev.filter(b => b.bank_name !== 'BRI'), ...parsed]);
-                setSuccessMsg(`Berhasil membaca ${parsed.length} baris mutasi BRI (OffUs / OnUs / QRIS).`);
+                setParsedBriMut(parsed);
             } catch (err) {
                 setError('Gagal membaca file mutasi BRI: ' + err.message);
             }
@@ -169,19 +199,17 @@ export default function RekonsiliasiBankPage() {
         reader.readAsArrayBuffer(file);
     };
 
-    const handleUploadBcaMutation = (e) => {
+    const handleSelectBcaMut = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        setUploadedBcaName(file.name);
+        setFileBcaMut(file);
         setError('');
-        setSuccessMsg('');
 
         const reader = new FileReader();
         reader.onload = (evt) => {
             try {
                 const parsed = parseBcaMutationExcel(evt.target.result, masterMappings.bca_mids);
-                setRawBankMutations(prev => [...prev.filter(b => b.bank_name !== 'BCA'), ...parsed]);
-                setSuccessMsg(`Berhasil membaca ${parsed.length} baris mutasi BCA (KR OTOMATIS / KREDIT / TANGGAL).`);
+                setParsedBcaMut(parsed);
             } catch (err) {
                 setError('Gagal membaca file mutasi BCA: ' + err.message);
             }
@@ -189,57 +217,125 @@ export default function RekonsiliasiBankPage() {
         reader.readAsArrayBuffer(file);
     };
 
-    const handleUploadMasterFile = (e, masterType) => {
+    const handleProcessDailyUploads = () => {
+        setError('');
+        setSuccessMsg('');
+        let countAdded = 0;
+
+        if (parsedXilnex.length > 0) {
+            setRawXilnexSales(parsedXilnex);
+            countAdded += parsedXilnex.length;
+        }
+
+        let newMutations = [...rawBankMutations];
+        if (parsedBriMut.length > 0) {
+            newMutations = [...newMutations.filter(b => b.bank_name !== 'BRI'), ...parsedBriMut];
+            countAdded += parsedBriMut.length;
+        }
+        if (parsedBcaMut.length > 0) {
+            newMutations = [...newMutations.filter(b => b.bank_name !== 'BCA'), ...parsedBcaMut];
+            countAdded += parsedBcaMut.length;
+        }
+
+        setRawBankMutations(newMutations);
+
+        if (countAdded > 0) {
+            setSuccessMsg("Berhasil memproses total " + countAdded + " baris data transaksi harian Xilnex & Bank.");
+            setActiveTab('tabel');
+        } else {
+            setError('Pilih minimal 1 file Excel (Xilnex / BRI / BCA) terlebih dahulu sebelum menekan tombol proses.');
+        }
+    };
+
+    const handleSelectMasterFile = (e, masterType) => {
         const file = e.target.files[0];
         if (!file) return;
-        setMasterUploadStatus(`Membaca ${file.name}...`);
-        setError('');
 
         const reader = new FileReader();
         reader.onload = (evt) => {
             try {
                 const buffer = evt.target.result;
-                let newMasters = { ...masterMappings };
+                let parsed = [];
+                if (masterType === 'deposit_card') parsed = parseDepositCardExcel(buffer);
+                else if (masterType === 'bri_mid') parsed = parseBriMidExcel(buffer);
+                else if (masterType === 'bca_mid') parsed = parseBcaMidExcel(buffer);
+                else if (masterType === 'pku_cabang') parsed = parsePkuCabangExcel(buffer);
 
-                if (masterType === 'deposit_card') {
-                    const list = parseDepositCardExcel(buffer);
-                    const map = {};
-                    list.forEach(item => { map[item.bca_deposit_card] = item.outcode; });
-                    newMasters = saveMasterMappings({ deposit_cards: map });
-                    setMasterUploadStatus(`Berhasil memperbarui ${list.length} data Deposit Card BCA.`);
-                } else if (masterType === 'bri_mid') {
-                    const list = parseBriMidExcel(buffer);
-                    const map = {};
-                    list.forEach(item => { map[item.mid_bri] = item.outcode; });
-                    newMasters = saveMasterMappings({ bri_mids: map });
-                    setMasterUploadStatus(`Berhasil memperbarui ${list.length} data MID BRI.`);
-                } else if (masterType === 'bca_mid') {
-                    const list = parseBcaMidExcel(buffer);
-                    const map = {};
-                    list.forEach(item => { map[item.mid_bca] = item.outcode; });
-                    newMasters = saveMasterMappings({ bca_mids: map });
-                    setMasterUploadStatus(`Berhasil memperbarui ${list.length} data MID BCA.`);
-                } else if (masterType === 'pku_cabang') {
-                    const list = parsePkuCabangExcel(buffer);
-                    const map = {};
-                    list.forEach(item => { map[item.outcode] = item.cabang_pku; });
-                    newMasters = saveMasterMappings({ pku_cabang: map });
-                    setMasterUploadStatus(`Berhasil memperbarui ${list.length} data Kode Cabang PKU.`);
-                }
-
-                setMasterMappings(newMasters);
+                setMasterFiles(prev => ({
+                    ...prev,
+                    [masterType]: { file, parsed, count: parsed.length, loading: false }
+                }));
+                setError('');
             } catch (err) {
-                setError(`Gagal memuat master ${masterType}: ` + err.message);
-                setMasterUploadStatus('');
+                setError("Gagal membaca file master " + masterType + ": " + err.message);
             }
         };
         reader.readAsArrayBuffer(file);
     };
 
+    const handleProcessMasterFile = async (masterType) => {
+        const item = masterFiles[masterType];
+        if (!item.file || item.parsed.length === 0) {
+            setError('Pilih file Excel master yang valid terlebih dahulu.');
+            return;
+        }
+
+        setMasterFiles(prev => ({
+            ...prev,
+            [masterType]: { ...prev[masterType], loading: true }
+        }));
+        setError('');
+        setSuccessMsg('');
+
+        try {
+            let partialMapping = {};
+
+            if (masterType === 'deposit_card') {
+                const map = {};
+                item.parsed.forEach(i => { map[i.bca_deposit_card] = i.outcode; });
+                partialMapping = { deposit_cards: map };
+            } else if (masterType === 'bri_mid') {
+                const map = {};
+                item.parsed.forEach(i => { map[i.mid_bri] = i.outcode; });
+                partialMapping = { bri_mids: map };
+            } else if (masterType === 'bca_mid') {
+                const map = {};
+                item.parsed.forEach(i => { map[i.mid_bca] = i.outcode; });
+                partialMapping = { bca_mids: map };
+            } else if (masterType === 'pku_cabang') {
+                const map = {};
+                item.parsed.forEach(i => { map[i.outcode] = i.cabang_pku; });
+                partialMapping = { pku_cabang: map };
+            }
+
+            const updated = saveMasterMappings(partialMapping);
+            setMasterMappings(updated);
+
+            const dbResult = await syncMasterMappingsToSupabase(partialMapping);
+
+            if (dbResult.success) {
+                setSuccessMsg("Berhasil memproses & menyimpan " + item.parsed.length + " data Master " + masterType.toUpperCase() + " ke Supabase Database & Browser Storage!");
+            } else {
+                setSuccessMsg("Master " + masterType.toUpperCase() + " tersimpan di browser Local Storage (" + item.parsed.length + " data). Supabase Note: " + (dbResult.error || "Tabel belum ada"));
+            }
+
+            setMasterFiles(prev => ({
+                ...prev,
+                [masterType]: { file: null, parsed: [], count: 0, loading: false }
+            }));
+        } catch (err) {
+            setError("Gagal memproses master " + masterType + ": " + err.message);
+            setMasterFiles(prev => ({
+                ...prev,
+                [masterType]: { ...prev[masterType], loading: false }
+            }));
+        }
+    };
+
     return (
         <AdminLayout title="Rekonsiliasi Transaksi Xilnex vs Mutasi Bank">
             <div className="max-w-screen-2xl mx-auto space-y-6">
-                
+
                 <div className="flex border-b border-gray-200 bg-white px-4 rounded-xl shadow-sm">
                     <button
                         onClick={() => setActiveTab('tabel')}
@@ -279,8 +375,8 @@ export default function RekonsiliasiBankPage() {
                 {error && (
                     <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-xl flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined">error</span>
-                            <span className="font-semibold text-sm">{error}</span>
+                            <span className="material-symbols-outlined text-lg">error</span>
+                            <span className="font-semibold text-xs">{error}</span>
                         </div>
                         <button onClick={() => setError('')} className="text-red-500 hover:text-red-700 font-bold cursor-pointer">✕</button>
                     </div>
@@ -288,8 +384,8 @@ export default function RekonsiliasiBankPage() {
                 {successMsg && (
                     <div className="p-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined">check_circle</span>
-                            <span className="font-semibold text-sm">{successMsg}</span>
+                            <span className="material-symbols-outlined text-lg">check_circle</span>
+                            <span className="font-semibold text-xs">{successMsg}</span>
                         </div>
                         <button onClick={() => setSuccessMsg('')} className="text-emerald-500 hover:text-emerald-700 font-bold cursor-pointer">✕</button>
                     </div>
@@ -418,7 +514,7 @@ export default function RekonsiliasiBankPage() {
                                 </span>
                                 {rawXilnexSales.length === 0 && rawBankMutations.length === 0 && (
                                     <span className="text-xs text-amber-600 font-semibold bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
-                                        ⚠️ Belum ada file yang diunggah. Silakan upload file Xilnex/Bank di tab "Pusat Upload".
+                                        ⚠️ Belum ada file harian diunggah. Silakan buka tab "Pusat Upload File Harian".
                                     </span>
                                 )}
                             </div>
@@ -515,84 +611,107 @@ export default function RekonsiliasiBankPage() {
                     <div className="max-w-4xl mx-auto space-y-6">
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center space-y-2">
                             <span className="material-symbols-outlined text-4xl text-primary-500">cloud_sync</span>
-                            <h3 className="text-lg font-bold text-gray-800">Unggah Berkas Harian (Xilnex & Bank)</h3>
+                            <h3 className="text-lg font-bold text-gray-800">Unggah Berkas Transaksi Harian</h3>
                             <p className="text-xs text-gray-500 max-w-lg mx-auto">
-                                Unggah file laporan Xilnex (Ref 1), mutasi BRI (Ref 5), dan mutasi BCA (Ref 6) untuk diproses secara otomatis oleh parser engine.
+                                Unggah file penjualan non-tunai Xilnex (Ref 1), mutasi BRI (Ref 5), dan mutasi BCA (Ref 6), lalu tekan <strong>"Proses & Mulai Rekonsiliasi"</strong>.
                             </p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between space-y-4">
                                 <div>
                                     <div className="flex items-center gap-2 text-primary-600 mb-2">
                                         <span className="material-symbols-outlined">receipt_long</span>
                                         <h4 className="font-bold text-sm text-gray-800">1. Data Xilnex Sales</h4>
                                     </div>
                                     <p className="text-xs text-gray-500">
-                                        File Excel `Cash & Card Automation_...xlsx` (Header Baris 14, Kolom F & G).
+                                        File Excel Cash & Card Automation_...xlsx (Ref 1).
                                     </p>
                                 </div>
                                 <div className="space-y-2">
-                                    {uploadedXilnexName && (
-                                        <span className="text-[11px] font-bold text-emerald-600 block truncate">
-                                            ✓ {uploadedXilnexName} ({rawXilnexSales.length} baris)
-                                        </span>
+                                    {fileXilnex ? (
+                                        <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs space-y-1">
+                                            <span className="font-bold text-blue-900 block truncate">📄 {fileXilnex.name}</span>
+                                            <span className="text-[11px] font-semibold text-blue-700 block">✓ {parsedXilnex.length} baris terdeteksi</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[11px] text-gray-400 block italic">Belum ada file dipilih</span>
                                     )}
                                     <label className="btn-primary w-full py-2 text-xs flex items-center justify-center gap-2 cursor-pointer">
                                         <span className="material-symbols-outlined text-base">upload_file</span>
-                                        Upload Xilnex Excel
-                                        <input type="file" accept=".xlsx,.xls" onChange={handleUploadXilnex} className="hidden" />
+                                        Pilih Xilnex Excel
+                                        <input type="file" accept=".xlsx,.xls" onChange={handleSelectXilnex} className="hidden" />
                                     </label>
                                 </div>
                             </div>
 
-                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between space-y-4">
                                 <div>
                                     <div className="flex items-center gap-2 text-orange-600 mb-2">
                                         <span className="material-symbols-outlined">account_balance</span>
                                         <h4 className="font-bold text-sm text-gray-800">2. Mutasi Bank BRI</h4>
                                     </div>
                                     <p className="text-xs text-gray-500">
-                                        File Excel `BRI PKU...xlsx` (Mengekstrak OffUs, OnUs, QRIS & MDR).
+                                        File Excel BRI PKU...xlsx (Ref 5 - OffUs, OnUs, QRIS).
                                     </p>
                                 </div>
                                 <div className="space-y-2">
-                                    {uploadedBriName && (
-                                        <span className="text-[11px] font-bold text-emerald-600 block truncate">
-                                            ✓ {uploadedBriName}
-                                        </span>
+                                    {fileBriMut ? (
+                                        <div className="p-2.5 bg-orange-50 border border-orange-200 rounded-xl text-xs space-y-1">
+                                            <span className="font-bold text-orange-900 block truncate">📄 {fileBriMut.name}</span>
+                                            <span className="text-[11px] font-semibold text-orange-700 block">✓ {parsedBriMut.length} mutasi terdeteksi</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[11px] text-gray-400 block italic">Belum ada file dipilih</span>
                                     )}
                                     <label className="bg-orange-600 hover:bg-orange-700 text-white font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm">
                                         <span className="material-symbols-outlined text-base">upload_file</span>
-                                        Upload Mutasi BRI
-                                        <input type="file" accept=".xlsx,.xls" onChange={handleUploadBriMutation} className="hidden" />
+                                        Pilih Mutasi BRI
+                                        <input type="file" accept=".xlsx,.xls" onChange={handleSelectBriMut} className="hidden" />
                                     </label>
                                 </div>
                             </div>
 
-                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between space-y-4">
                                 <div>
                                     <div className="flex items-center gap-2 text-blue-600 mb-2">
                                         <span className="material-symbols-outlined">account_balance</span>
                                         <h4 className="font-bold text-sm text-gray-800">3. Mutasi Bank BCA</h4>
                                     </div>
                                     <p className="text-xs text-gray-500">
-                                        File Excel `BCA PKU...xlsx` (Mengekstrak KR OTOMATIS, KREDIT, TGH & DDR).
+                                        File Excel BCA PKU...xlsx (Ref 6 - KR OTOMATIS, KREDIT).
                                     </p>
                                 </div>
                                 <div className="space-y-2">
-                                    {uploadedBcaName && (
-                                        <span className="text-[11px] font-bold text-emerald-600 block truncate">
-                                            ✓ {uploadedBcaName}
-                                        </span>
+                                    {fileBcaMut ? (
+                                        <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs space-y-1">
+                                            <span className="font-bold text-blue-900 block truncate">📄 {fileBcaMut.name}</span>
+                                            <span className="text-[11px] font-semibold text-blue-700 block">✓ {parsedBcaMut.length} mutasi terdeteksi</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[11px] text-gray-400 block italic">Belum ada file dipilih</span>
                                     )}
                                     <label className="bg-blue-600 hover:bg-blue-700 text-white font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm">
                                         <span className="material-symbols-outlined text-base">upload_file</span>
-                                        Upload Mutasi BCA
-                                        <input type="file" accept=".xlsx,.xls" onChange={handleUploadBcaMutation} className="hidden" />
+                                        Pilih Mutasi BCA
+                                        <input type="file" accept=".xlsx,.xls" onChange={handleSelectBcaMut} className="hidden" />
                                     </label>
                                 </div>
                             </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div className="text-xs text-gray-500 space-y-1">
+                                <span className="font-bold text-gray-800 block text-sm">Siap Memproses Rekonsiliasi?</span>
+                                <span>Pastikan Anda telah memilih file Excel harian yang ingin dibandingkan.</span>
+                            </div>
+                            <button
+                                onClick={handleProcessDailyUploads}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl text-xs flex items-center gap-2 transition-all shadow-md cursor-pointer whitespace-nowrap"
+                            >
+                                <span className="material-symbols-outlined text-lg">play_circle</span>
+                                Proses & Mulai Rekonsiliasi
+                            </button>
                         </div>
                     </div>
                 )}
@@ -601,58 +720,190 @@ export default function RekonsiliasiBankPage() {
                     <div className="max-w-4xl mx-auto space-y-6">
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center space-y-2">
                             <span className="material-symbols-outlined text-4xl text-primary-500">dataset</span>
-                            <h3 className="text-lg font-bold text-gray-800">Kelola File Master & MID Bank (1x Import)</h3>
+                            <h3 className="text-lg font-bold text-gray-800">Kelola File Master & MID Bank</h3>
                             <p className="text-xs text-gray-500 max-w-lg mx-auto">
-                                Unggah file master referensi untuk menghubungkan Merchant ID (MID) bank dengan kode toko (`OUTCODE`).
+                                Unggah file master referensi untuk menghubungkan Merchant ID (MID) bank dengan kode toko (OUTCODE). Data otomatis tersimpan terpusat di <strong>Supabase Database</strong>.
                             </p>
-
-                            {masterUploadStatus && (
-                                <div className="p-3 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 max-w-md mx-auto">
-                                    {masterUploadStatus}
-                                </div>
-                            )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
-                                <h4 className="font-bold text-sm text-gray-800">Referensi 2: DEPOSIT CARD BCA</h4>
-                                <p className="text-xs text-gray-500">Mapping Nomor Kartu BCA Deposit Card ke Outcode toko.</p>
-                                <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
-                                    <span className="material-symbols-outlined text-base">upload_file</span>
-                                    Import DEPOSIT CARD.xlsx
-                                    <input type="file" accept=".xlsx,.xls" onChange={(e) => handleUploadMasterFile(e, 'deposit_card')} className="hidden" />
-                                </label>
+                            
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-bold text-sm text-gray-800">Referensi 2: DEPOSIT CARD BCA</h4>
+                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                                            {masterCounts.deposit_card} Stored
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500">Mapping Nomor Kartu BCA Deposit Card ke Outcode toko.</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {masterFiles.deposit_card.file ? (
+                                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs space-y-1">
+                                            <span className="font-bold text-gray-800 block truncate">📄 {masterFiles.deposit_card.file.name}</span>
+                                            <span className="text-emerald-600 font-bold block">✓ {masterFiles.deposit_card.count} baris data terbaca</span>
+                                        </div>
+                                    ) : (
+                                        <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                                            <span className="material-symbols-outlined text-base">upload_file</span>
+                                            Pilih Berkas DEPOSIT CARD.xlsx
+                                            <input type="file" accept=".xlsx,.xls" onChange={(e) => handleSelectMasterFile(e, 'deposit_card')} className="hidden" />
+                                        </label>
+                                    )}
+
+                                    {masterFiles.deposit_card.file && (
+                                        <button
+                                            onClick={() => handleProcessMasterFile('deposit_card')}
+                                            disabled={masterFiles.deposit_card.loading}
+                                            className="btn-primary w-full py-2.5 text-xs flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            {masterFiles.deposit_card.loading ? (
+                                                <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                                            ) : (
+                                                <>
+                                                    <span className="material-symbols-outlined text-base">save</span>
+                                                    Proses & Simpan ke Supabase
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
-                                <h4 className="font-bold text-sm text-gray-800">Referensi 3: MASTER MID BRI</h4>
-                                <p className="text-xs text-gray-500">Mapping MID BRI ke Outcode toko.</p>
-                                <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
-                                    <span className="material-symbols-outlined text-base">upload_file</span>
-                                    Import MASTER MID BRI.xlsx
-                                    <input type="file" accept=".xlsx,.xls" onChange={(e) => handleUploadMasterFile(e, 'bri_mid')} className="hidden" />
-                                </label>
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-bold text-sm text-gray-800">Referensi 3: MASTER MID BRI</h4>
+                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                                            {masterCounts.bri_mid} Stored
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500">Mapping Merchant ID (MID) BRI ke Outcode toko.</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {masterFiles.bri_mid.file ? (
+                                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs space-y-1">
+                                            <span className="font-bold text-gray-800 block truncate">📄 {masterFiles.bri_mid.file.name}</span>
+                                            <span className="text-emerald-600 font-bold block">✓ {masterFiles.bri_mid.count} baris data terbaca</span>
+                                        </div>
+                                    ) : (
+                                        <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                                            <span className="material-symbols-outlined text-base">upload_file</span>
+                                            Pilih Berkas MASTER MID BRI.xlsx
+                                            <input type="file" accept=".xlsx,.xls" onChange={(e) => handleSelectMasterFile(e, 'bri_mid')} className="hidden" />
+                                        </label>
+                                    )}
+
+                                    {masterFiles.bri_mid.file && (
+                                        <button
+                                            onClick={() => handleProcessMasterFile('bri_mid')}
+                                            disabled={masterFiles.bri_mid.loading}
+                                            className="btn-primary w-full py-2.5 text-xs flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            {masterFiles.bri_mid.loading ? (
+                                                <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                                            ) : (
+                                                <>
+                                                    <span className="material-symbols-outlined text-base">save</span>
+                                                    Proses & Simpan ke Supabase
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
-                                <h4 className="font-bold text-sm text-gray-800">Referensi 4: MASTER MID BCA</h4>
-                                <p className="text-xs text-gray-500">Mapping MID BCA ke Outcode toko.</p>
-                                <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
-                                    <span className="material-symbols-outlined text-base">upload_file</span>
-                                    Import MASTER MID BCA.xlsx
-                                    <input type="file" accept=".xlsx,.xls" onChange={(e) => handleUploadMasterFile(e, 'bca_mid')} className="hidden" />
-                                </label>
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-bold text-sm text-gray-800">Referensi 4: MASTER MID BCA</h4>
+                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                                            {masterCounts.bca_mid} Stored
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500">Mapping Merchant ID (MID) BCA (7-digit) ke Outcode toko.</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {masterFiles.bca_mid.file ? (
+                                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs space-y-1">
+                                            <span className="font-bold text-gray-800 block truncate">📄 {masterFiles.bca_mid.file.name}</span>
+                                            <span className="text-emerald-600 font-bold block">✓ {masterFiles.bca_mid.count} baris data terbaca</span>
+                                        </div>
+                                    ) : (
+                                        <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                                            <span className="material-symbols-outlined text-base">upload_file</span>
+                                            Pilih Berkas MASTER MID BCA.xlsx
+                                            <input type="file" accept=".xlsx,.xls" onChange={(e) => handleSelectMasterFile(e, 'bca_mid')} className="hidden" />
+                                        </label>
+                                    )}
+
+                                    {masterFiles.bca_mid.file && (
+                                        <button
+                                            onClick={() => handleProcessMasterFile('bca_mid')}
+                                            disabled={masterFiles.bca_mid.loading}
+                                            className="btn-primary w-full py-2.5 text-xs flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            {masterFiles.bca_mid.loading ? (
+                                                <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                                            ) : (
+                                                <>
+                                                    <span className="material-symbols-outlined text-base">save</span>
+                                                    Proses & Simpan ke Supabase
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
-                                <h4 className="font-bold text-sm text-gray-800">Referensi 7: MASTER CABANG PKU</h4>
-                                <p className="text-xs text-gray-500">Mapping Outcode ke Kode Cabang PKU.</p>
-                                <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
-                                    <span className="material-symbols-outlined text-base">upload_file</span>
-                                    Import MASTER CABANG PKU.xlsx
-                                    <input type="file" accept=".xlsx,.xls" onChange={(e) => handleUploadMasterFile(e, 'pku_cabang')} className="hidden" />
-                                </label>
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="font-bold text-sm text-gray-800">Referensi 7: MASTER CABANG PKU</h4>
+                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                                            {masterCounts.pku_cabang} Stored
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500">Mapping Outcode ke Kode Cabang PKU.</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {masterFiles.pku_cabang.file ? (
+                                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs space-y-1">
+                                            <span className="font-bold text-gray-800 block truncate">📄 {masterFiles.pku_cabang.file.name}</span>
+                                            <span className="text-emerald-600 font-bold block">✓ {masterFiles.pku_cabang.count} baris data terbaca</span>
+                                        </div>
+                                    ) : (
+                                        <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                                            <span className="material-symbols-outlined text-base">upload_file</span>
+                                            Pilih Berkas MASTER CABANG PKU.xlsx
+                                            <input type="file" accept=".xlsx,.xls" onChange={(e) => handleSelectMasterFile(e, 'pku_cabang')} className="hidden" />
+                                        </label>
+                                    )}
+
+                                    {masterFiles.pku_cabang.file && (
+                                        <button
+                                            onClick={() => handleProcessMasterFile('pku_cabang')}
+                                            disabled={masterFiles.pku_cabang.loading}
+                                            className="btn-primary w-full py-2.5 text-xs flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            {masterFiles.pku_cabang.loading ? (
+                                                <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                                            ) : (
+                                                <>
+                                                    <span className="material-symbols-outlined text-base">save</span>
+                                                    Proses & Simpan ke Supabase
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
+
                         </div>
                     </div>
                 )}
@@ -737,6 +988,7 @@ export default function RekonsiliasiBankPage() {
                         </div>
                     </div>
                 )}
+
             </div>
         </AdminLayout>
     );

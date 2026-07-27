@@ -40,11 +40,6 @@ export function saveMasterMappings(newPartial) {
         console.error('Gagal menyimpan master mappings ke LocalStorage:', e);
     }
 
-    // Auto-sync to Supabase database if tables exist (background sync)
-    syncMasterMappingsToSupabase(newPartial).catch(err => {
-        console.warn('Persist Supabase info:', err.message);
-    });
-
     return updated;
 }
 
@@ -53,34 +48,67 @@ export async function syncMasterMappingsToSupabase(newPartial) {
         const rowsToUpsert = [];
         if (newPartial.deposit_cards) {
             Object.entries(newPartial.deposit_cards).forEach(([card, outcode]) => {
-                rowsToUpsert.append ? rowsToUpsert.append({ mapping_type: 'deposit_card', key_code: card, outcode_target: outcode })
-                : rowsToUpsert.push({ mapping_type: 'deposit_card', key_code: card, outcode_target: outcode });
+                if (card && outcode) {
+                    rowsToUpsert.push({
+                        mapping_type: 'deposit_card',
+                        key_code: card.toString().trim(),
+                        outcode_target: outcode.toString().trim().toUpperCase()
+                    });
+                }
             });
         }
         if (newPartial.bri_mids) {
             Object.entries(newPartial.bri_mids).forEach(([mid, outcode]) => {
-                rowsToUpsert.push({ mapping_type: 'bri_mid', key_code: mid, outcode_target: outcode });
+                if (mid && outcode) {
+                    rowsToUpsert.push({
+                        mapping_type: 'bri_mid',
+                        key_code: mid.toString().trim(),
+                        outcode_target: outcode.toString().trim().toUpperCase()
+                    });
+                }
             });
         }
         if (newPartial.bca_mids) {
             Object.entries(newPartial.bca_mids).forEach(([mid, outcode]) => {
-                rowsToUpsert.push({ mapping_type: 'bca_mid', key_code: mid, outcode_target: outcode });
+                if (mid && outcode) {
+                    rowsToUpsert.push({
+                        mapping_type: 'bca_mid',
+                        key_code: mid.toString().trim(),
+                        outcode_target: outcode.toString().trim().toUpperCase()
+                    });
+                }
             });
         }
         if (newPartial.pku_cabang) {
             Object.entries(newPartial.pku_cabang).forEach(([outcode, cabang]) => {
-                rowsToUpsert.push({ mapping_type: 'pku_cabang', key_code: outcode, outcode_target: cabang });
+                if (outcode && cabang) {
+                    rowsToUpsert.push({
+                        mapping_type: 'pku_cabang',
+                        key_code: outcode.toString().trim().toUpperCase(),
+                        outcode_target: cabang.toString().trim()
+                    });
+                }
             });
         }
 
         if (rowsToUpsert.length > 0) {
-            const { error } = await supabase.from('recon_master_mids').upsert(rowsToUpsert, { onConflict: 'mapping_type,key_code' });
-            if (error) {
-                console.warn('Tabel recon_master_mids belum dibuat di Supabase (data tersimpan aman di browser LocalStorage).');
+            const chunkSize = 500;
+            for (let i = 0; i < rowsToUpsert.length; i += chunkSize) {
+                const chunk = rowsToUpsert.slice(i, i + chunkSize);
+                const { error } = await supabase
+                    .from('recon_master_mids')
+                    .upsert(chunk, { onConflict: 'mapping_type,key_code' });
+                if (error) {
+                    console.warn('Supabase upsert error:', error.message);
+                    return { success: false, count: rowsToUpsert.length, error: error.message };
+                }
             }
+            return { success: true, count: rowsToUpsert.length };
         }
+        return { success: true, count: 0 };
     } catch (e) {
         console.warn('Supabase sync warning:', e.message);
+        return { success: false, count: 0, error: e.message };
     }
 }
 
@@ -97,7 +125,6 @@ export async function fetchMasterMappingsFromSupabase() {
             else if (item.mapping_type === 'pku_cabang') mappings.pku_cabang[item.key_code] = item.outcode_target;
         });
 
-        // Save to local storage for caching
         saveMasterMappings(mappings);
         return mappings;
     } catch (e) {
@@ -119,7 +146,7 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
         const outcode = (item.outcode || '').toUpperCase();
         const date = item.tanggal;
         const bank = item.bank_type; // 'BCA' | 'BRI'
-        const key = `${date}_${outcode}_${bank}`;
+        const key = date + "__" + outcode + "__" + bank;
 
         if (!xilnexMap[key]) {
             xilnexMap[key] = {
@@ -139,7 +166,7 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
         const date = b.tanggal_mutasi;
         const outcode = (b.outcode || 'UNMAPPED').toUpperCase();
         const bank = b.bank_name; // 'BCA' | 'BRI'
-        const key = `${date}_${outcode}_${bank}`;
+        const key = date + "__" + outcode + "__" + bank;
 
         if (!bankMap[key]) {
             bankMap[key] = {
@@ -168,7 +195,7 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
             const dateObj = new Date(date);
             dateObj.setDate(dateObj.getDate() + 1);
             const h1Date = dateObj.toLocaleDateString('sv-SE');
-            const h1Key = `${h1Date}_${outcode}_${bank}`;
+            const h1Key = h1Date + "__" + outcode + "__" + bank;
 
             if (bankMap[h1Key] && bankMap[h1Key].bankNet > 0) {
                 bRecord = bankMap[h1Key];
@@ -194,7 +221,7 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
             badgeColor = 'bg-orange-100 text-orange-800 border-orange-300';
         } else if (selisihNet !== 0) {
             status = 'Selisih';
-            statusLabel = `Selisih Rp ${Math.abs(selisihNet).toLocaleString('id-ID')}`;
+            statusLabel = "Selisih Rp " + selisihNet;
             badgeColor = 'bg-red-100 text-red-800 border-red-300';
         }
 
@@ -221,7 +248,6 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
 
     results.sort((a, b) => b.date.localeCompare(a.date) || a.outcode.localeCompare(b.outcode));
 
-    // Auto sync summaries to Supabase if table exists
     syncSummariesToSupabase(results).catch(() => {});
 
     return results;
@@ -242,6 +268,6 @@ export async function syncSummariesToSupabase(reconGrid) {
         }));
         await supabase.from('recon_daily_summaries').upsert(rows, { onConflict: 'recon_date,outcode,bank_name' });
     } catch (e) {
-        // Silent fallback if table does not exist
+        // Silent fallback
     }
 }
