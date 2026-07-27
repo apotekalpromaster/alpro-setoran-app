@@ -5,7 +5,7 @@ import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 
 export default function TroubleshootingTokoPage() {
-    const { user, profile } = useAuth();
+    const { user, profile, loading: authLoading } = useAuth();
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState(null);
     const [issues, setIssues] = useState([]);
@@ -41,7 +41,7 @@ export default function TroubleshootingTokoPage() {
             const { data, error } = await supabase
                 .from('finance_troubleshooting_issues')
                 .select('*')
-                .or(`user_id.eq.${user.id},kode_toko.eq.${storeCode}`)
+                .or(`user_id.eq.${user?.id || ""},kode_toko.eq.${storeCode}`)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
