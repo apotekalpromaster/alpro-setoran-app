@@ -1,761 +1,743 @@
-﻿import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
-import * as XLSX from 'xlsx';
+import {
+    parseXilnexSalesExcel,
+    parseDepositCardExcel,
+    parseBriMidExcel,
+    parseBcaMidExcel,
+    parseBriMutationExcel,
+    parseBcaMutationExcel,
+    parsePkuCabangExcel
+} from '../services/reconciliationParser';
+import {
+    getStoredMasterMappings,
+    saveMasterMappings,
+    computeReconciliation
+} from '../services/reconciliationService';
 
 export default function RekonsiliasiPOSPage() {
     const { profile } = useAuth();
-    
-    const [activeTab, setActiveTab] = useState('tabel'); 
+
+    const [activeTab, setActiveTab] = useState('tabel');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
-    
+
     const [startDate, setStartDate] = useState(() => {
         const d = new Date();
-        d.setDate(d.getDate() - 7);
+        d.setDate(d.getDate() - 14);
         return d.toLocaleDateString('sv-SE');
     });
     const [endDate, setEndDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
     const [selectedBranch, setSelectedBranch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('All'); 
+    const [selectedBank, setSelectedBank] = useState('All');
+    const [statusFilter, setStatusFilter] = useState('All');
+    const [toleranceH1, setToleranceH1] = useState(true);
 
-    // Draft states for manual filtering
-    const [draftStartDate, setDraftStartDate] = useState(startDate);
-    const [draftEndDate, setDraftEndDate] = useState(endDate);
-    const [draftSelectedBranch, setDraftSelectedBranch] = useState(selectedBranch);
-    const [draftStatusFilter, setDraftStatusFilter] = useState(statusFilter); 
-    
-    const [reconData, setReconData] = useState([]);
-    const [branchesList, setBranchesList] = useState([]);
-    
-    const [parsedData, setParsedData] = useState([]);
-    const [fileName, setFileName] = useState('');
-    const [profilesForLookup, setProfilesForLookup] = useState([]);
+    const [rawXilnexSales, setRawXilnexSales] = useState([]);
+    const [rawBankMutations, setRawBankMutations] = useState([]);
+    const [storeProfiles, setStoreProfiles] = useState([]);
+    const [masterMappings, setMasterMappings] = useState(() => getStoredMasterMappings());
+
+    const [uploadedXilnexName, setUploadedXilnexName] = useState('');
+    const [uploadedBriName, setUploadedBriName] = useState('');
+    const [uploadedBcaName, setUploadedBcaName] = useState('');
+    const [masterUploadStatus, setMasterUploadStatus] = useState('');
+
+    const [selectedRowDetail, setSelectedRowDetail] = useState(null);
 
     useEffect(() => {
-        fetchBranches();
-        fetchReconciliationData(startDate, endDate);
+        fetchStoreProfiles();
     }, []);
 
-    const fetchBranches = async () => {
+    const fetchStoreProfiles = async () => {
         try {
             const { data, error: err } = await supabase
                 .from('profiles')
-                .select('username, kode_toko')
+                .select('id, username, kode_toko, email, role')
                 .eq('role', 'User')
                 .order('username');
             if (err) throw err;
-            setBranchesList(data.map(p => p.username) || []);
-            setProfilesForLookup(data || []);
+            setStoreProfiles(data || []);
         } catch (e) {
-            console.error('Gagal memuat cabang:', e.message);
+            console.error('Gagal memuat profil toko:', e.message);
         }
     };
 
-    // Helper: fetch all rows with automatic pagination (bypass Supabase 1000 row limit)
-    const fetchAllPaginated = async (queryBuilder) => {
-        const PAGE_SIZE = 1000;
-        let allData = [];
-        let page = 0;
-        while (true) {
-            const { data, error } = await queryBuilder.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-            if (error) throw error;
-            if (!data || data.length === 0) break;
-            allData = [...allData, ...data];
-            if (data.length < PAGE_SIZE) break;
-            page++;
-        }
-        return allData;
-    };
-
-    const fetchReconciliationData = async (start = startDate, end = endDate) => {
-        setLoading(true);
-        setError('');
-        try {
-            const reports = await fetchAllPaginated(
-                supabase
-                    .from('laporan')
-                    .select(`
-                        tanggal_jual,
-                        nominal_jual,
-                        nominal_setoran,
-                        potongan,
-                        profiles!laporan_user_id_fkey!inner ( username )
-                    `)
-                    .gte('tanggal_jual', start)
-                    .lte('tanggal_jual', end)
-            );
-
-            const posData = await fetchAllPaginated(
-                supabase
-                    .from('pos_sales_data')
-                    .select('kode_cabang, tanggal_jual, sales_pos')
-                    .gte('tanggal_jual', start)
-                    .lte('tanggal_jual', end)
-            );
-
-            const map = {};
-            const getEntry = (branch, date) => {
-                const key = `${branch}_${date}`;
-                if (!map[key]) {
-                    map[key] = {
-                        branch,
-                        date,
-                        reportSales: 0,
-                        reportSetoran: 0,
-                        reportPotongan: 0,
-                        posSales: 0,
-                        hasReport: false,
-                        hasPOS: false
-                    };
-                }
-                return map[key];
-            };
-
-            reports.forEach(r => {
-                const branch = r.profiles?.username;
-                if (!branch) return;
-                const entry = getEntry(branch, r.tanggal_jual);
-                entry.reportSales += Number(r.nominal_jual || 0);
-                entry.reportSetoran += Number(r.nominal_setoran || 0);
-                entry.reportPotongan += Number(r.potongan || 0);
-                entry.hasReport = true;
-            });
-
-            posData.forEach(p => {
-                const entry = getEntry(p.kode_cabang, p.tanggal_jual);
-                entry.posSales = Number(p.sales_pos || 0);
-                entry.hasPOS = true;
-            });
-
-            const merged = Object.values(map).map(entry => {
-                // Selisih 1: POS vs Sales Manual (Laporan)
-                const delta1 = entry.posSales - entry.reportSales;
-                let status1 = 'Cocok';
-                if (!entry.hasReport && entry.hasPOS) {
-                    status1 = 'BelumLapor';
-                } else if (!entry.hasPOS && entry.hasReport) {
-                    status1 = 'BelumPOS';
-                } else if (!entry.hasReport && !entry.hasPOS) {
-                    status1 = 'KurangData';
-                } else if (delta1 !== 0) {
-                    status1 = 'Selisih';
-                }
-
-                // Selisih 2: POS vs (Setoran + Potongan)
-                const setoranPlusPotongan = entry.reportSetoran + entry.reportPotongan;
-                const delta2 = entry.posSales - setoranPlusPotongan;
-                let status2 = 'Cocok';
-                if (!entry.hasReport && entry.hasPOS) {
-                    status2 = 'BelumLapor';
-                } else if (!entry.hasPOS && entry.hasReport) {
-                    status2 = 'BelumPOS';
-                } else if (!entry.hasReport && !entry.hasPOS) {
-                    status2 = 'KurangData';
-                } else if (delta2 !== 0) {
-                    status2 = 'Selisih';
-                }
-
-                // Legacy status for stats summary card (use status1 as primary)
-                const status = status1;
-                return { ...entry, delta1, status1, delta2, status2, setoranPlusPotongan, status };
-            });
-
-            merged.sort((a, b) => {
-                if (b.date !== a.date) return b.date.localeCompare(a.date);
-                return a.branch.localeCompare(b.branch);
-            });
-
-            setReconData(merged);
-        } catch (e) {
-            setError('Gagal memuat data rekonsiliasi: ' + e.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const filteredReconData = useMemo(() => {
-        return reconData.filter(item => {
-            const matchBranch = !selectedBranch || item.branch === selectedBranch;
-            const matchStatus = statusFilter === 'All' || item.status === statusFilter;
-            return matchBranch && matchStatus;
+    const reconGrid = useMemo(() => {
+        return computeReconciliation({
+            xilnexSales: rawXilnexSales,
+            bankMutations: rawBankMutations,
+            storeProfiles,
+            toleranceH1
         });
-    }, [reconData, selectedBranch, statusFilter]);
+    }, [rawXilnexSales, rawBankMutations, storeProfiles, toleranceH1]);
+
+    const filteredGrid = useMemo(() => {
+        return reconGrid.filter(row => {
+            if (startDate && row.date < startDate) return false;
+            if (endDate && row.date > endDate) return false;
+
+            if (selectedBranch) {
+                const matchStore = row.outcode.toLowerCase().includes(selectedBranch.toLowerCase()) ||
+                                   row.storeName.toLowerCase().includes(selectedBranch.toLowerCase());
+                if (!matchStore) return false;
+            }
+
+            if (selectedBank !== 'All' && row.bank !== selectedBank) return false;
+
+            if (statusFilter !== 'All') {
+                if (statusFilter === 'Cocok' && row.status !== 'Cocok') return false;
+                if (statusFilter === 'Selisih' && !row.status.includes('Selisih')) return false;
+                if (statusFilter === 'BelumMutasi' && row.status !== 'BelumMutasi') return false;
+                if (statusFilter === 'Unmapped' && row.status !== 'Unmapped') return false;
+            }
+
+            return true;
+        });
+    }, [reconGrid, startDate, endDate, selectedBranch, selectedBank, statusFilter]);
 
     const stats = useMemo(() => {
-        let total = reconData.length;
-        let cocok = 0;
-        let selisih = 0;
-        let belumLapor = 0;
-        let belumPOS = 0;
+        let totalXilnex = 0;
+        let totalBankNet = 0;
+        let totalBankMdr = 0;
+        let totalSelisih = 0;
+        let countCocok = 0;
+        let countSelisih = 0;
 
-        reconData.forEach(item => {
-            if (item.status1 === 'Cocok') cocok++;
-            else if (item.status1 === 'Selisih') selisih++;
-            else if (item.status1 === 'BelumLapor') belumLapor++;
-            else if (item.status1 === 'BelumPOS') belumPOS++;
+        filteredGrid.forEach(row => {
+            totalXilnex += row.xilnexTotal;
+            totalBankNet += row.bankNet;
+            totalBankMdr += row.bankMdr;
+            totalSelisih += Math.abs(row.selisihNet);
+
+            if (row.status === 'Cocok') countCocok++;
+            else countSelisih++;
         });
 
-        return { total, cocok, selisih, belumLapor, belumPOS };
-    }, [reconData]);
+        return {
+            totalRows: filteredGrid.length,
+            totalXilnex,
+            totalBankNet,
+            totalBankMdr,
+            totalSelisih,
+            countCocok,
+            countSelisih
+        };
+    }, [filteredGrid]);
 
-    const grandTotals = useMemo(() => {
-        return filteredReconData.reduce((acc, item) => {
-            acc.posSales += item.posSales || 0;
-            acc.reportSales += item.reportSales || 0;
-            acc.reportSetoran += item.reportSetoran || 0;
-            acc.reportPotongan += item.reportPotongan || 0;
-            acc.setoranPlusPotongan += item.setoranPlusPotongan || 0;
-            acc.delta1 += item.delta1 || 0;
-            acc.delta2 += item.delta2 || 0;
-            return acc;
-        }, { posSales: 0, reportSales: 0, reportSetoran: 0, reportPotongan: 0, setoranPlusPotongan: 0, delta1: 0, delta2: 0 });
-    }, [filteredReconData]);
-
-const handleFileChange = (e) => {
+    const handleUploadXilnex = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        setFileName(file.name);
+        setUploadedXilnexName(file.name);
         setError('');
         setSuccessMsg('');
 
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = (evt) => {
             try {
-                const data = new Uint8Array(event.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                
-                if (workbook.SheetNames.length === 0) {
-                    throw new Error('Berkas tidak memiliki sheet data.');
-                }
-                
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                
-                const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-                
-                if (rawRows.length < 13) {
-                    throw new Error('Berkas tidak memiliki baris data yang cukup (header di baris 13).');
-                }
-                
-                               // Create lookup map mapping both kode_toko and username to username
-                const storeMap = {};
-                profilesForLookup.forEach(p => {
-                    if (p.kode_toko) {
-                        storeMap[p.kode_toko.toString().trim().toLowerCase()] = p.username;
-                    }
-                    if (p.username) {
-                        storeMap[p.username.toString().trim().toLowerCase()] = p.username;
-                    }
-                });
-
-                // Auto-detect template format:
-                // Mode A: New Template "Cash & Card Automation" (Header at Row 14, Index 13)
-                // Mode B: Legacy Template "POS Simple" (Header at Row 13, Index 12)
-                let isNewTemplate = false;
-                let startRowIndex = 13; // Default data start index (Row 14) for legacy if index 12 is header
-
-                if (rawRows.length >= 14) {
-                    const row14Str = rawRows[13].map(c => (c || '').toString().toLowerCase()).join(' ');
-                    if (row14Str.includes('date') && row14Str.includes('store') && row14Str.includes('cash amount')) {
-                        isNewTemplate = true;
-                        startRowIndex = 14; // Data starts on Row 15 (Index 14)
-                    }
-                }
-
-                const rows = [];
-
-                for (let i = startRowIndex; i < rawRows.length; i++) {
-                    const row = rawRows[i];
-                    if (!row || row.length === 0) continue;
-
-                    const rawDateVal = (row[0] || '').toString().trim();
-                    const rawStoreVal = (row[1] || '').toString().trim();
-                    const rawColCVal = (row[2] || '').toString().trim();
-
-                    if (!rawDateVal || !rawStoreVal) continue;
-
-                    if (isNewTemplate) {
-                        // NEW TEMPLATE LOGIC (Cash & Card Automation):
-                        // 1. Filter out if Col A, B, or C contains 'total' (case-insensitive)
-                        const lowerA = rawDateVal.toLowerCase();
-                        const lowerB = rawStoreVal.toLowerCase();
-                        const lowerC = rawColCVal.toLowerCase();
-                        if (lowerA.includes('total') || lowerB.includes('total') || lowerC.includes('total')) {
-                            continue;
-                        }
-
-                        // 2. Extract Cash Amount from Col E (Index 4)
-                        const rawCashVal = (row[4] || '').toString().trim();
-                        const cleanSales = parseInt(rawCashVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
-
-                        // 3. Filter out Rp 0 cash amount
-                        if (cleanSales === 0) continue;
-
-                        // 4. Store Lookup
-                        const cleanStoreKey = rawStoreVal.toLowerCase();
-                        const matchedUsername = storeMap[cleanStoreKey];
-                        if (!matchedUsername) continue;
-
-                        // 5. Date Parsing
-                        let formattedDate = '';
-                        if (/^\d+(\.\d+)?$/.test(rawDateVal)) {
-                            const excelDateNum = parseFloat(rawDateVal);
-                            const d = new Date((excelDateNum - 25569) * 86400 * 1000);
-                            if (!isNaN(d.getTime())) formattedDate = d.toLocaleDateString('sv-SE');
-                        } else {
-                            const d = new Date(rawDateVal);
-                            if (!isNaN(d.getTime())) formattedDate = d.toLocaleDateString('sv-SE');
-                        }
-
-                        if (matchedUsername && formattedDate) {
-                            rows.push({
-                                kode_cabang: matchedUsername,
-                                tanggal_jual: formattedDate,
-                                sales_pos: cleanSales
-                            });
-                        }
-                    } else {
-                        // LEGACY TEMPLATE LOGIC:
-                        const lowerDate = rawDateVal.toLowerCase();
-                        if (lowerDate.includes('total') || lowerDate.includes('grand total')) continue;
-
-                        const rawSalesVal = (row[2] || '').toString().trim();
-                        const cleanStoreKey = rawStoreVal.toLowerCase();
-                        const matchedUsername = storeMap[cleanStoreKey];
-                        if (!matchedUsername) continue;
-
-                        let formattedDate = '';
-                        if (/^\d+(\.\d+)?$/.test(rawDateVal)) {
-                            const excelDateNum = parseFloat(rawDateVal);
-                            const d = new Date((excelDateNum - 25569) * 86400 * 1000);
-                            if (!isNaN(d.getTime())) formattedDate = d.toLocaleDateString('sv-SE');
-                        } else {
-                            const d = new Date(rawDateVal);
-                            if (!isNaN(d.getTime())) formattedDate = d.toLocaleDateString('sv-SE');
-                        }
-
-                        const cleanSales = parseInt(rawSalesVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
-
-                        if (matchedUsername && formattedDate) {
-                            rows.push({
-                                kode_cabang: matchedUsername,
-                                tanggal_jual: formattedDate,
-                                sales_pos: cleanSales
-                            });
-                        }
-                    }
-                }
-
-                if (rows.length === 0) {
-                    throw new Error('Tidak ada baris data valid yang berhasil dibaca. Pastikan nama cabang terdaftar di profiles (lookup kode_toko).');
-                }
-                
-                setParsedData(rows);
+                const parsed = parseXilnexSalesExcel(evt.target.result);
+                setRawXilnexSales(parsed);
+                setSuccessMsg(`Berhasil membaca ${parsed.length} baris data penjualan non-tunai Xilnex.`);
             } catch (err) {
-                setError(err.message);
-                setParsedData([]);
+                setError('Gagal membaca file Xilnex: ' + err.message);
             }
         };
         reader.readAsArrayBuffer(file);
     };
 
-        const handleApplyFilter = () => {
-        setStartDate(draftStartDate);
-        setEndDate(draftEndDate);
-        setSelectedBranch(draftSelectedBranch);
-        setStatusFilter(draftStatusFilter);
-        fetchReconciliationData(draftStartDate, draftEndDate);
-    };
-
-    const handleResetFilter = () => {
-        const defaultStart = () => {
-            const d = new Date();
-            d.setDate(d.getDate() - 7);
-            return d.toLocaleDateString('sv-SE');
-        };
-        const defaultEnd = () => new Date().toLocaleDateString('sv-SE');
-
-        const start = defaultStart();
-        const end = defaultEnd();
-
-        setDraftStartDate(start);
-        setDraftEndDate(end);
-        setDraftSelectedBranch('');
-        setDraftStatusFilter('All');
-
-        setStartDate(start);
-        setEndDate(end);
-        setSelectedBranch('');
-        setStatusFilter('All');
-
-        fetchReconciliationData(start, end);
-    };
-
-    const handleSavePOS = async () => {
-        if (parsedData.length === 0) return;
-        setLoading(true);
+    const handleUploadBriMutation = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploadedBriName(file.name);
         setError('');
         setSuccessMsg('');
 
-        try {
-            const uniqueBranches = [...new Set(parsedData.map(d => d.kode_cabang))];
-            const dates = parsedData.map(d => d.tanggal_jual);
-            const minDate = dates.reduce((a, b) => a < b ? a : b);
-            const maxDate = dates.reduce((a, b) => a > b ? a : b);
-
-            const { error: deleteError } = await supabase
-                .from('pos_sales_data')
-                .delete()
-                .in('kode_cabang', uniqueBranches)
-                .gte('tanggal_jual', minDate)
-                .lte('tanggal_jual', maxDate);
-
-            if (deleteError) throw deleteError;
-
-            const chunkSize = 200;
-            for (let i = 0; i < parsedData.length; i += chunkSize) {
-                const chunk = parsedData.slice(i, i + chunkSize);
-                const { error: insertError } = await supabase
-                    .from('pos_sales_data')
-                    .insert(chunk.map(row => ({
-                        kode_cabang: row.kode_cabang,
-                        tanggal_jual: row.tanggal_jual,
-                        sales_pos: row.sales_pos,
-                        uploaded_by: profile.id
-                    })));
-
-                if (insertError) throw insertError;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const parsed = parseBriMutationExcel(evt.target.result, masterMappings.bri_mids);
+                setRawBankMutations(prev => [...prev.filter(b => b.bank_name !== 'BRI'), ...parsed]);
+                setSuccessMsg(`Berhasil membaca ${parsed.length} baris mutasi BRI (OffUs / OnUs / QRIS).`);
+            } catch (err) {
+                setError('Gagal membaca file mutasi BRI: ' + err.message);
             }
+        };
+        reader.readAsArrayBuffer(file);
+    };
 
-            setSuccessMsg(`Berhasil mengunggah ${parsedData.length} baris data POS.`);
-            setParsedData([]);
-            setFileName('');
-            fetchReconciliationData();
-            setActiveTab('tabel');
-        } catch (err) {
-            setError('Gagal menyimpan data POS: ' + err.message);
-        } finally {
-            setLoading(false);
-        }
+    const handleUploadBcaMutation = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploadedBcaName(file.name);
+        setError('');
+        setSuccessMsg('');
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const parsed = parseBcaMutationExcel(evt.target.result, masterMappings.bca_mids);
+                setRawBankMutations(prev => [...prev.filter(b => b.bank_name !== 'BCA'), ...parsed]);
+                setSuccessMsg(`Berhasil membaca ${parsed.length} baris mutasi BCA (KR OTOMATIS / KREDIT / TANGGAL).`);
+            } catch (err) {
+                setError('Gagal membaca file mutasi BCA: ' + err.message);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
+    const handleUploadMasterFile = (e, masterType) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setMasterUploadStatus(`Membaca ${file.name}...`);
+        setError('');
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const buffer = evt.target.result;
+                let newMasters = { ...masterMappings };
+
+                if (masterType === 'deposit_card') {
+                    const list = parseDepositCardExcel(buffer);
+                    const map = {};
+                    list.forEach(item => { map[item.bca_deposit_card] = item.outcode; });
+                    newMasters = saveMasterMappings({ deposit_cards: map });
+                    setMasterUploadStatus(`Berhasil memperbarui ${list.length} data Deposit Card BCA.`);
+                } else if (masterType === 'bri_mid') {
+                    const list = parseBriMidExcel(buffer);
+                    const map = {};
+                    list.forEach(item => { map[item.mid_bri] = item.outcode; });
+                    newMasters = saveMasterMappings({ bri_mids: map });
+                    setMasterUploadStatus(`Berhasil memperbarui ${list.length} data MID BRI.`);
+                } else if (masterType === 'bca_mid') {
+                    const list = parseBcaMidExcel(buffer);
+                    const map = {};
+                    list.forEach(item => { map[item.mid_bca] = item.outcode; });
+                    newMasters = saveMasterMappings({ bca_mids: map });
+                    setMasterUploadStatus(`Berhasil memperbarui ${list.length} data MID BCA.`);
+                } else if (masterType === 'pku_cabang') {
+                    const list = parsePkuCabangExcel(buffer);
+                    const map = {};
+                    list.forEach(item => { map[item.outcode] = item.cabang_pku; });
+                    newMasters = saveMasterMappings({ pku_cabang: map });
+                    setMasterUploadStatus(`Berhasil memperbarui ${list.length} data Kode Cabang PKU.`);
+                }
+
+                setMasterMappings(newMasters);
+            } catch (err) {
+                setError(`Gagal memuat master ${masterType}: ` + err.message);
+                setMasterUploadStatus('');
+            }
+        };
+        reader.readAsArrayBuffer(file);
     };
 
     return (
-        <AdminLayout title="Rekonsiliasi Xilnex Harian">
-            <div className="max-w-screen-xl mx-auto space-y-6">
-                <div className="flex border-b border-gray-200">
+        <AdminLayout title="Rekonsiliasi Transaksi Xilnex vs Mutasi Bank">
+            <div className="max-w-screen-2xl mx-auto space-y-6">
+                
+                <div className="flex border-b border-gray-200 bg-white px-4 rounded-xl shadow-sm">
                     <button
                         onClick={() => setActiveTab('tabel')}
-                        className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+                        className={`py-3 px-6 font-bold text-sm border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
                             activeTab === 'tabel'
                                 ? 'border-primary-500 text-primary-600'
                                 : 'border-transparent text-gray-500 hover:text-gray-700'
                         }`}
                     >
-                        Tabel Rekonsiliasi
+                        <span className="material-symbols-outlined text-lg">fact_check</span>
+                        Dashboard & Matriks Rekonsiliasi
                     </button>
                     <button
                         onClick={() => setActiveTab('upload')}
-                        className={`py-3 px-6 font-bold text-sm border-b-2 transition-all ${
+                        className={`py-3 px-6 font-bold text-sm border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
                             activeTab === 'upload'
                                 ? 'border-primary-500 text-primary-600'
                                 : 'border-transparent text-gray-500 hover:text-gray-700'
                         }`}
                     >
-                        Upload Excel POS
+                        <span className="material-symbols-outlined text-lg">cloud_upload</span>
+                        Pusat Upload File Harian (Xilnex, BRI, BCA)
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('masters')}
+                        className={`py-3 px-6 font-bold text-sm border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+                            activeTab === 'masters'
+                                ? 'border-primary-500 text-primary-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        <span className="material-symbols-outlined text-lg">dataset</span>
+                        Kelola Master MID & Cabang
                     </button>
                 </div>
 
-                {activeTab === 'tabel' ? (
+                {error && (
+                    <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined">error</span>
+                            <span className="font-semibold text-sm">{error}</span>
+                        </div>
+                        <button onClick={() => setError('')} className="text-red-500 hover:text-red-700 font-bold cursor-pointer">✕</button>
+                    </div>
+                )}
+                {successMsg && (
+                    <div className="p-4 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined">check_circle</span>
+                            <span className="font-semibold text-sm">{successMsg}</span>
+                        </div>
+                        <button onClick={() => setSuccessMsg('')} className="text-emerald-500 hover:text-emerald-700 font-bold cursor-pointer">✕</button>
+                    </div>
+                )}
+
+                {activeTab === 'tabel' && (
                     <>
-                        {/* Filter Rekonsiliasi - Always Visible */}
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-4">
-                            <h3 className="text-base font-bold text-gray-800 flex items-center gap-2 pb-3 border-b border-gray-100">
-                                <span className="material-symbols-outlined text-primary-500">filter_list</span> Filter Rekonsiliasi Xilnex
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Mulai Tanggal</label>
-                                    <input
-                                        type="date"
-                                        value={draftStartDate}
-                                        onChange={(e) => setDraftStartDate(e.target.value)}
-                                        className="form-input w-full py-1.5 px-3 text-xs"
-                                        disabled={loading}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Sampai Tanggal</label>
-                                    <input
-                                        type="date"
-                                        value={draftEndDate}
-                                        onChange={(e) => setDraftEndDate(e.target.value)}
-                                        className="form-input w-full py-1.5 px-3 text-xs"
-                                        disabled={loading}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Pilih Cabang</label>
-                                    <select
-                                        value={draftSelectedBranch}
-                                        onChange={(e) => setDraftSelectedBranch(e.target.value)}
-                                        className="form-input w-full py-1.5 px-3 text-xs bg-gray-50 cursor-pointer"
-                                        disabled={loading}
-                                    >
-                                        <option value="">Semua Cabang</option>
-                                        {branchesList.map(b => (
-                                            <option key={b} value={b}>{b}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Status Kecocokan</label>
-                                    <select
-                                        value={draftStatusFilter}
-                                        onChange={(e) => setDraftStatusFilter(e.target.value)}
-                                        className="form-input w-full py-1.5 px-3 text-xs bg-gray-50 cursor-pointer"
-                                        disabled={loading}
-                                    >
-                                        <option value="All">Semua Status</option>
-                                        <option value="Cocok">Cocok (Sesuai)</option>
-                                        <option value="Selisih">Selisih (Mismatch)</option>
-                                        <option value="BelumLapor">Laporan Belum Diinput</option>
-                                        <option value="BelumPOS">POS Belum Diupload</option>
-                                    </select>
-                                </div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden">
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Total Penjualan Xilnex</span>
+                                <span className="text-2xl font-black text-gray-800 mt-1 block font-mono">
+                                    {formatRupiah(stats.totalXilnex)}
+                                </span>
+                                <span className="text-[11px] text-gray-500 mt-1 block">Kartu Kredit/Debit & QRIS</span>
                             </div>
-                            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                                <button
-                                    type="button"
-                                    onClick={handleResetFilter}
-                                    disabled={loading}
-                                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                                >
-                                    <span className="material-symbols-outlined text-sm">restart_alt</span> Reset Filter
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleApplyFilter}
-                                    disabled={loading}
-                                    className="bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-                                >
-                                    <span className="material-symbols-outlined text-sm">search</span> Terapkan Filter
-                                </button>
+
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-emerald-500">
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Mutasi Net Bank (Riil)</span>
+                                <span className="text-2xl font-black text-emerald-600 mt-1 block font-mono">
+                                    {formatRupiah(stats.totalBankNet)}
+                                </span>
+                                <span className="text-[11px] text-gray-500 mt-1 block">Total uang masuk rekening</span>
+                            </div>
+
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-amber-500">
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Total Potongan MDR Bank</span>
+                                <span className="text-2xl font-black text-amber-600 mt-1 block font-mono">
+                                    {formatRupiah(stats.totalBankMdr)}
+                                </span>
+                                <span className="text-[11px] text-gray-500 mt-1 block">Biaya MDR / ADM Bank</span>
+                            </div>
+
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-red-500">
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Total Akumulasi Selisih</span>
+                                <span className="text-2xl font-black text-red-600 mt-1 block font-mono">
+                                    {formatRupiah(stats.totalSelisih)}
+                                </span>
+                                <span className="text-[11px] text-red-600 font-semibold mt-1 block">
+                                    {stats.countSelisih} Rekaman Butuh Perhatian
+                                </span>
                             </div>
                         </div>
 
-                        {/* Loading State or Data */}
-                        {loading ? (
-                            <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-gray-200 shadow-sm">
-                                <span className="material-symbols-outlined animate-spin text-4xl text-primary-500 mb-2">sync</span>
-                                <p className="text-sm font-semibold text-gray-600">Memuat data rekonsiliasi Xilnex...</p>
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-gray-100">
+                                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary-500 text-lg">filter_alt</span>
+                                    Filter & Parameter Rekonsiliasi
+                                </h3>
+
+                                <label className="flex items-center gap-3 cursor-pointer bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={toleranceH1}
+                                        onChange={(e) => setToleranceH1(e.target.checked)}
+                                        className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500 cursor-pointer"
+                                    />
+                                    <span className="text-xs font-bold text-gray-700">
+                                        Aktifkan Opsi Toleransi Settlement H+1 (T+1)
+                                    </span>
+                                </label>
                             </div>
-                        ) : (
-                            <>
-                                {/* Stats Cards */}
-                                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-                                        <span className="block text-xs font-bold text-gray-400 uppercase">Total Rekaman</span>
-                                        <span className="block text-2xl font-extrabold text-gray-800 mt-1">{stats.total}</span>
-                                    </div>
-                                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-green-500">
-                                        <span className="block text-xs font-bold text-gray-400 uppercase">Cocok</span>
-                                        <span className="block text-2xl font-extrabold text-green-600 mt-1">{stats.cocok}</span>
-                                    </div>
-                                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-red-500">
-                                        <span className="block text-xs font-bold text-gray-400 uppercase">Selisih</span>
-                                        <span className="block text-2xl font-extrabold text-red-600 mt-1">{stats.selisih}</span>
-                                    </div>
-                                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-yellow-500">
-                                        <span className="block text-xs font-bold text-gray-400 uppercase">Belum Lapor</span>
-                                        <span className="block text-2xl font-extrabold text-yellow-600 mt-1">{stats.belumLapor}</span>
-                                    </div>
-                                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-gray-400">
-                                        <span className="block text-xs font-bold text-gray-400 uppercase">Data Xilnex Belum Upload</span>
-                                        <span className="block text-2xl font-extrabold text-gray-500 mt-1">{stats.belumPOS}</span>
-                                    </div>
-                                </div>
 
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                    {error && (
-                                        <div className="p-4 bg-red-50 text-red-700 border-b border-red-100 flex items-center gap-2">
-                                            <span className="material-symbols-outlined">error</span>
-                                            <span>{error}</span>
-                                        </div>
-                                    )}
-
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200 text-left">
-                                            <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                                <tr className="border-b border-gray-200">
-                                                    <th className="py-3 px-4 whitespace-nowrap" rowSpan="2">Tanggal Jual</th>
-                                                    <th className="py-3 px-4 whitespace-nowrap" rowSpan="2">Nama Cabang</th>
-                                                    <th className="py-3 px-4 text-right whitespace-nowrap bg-blue-50 text-blue-700" rowSpan="2">Sales Xilnex</th>
-                                                    <th className="py-3 px-4 text-center text-purple-700 bg-purple-50" colSpan="3">Data Laporan Manual</th>
-                                                    <th className="py-3 px-4 text-center text-red-700 bg-red-50" colSpan="2">Selisih POS vs Sales Manual</th>
-                                                    <th className="py-3 px-4 text-center text-orange-700 bg-orange-50" colSpan="2">Selisih POS vs Setoran+Potongan</th>
-                                                </tr>
-                                                <tr className="border-b-2 border-gray-300">
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-600">Sales Manual</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-600">Potongan</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-600">Nominal Setoran</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-red-50 text-red-500">Selisih 1</th>
-                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-red-50 text-red-500">Status 1</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-orange-50 text-orange-500">Selisih 2</th>
-                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-orange-50 text-orange-500">Status 2</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
-                                                {filteredReconData.length === 0 ? (
-                                                    <tr><td colSpan="10" className="py-10 text-center text-gray-400">Tidak ada data rekonsiliasi yang cocok dengan kriteria filter.</td></tr>
-                                                ) : (
-                                                    filteredReconData.map((item, idx) => {
-                                                        const rowCls2 = (item.status1 === "Selisih" || item.status2 === "Selisih") ? "bg-red-50/30" : item.status1 === "BelumLapor" ? "bg-yellow-50/20" : "";
-                                                        const B = (s, theme) => {
-                                                            const col = s === "Cocok" ? "bg-green-50 text-green-700 border-green-200" : s === "Selisih" ? (theme === "orange" ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-red-50 text-red-700 border-red-200") : s === "BelumLapor" ? "bg-yellow-50 text-yellow-700 border-yellow-200" : "bg-gray-100 text-gray-600 border-gray-300";
-                                                            const lbl = {Cocok:"Cocok",Selisih:"Selisih",BelumLapor:"Blm Lapor",BelumPOS:"Xilnex Ksg"}[s] || "-";
-                                                            return <span className={"px-2 py-0.5 text-[10px] font-bold rounded-full border " + col}>{lbl}</span>;
-                                                        };
-                                                        const D = (v) => v === 0 ? <span className="text-gray-400">Rp 0</span> : <span className={v > 0 ? "text-blue-600" : "text-red-600"}>{(v > 0 ? "+" : "") + formatRupiah(v)}</span>;
-                                                        return (
-                                                            <tr key={idx} className={"hover:bg-gray-50/50 transition-colors " + rowCls2}>
-                                                                <td className="py-2.5 px-4 font-medium text-gray-900 whitespace-nowrap text-xs">{new Date(item.date).toLocaleDateString("id-ID",{day:"2-digit",month:"short",year:"numeric"})}</td>
-                                                                <td className="py-2.5 px-4 text-xs font-semibold">{item.branch}</td>
-                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-blue-50/40">{item.hasPOS ? formatRupiah(item.posSales) : <span className="text-gray-300">-</span>}</td>
-                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-purple-50/30">{item.hasReport ? formatRupiah(item.reportSales) : <span className="text-gray-300">-</span>}</td>
-                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-purple-50/30">{item.hasReport ? formatRupiah(item.reportPotongan) : <span className="text-gray-300">-</span>}</td>
-                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-purple-50/30">{item.hasReport ? formatRupiah(item.reportSetoran) : <span className="text-gray-300">-</span>}</td>
-                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-red-50/20">{D(item.delta1)}</td>
-                                                                <td className="py-2.5 px-4 text-center bg-red-50/20">{B(item.status1,"red")}</td>
-                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-orange-50/20">{D(item.delta2)}</td>
-                                                                <td className="py-2.5 px-4 text-center bg-orange-50/20">{B(item.status2,"orange")}</td>
-                                                            </tr>
-                                                        );
-                                                    })
-                                                )}
-                                            </tbody>
-                                            <tfoot className="bg-gray-100 border-t-2 border-gray-400 text-xs font-bold text-gray-800">
-                                                <tr>
-                                                    <td className="py-3 px-4" colSpan="2">Grand Total ({filteredReconData.length} baris)</td>
-                                                    <td className="py-3 px-4 text-right font-mono bg-blue-100">{formatRupiah(grandTotals.posSales)}</td>
-                                                    <td className="py-3 px-4 text-right font-mono bg-purple-100">{formatRupiah(grandTotals.reportSales)}</td>
-                                                    <td className="py-3 px-4 text-right font-mono bg-purple-100">{formatRupiah(grandTotals.reportPotongan)}</td>
-                                                    <td className="py-3 px-4 text-right font-mono bg-purple-100">{formatRupiah(grandTotals.reportSetoran)}</td>
-                                                    <td className="py-3 px-4 text-right font-mono bg-red-100"><span className={grandTotals.delta1 < 0 ? "text-red-700" : grandTotals.delta1 > 0 ? "text-blue-700" : "text-gray-500"}>{grandTotals.delta1 !== 0 ? (grandTotals.delta1 > 0 ? "+" : "") + formatRupiah(grandTotals.delta1) : "Rp 0"}</span></td>
-                                                    <td className="py-3 px-4 bg-red-100"></td>
-                                                    <td className="py-3 px-4 text-right font-mono bg-orange-100"><span className={grandTotals.delta2 < 0 ? "text-red-700" : grandTotals.delta2 > 0 ? "text-blue-700" : "text-gray-500"}>{grandTotals.delta2 !== 0 ? (grandTotals.delta2 > 0 ? "+" : "") + formatRupiah(grandTotals.delta2) : "Rp 0"}</span></td>
-                                                    <td className="py-3 px-4 bg-orange-100"></td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-                                    </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Mulai Tanggal</label>
+                                    <input
+                                        type="date"
+                                        value={startDate}
+                                        onChange={(e) => setStartDate(e.target.value)}
+                                        className="form-input w-full py-1.5 px-3 text-xs"
+                                    />
                                 </div>
-                            </>
-                        )}
-                                        </>
-                ) : (
-                    <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-gray-200 space-y-6">
-                        <div className="text-center space-y-2">
-                            <span className="material-symbols-outlined text-5xl text-primary-500">cloud_upload</span>
-                            <h3 className="text-lg font-bold text-gray-800">Unggah Data Penjualan POS</h3>
-                            <p className="text-xs text-gray-500 max-w-md mx-auto">
-                                Unggah berkas Excel (.xlsx) dari sistem POS untuk dibandingkan secara otomatis dengan pelaporan setoran manual apotek.
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Sampai Tanggal</label>
+                                    <input
+                                        type="date"
+                                        value={endDate}
+                                        onChange={(e) => setEndDate(e.target.value)}
+                                        className="form-input w-full py-1.5 px-3 text-xs"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Cari Toko / Outcode</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Contoh: JKJSTT1 / KALIBATA"
+                                        value={selectedBranch}
+                                        onChange={(e) => setSelectedBranch(e.target.value)}
+                                        className="form-input w-full py-1.5 px-3 text-xs"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Filter Bank Merchant</label>
+                                    <select
+                                        value={selectedBank}
+                                        onChange={(e) => setSelectedBank(e.target.value)}
+                                        className="form-input w-full py-1.5 px-3 text-xs bg-gray-50 cursor-pointer"
+                                    >
+                                        <option value="All">Semua Bank (BCA & BRI)</option>
+                                        <option value="BCA">Bank BCA Only</option>
+                                        <option value="BRI">Bank BRI Only</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Status Kecocokan</label>
+                                    <select
+                                        value={statusFilter}
+                                        onChange={(e) => setStatusFilter(e.target.value)}
+                                        className="form-input w-full py-1.5 px-3 text-xs bg-gray-50 cursor-pointer"
+                                    >
+                                        <option value="All">Semua Status</option>
+                                        <option value="Cocok">Cocok (Sesuai Rp 0)</option>
+                                        <option value="Selisih">Memiliki Selisih</option>
+                                        <option value="BelumMutasi">Belum Ada Mutasi Bank</option>
+                                        <option value="Unmapped">MID Belum Terhubung</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                                <span className="text-xs font-bold text-gray-600">
+                                    Menampilkan {filteredGrid.length} Rekaman Perbandingan Transaksi
+                                </span>
+                                {rawXilnexSales.length === 0 && rawBankMutations.length === 0 && (
+                                    <span className="text-xs text-amber-600 font-semibold bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                                        ⚠️ Belum ada file yang diunggah. Silakan upload file Xilnex/Bank di tab "Pusat Upload".
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200 text-left">
+                                    <thead className="bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                                        <tr>
+                                            <th className="py-3 px-4 whitespace-nowrap">Tanggal</th>
+                                            <th className="py-3 px-4 whitespace-nowrap">Toko / Outcode</th>
+                                            <th className="py-3 px-4 whitespace-nowrap">Cabang PKU</th>
+                                            <th className="py-3 px-4 whitespace-nowrap text-center">Bank</th>
+                                            <th className="py-3 px-4 text-right bg-blue-50/50 text-blue-700 whitespace-nowrap">Penjualan Xilnex</th>
+                                            <th className="py-3 px-4 text-right bg-emerald-50/50 text-emerald-700 whitespace-nowrap">Mutasi Net Bank</th>
+                                            <th className="py-3 px-4 text-right bg-amber-50/50 text-amber-700 whitespace-nowrap">MDR Bank</th>
+                                            <th className="py-3 px-4 text-right whitespace-nowrap">Selisih (Net)</th>
+                                            <th className="py-3 px-4 text-center whitespace-nowrap">Status Matching</th>
+                                            <th className="py-3 px-4 text-center whitespace-nowrap">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
+                                        {filteredGrid.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="10" className="py-12 text-center text-gray-400">
+                                                    Tidak ada data rekonsiliasi yang sesuai dengan kriteria filter.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            filteredGrid.map((row, idx) => (
+                                                <tr
+                                                    key={idx}
+                                                    className="hover:bg-gray-50/80 transition-colors cursor-pointer"
+                                                    onClick={() => setSelectedRowDetail(row)}
+                                                >
+                                                    <td className="py-3 px-4 font-semibold text-gray-900 whitespace-nowrap">
+                                                        {row.date}
+                                                    </td>
+                                                    <td className="py-3 px-4 font-bold text-gray-800">
+                                                        {row.outcode}
+                                                    </td>
+                                                    <td className="py-3 px-4 font-mono text-gray-500">
+                                                        {row.cabang_pku || '-'}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-center">
+                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                            row.bank === 'BCA' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'
+                                                        }`}>
+                                                            {row.bank}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-mono font-bold bg-blue-50/20 text-blue-900">
+                                                        {formatRupiah(row.xilnexTotal)}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-mono font-bold bg-emerald-50/20 text-emerald-900">
+                                                        {formatRupiah(row.bankNet)}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-mono text-amber-800 bg-amber-50/20">
+                                                        {formatRupiah(row.bankMdr)}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right font-mono font-bold">
+                                                        {row.selisihNet === 0 ? (
+                                                            <span className="text-gray-400">Rp 0</span>
+                                                        ) : (
+                                                            <span className={row.selisihNet > 0 ? 'text-red-600' : 'text-blue-600'}>
+                                                                {(row.selisihNet > 0 ? '+' : '') + formatRupiah(row.selisihNet)}
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-3 px-4 text-center whitespace-nowrap">
+                                                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full border ${row.badgeColor}`}>
+                                                            {row.statusLabel}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-center">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setSelectedRowDetail(row); }}
+                                                            className="p-1 text-gray-400 hover:text-primary-600 rounded transition-colors cursor-pointer"
+                                                            title="Lihat Detail Transaksi"
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">visibility</span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {activeTab === 'upload' && (
+                    <div className="max-w-4xl mx-auto space-y-6">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center space-y-2">
+                            <span className="material-symbols-outlined text-4xl text-primary-500">cloud_sync</span>
+                            <h3 className="text-lg font-bold text-gray-800">Unggah Berkas Harian (Xilnex & Bank)</h3>
+                            <p className="text-xs text-gray-500 max-w-lg mx-auto">
+                                Unggah file laporan Xilnex (Ref 1), mutasi BRI (Ref 5), dan mutasi BCA (Ref 6) untuk diproses secara otomatis oleh parser engine.
                             </p>
                         </div>
 
-                        {error && (
-                            <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-center gap-2 text-sm">
-                                <span className="material-symbols-outlined">error</span>
-                                <span>{error}</span>
-                            </div>
-                        )}
-
-                        {successMsg && (
-                            <div className="p-4 bg-green-50 text-green-700 border border-green-200 rounded-lg flex items-center gap-2 text-sm">
-                                <span className="material-symbols-outlined">check_circle</span>
-                                <span>{successMsg}</span>
-                            </div>
-                        )}
-
-                        <div className="border-2 border-dashed border-gray-300 hover:border-primary-400 transition-colors rounded-xl p-8 text-center relative cursor-pointer group">
-                            <input
-                                type="file"
-                                accept=".xlsx, .xls"
-                                onChange={handleFileChange}
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            />
-                            <div className="space-y-1">
-                                <span className="text-sm font-bold text-gray-700 group-hover:text-primary-600 block">
-                                    {fileName ? fileName : 'Pilih Berkas Excel POS (.xlsx)'}
-                                </span>
-                                <span className="text-xs text-gray-400 block">
-                                    {fileName ? 'Klik atau seret file lain untuk mengganti' : 'Seret berkas ke sini atau klik untuk mencari'}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-xs text-gray-600 space-y-2">
-                            <span className="font-bold text-gray-700 block">ðŸ’¡ Ketentuan Format Excel:</span>
-                            <ul className="list-disc pl-5 space-y-1">
-                                <li>Menerima berkas spreadsheet Excel (*.xlsx, *.xls).</li>
-                                <li>Mendukung <strong>Template Otomatis Baru (Cash & Card Automation)</strong> dengan Header pada <strong>baris 14</strong>, membaca sales tunai dari <strong>Kolom E (Cash Amount)</strong> yang bukan Rp 0, serta menyaring otomatis baris Total pada Kolom A, B, dan C.</li>
-                                <li>Mendukung juga <strong>Template Lama</strong> dengan Header pada baris 13.</li>
-                                <li>Kolom B (Store) otomatis dicocokkan dengan <strong>Kode Toko</strong> pada profil apotek untuk mendapatkan kode cabang yang sesuai.</li>
-                            </ul>
-                        </div>
-
-                        {parsedData.length > 0 && (
-                            <div className="space-y-4 pt-4 border-t border-gray-100">
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-600 font-medium">Preview Data Parsed:</span>
-                                    <span className="font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded">{parsedData.length} Baris Terbaca</span>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                                <div>
+                                    <div className="flex items-center gap-2 text-primary-600 mb-2">
+                                        <span className="material-symbols-outlined">receipt_long</span>
+                                        <h4 className="font-bold text-sm text-gray-800">1. Data Xilnex Sales</h4>
+                                    </div>
+                                    <p className="text-xs text-gray-500">
+                                        File Excel `Cash & Card Automation_...xlsx` (Header Baris 14, Kolom F & G).
+                                    </p>
                                 </div>
-                                <div className="border border-gray-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
-                                    <table className="min-w-full text-left text-xs">
-                                        <thead className="bg-gray-50 text-gray-500 font-bold sticky top-0">
-                                            <tr>
-                                                <th className="p-2">Cabang</th>
-                                                <th className="p-2">Tanggal</th>
-                                                <th className="p-2 text-right">Sales Xilnex</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100 text-gray-600">
-                                            {parsedData.slice(0, 10).map((row, idx) => (
-                                                <tr key={idx} className="hover:bg-gray-50">
-                                                    <td className="p-2 font-semibold">{row.kode_cabang}</td>
-                                                    <td className="p-2">{row.tanggal_jual}</td>
-                                                    <td className="p-2 text-right font-mono">{formatRupiah(row.sales_pos)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                <div className="space-y-2">
+                                    {uploadedXilnexName && (
+                                        <span className="text-[11px] font-bold text-emerald-600 block truncate">
+                                            ✓ {uploadedXilnexName} ({rawXilnexSales.length} baris)
+                                        </span>
+                                    )}
+                                    <label className="btn-primary w-full py-2 text-xs flex items-center justify-center gap-2 cursor-pointer">
+                                        <span className="material-symbols-outlined text-base">upload_file</span>
+                                        Upload Xilnex Excel
+                                        <input type="file" accept=".xlsx,.xls" onChange={handleUploadXilnex} className="hidden" />
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                                <div>
+                                    <div className="flex items-center gap-2 text-orange-600 mb-2">
+                                        <span className="material-symbols-outlined">account_balance</span>
+                                        <h4 className="font-bold text-sm text-gray-800">2. Mutasi Bank BRI</h4>
+                                    </div>
+                                    <p className="text-xs text-gray-500">
+                                        File Excel `BRI PKU...xlsx` (Mengekstrak OffUs, OnUs, QRIS & MDR).
+                                    </p>
+                                </div>
+                                <div className="space-y-2">
+                                    {uploadedBriName && (
+                                        <span className="text-[11px] font-bold text-emerald-600 block truncate">
+                                            ✓ {uploadedBriName}
+                                        </span>
+                                    )}
+                                    <label className="bg-orange-600 hover:bg-orange-700 text-white font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm">
+                                        <span className="material-symbols-outlined text-base">upload_file</span>
+                                        Upload Mutasi BRI
+                                        <input type="file" accept=".xlsx,.xls" onChange={handleUploadBriMutation} className="hidden" />
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 flex flex-col justify-between">
+                                <div>
+                                    <div className="flex items-center gap-2 text-blue-600 mb-2">
+                                        <span className="material-symbols-outlined">account_balance</span>
+                                        <h4 className="font-bold text-sm text-gray-800">3. Mutasi Bank BCA</h4>
+                                    </div>
+                                    <p className="text-xs text-gray-500">
+                                        File Excel `BCA PKU...xlsx` (Mengekstrak KR OTOMATIS, KREDIT, TGH & DDR).
+                                    </p>
+                                </div>
+                                <div className="space-y-2">
+                                    {uploadedBcaName && (
+                                        <span className="text-[11px] font-bold text-emerald-600 block truncate">
+                                            ✓ {uploadedBcaName}
+                                        </span>
+                                    )}
+                                    <label className="bg-blue-600 hover:bg-blue-700 text-white font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm">
+                                        <span className="material-symbols-outlined text-base">upload_file</span>
+                                        Upload Mutasi BCA
+                                        <input type="file" accept=".xlsx,.xls" onChange={handleUploadBcaMutation} className="hidden" />
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'masters' && (
+                    <div className="max-w-4xl mx-auto space-y-6">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center space-y-2">
+                            <span className="material-symbols-outlined text-4xl text-primary-500">dataset</span>
+                            <h3 className="text-lg font-bold text-gray-800">Kelola File Master & MID Bank (1x Import)</h3>
+                            <p className="text-xs text-gray-500 max-w-lg mx-auto">
+                                Unggah file master referensi untuk menghubungkan Merchant ID (MID) bank dengan kode toko (`OUTCODE`).
+                            </p>
+
+                            {masterUploadStatus && (
+                                <div className="p-3 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 max-w-md mx-auto">
+                                    {masterUploadStatus}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                                <h4 className="font-bold text-sm text-gray-800">Referensi 2: DEPOSIT CARD BCA</h4>
+                                <p className="text-xs text-gray-500">Mapping Nomor Kartu BCA Deposit Card ke Outcode toko.</p>
+                                <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                                    <span className="material-symbols-outlined text-base">upload_file</span>
+                                    Import DEPOSIT CARD.xlsx
+                                    <input type="file" accept=".xlsx,.xls" onChange={(e) => handleUploadMasterFile(e, 'deposit_card')} className="hidden" />
+                                </label>
+                            </div>
+
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                                <h4 className="font-bold text-sm text-gray-800">Referensi 3: MASTER MID BRI</h4>
+                                <p className="text-xs text-gray-500">Mapping MID BRI ke Outcode toko.</p>
+                                <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                                    <span className="material-symbols-outlined text-base">upload_file</span>
+                                    Import MASTER MID BRI.xlsx
+                                    <input type="file" accept=".xlsx,.xls" onChange={(e) => handleUploadMasterFile(e, 'bri_mid')} className="hidden" />
+                                </label>
+                            </div>
+
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                                <h4 className="font-bold text-sm text-gray-800">Referensi 4: MASTER MID BCA</h4>
+                                <p className="text-xs text-gray-500">Mapping MID BCA ke Outcode toko.</p>
+                                <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                                    <span className="material-symbols-outlined text-base">upload_file</span>
+                                    Import MASTER MID BCA.xlsx
+                                    <input type="file" accept=".xlsx,.xls" onChange={(e) => handleUploadMasterFile(e, 'bca_mid')} className="hidden" />
+                                </label>
+                            </div>
+
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+                                <h4 className="font-bold text-sm text-gray-800">Referensi 7: MASTER CABANG PKU</h4>
+                                <p className="text-xs text-gray-500">Mapping Outcode ke Kode Cabang PKU.</p>
+                                <label className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold w-full py-2 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                                    <span className="material-symbols-outlined text-base">upload_file</span>
+                                    Import MASTER CABANG PKU.xlsx
+                                    <input type="file" accept=".xlsx,.xls" onChange={(e) => handleUploadMasterFile(e, 'pku_cabang')} className="hidden" />
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {selectedRowDetail && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-xs p-4">
+                        <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                            <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-bold text-sm text-gray-800">
+                                        Rincian Transaksi: {selectedRowDetail.outcode} ({selectedRowDetail.bank}) - {selectedRowDetail.date}
+                                    </h3>
+                                    <span className="text-xs text-gray-500">Status: {selectedRowDetail.statusLabel}</span>
                                 </div>
                                 <button
-                                    onClick={handleSavePOS}
-                                    disabled={loading}
-                                    className="btn-primary w-full py-2.5 flex items-center justify-center gap-2"
+                                    onClick={() => setSelectedRowDetail(null)}
+                                    className="text-gray-400 hover:text-gray-600 font-bold cursor-pointer"
                                 >
-                                    {loading ? (
-                                        <>
-                                            <span className="animate-spin inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
-                                            Menyimpan...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="material-symbols-outlined">save</span>
-                                            Simpan POS & Lakukan Rekonsiliasi
-                                        </>
-                                    )}
+                                    ✕
                                 </button>
                             </div>
-                        )}
+
+                            <div className="p-6 overflow-y-auto space-y-6 text-xs">
+                                <div className="grid grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                    <div>
+                                        <span className="text-gray-500 block">Total Xilnex</span>
+                                        <span className="font-bold font-mono text-blue-700 text-sm">{formatRupiah(selectedRowDetail.xilnexTotal)}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-500 block">Total Mutasi Bank (Net)</span>
+                                        <span className="font-bold font-mono text-emerald-700 text-sm">{formatRupiah(selectedRowDetail.bankNet)}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-500 block">Selisih Net</span>
+                                        <span className="font-bold font-mono text-red-600 text-sm">{formatRupiah(selectedRowDetail.selisihNet)}</span>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h4 className="font-bold text-gray-700">Detail Baris Mutasi Bank ({selectedRowDetail.rawBank.length} baris):</h4>
+                                    {selectedRowDetail.rawBank.length === 0 ? (
+                                        <p className="text-gray-400 italic">Belum ada mutasi bank terdeteksi.</p>
+                                    ) : (
+                                        <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                            <table className="min-w-full text-left divide-y divide-gray-200">
+                                                <thead className="bg-gray-50 font-bold text-gray-600">
+                                                    <tr>
+                                                        <th className="p-2">Tgl</th>
+                                                        <th className="p-2">MID</th>
+                                                        <th className="p-2">Tag</th>
+                                                        <th className="p-2 text-right">Gross</th>
+                                                        <th className="p-2 text-right">MDR</th>
+                                                        <th className="p-2 text-right">Net</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {selectedRowDetail.rawBank.map((b, i) => (
+                                                        <tr key={i}>
+                                                            <td className="p-2">{b.tanggal_mutasi}</td>
+                                                            <td className="p-2 font-mono">{b.mid}</td>
+                                                            <td className="p-2">{b.category_tag}</td>
+                                                            <td className="p-2 text-right font-mono">{formatRupiah(b.gross_amount)}</td>
+                                                            <td className="p-2 text-right font-mono text-amber-700">{formatRupiah(b.mdr_amount)}</td>
+                                                            <td className="p-2 text-right font-mono font-bold text-emerald-700">{formatRupiah(b.net_amount)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+                                <button
+                                    onClick={() => setSelectedRowDetail(null)}
+                                    className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold px-4 py-1.5 rounded-lg text-xs cursor-pointer"
+                                >
+                                    Tutup
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
         </AdminLayout>
     );
 }
-
