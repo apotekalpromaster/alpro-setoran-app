@@ -308,13 +308,10 @@ export function computeReconciliation({
                 }
 
                 // C. Unmatched Mutation Handling
-                // If mutation date matches sales date directly (H+0), or if there are no sales at all, treat as orphan mutation.
-                // Otherwise (H+1..H+7 unmatched entries), ignore it for this sales period since it belongs to sales of another date!
+                // Unmatched mutations from H+1..H+7 or other dates are NOT added to Bank Gross of this sales period.
+                // They are tracked as Orphan Mutations only if sales is empty or explicit sales date matches.
                 const isSameDate = sales.some(s => s.tanggal_jual === mDate || (m.explicit_sales_date && s.tanggal_jual === m.explicit_sales_date));
                 if (isSameDate || sales.length === 0) {
-                    sgBankGross += mGross;
-                    sgBankMdr += (m.mdr_amount || 0);
-                    sgBankNet += (m.net_amount || 0);
                     orphanMutations.push({
                         subGroup: sg,
                         ...m
