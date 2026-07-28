@@ -176,20 +176,36 @@ export function computeReconciliation({
         }
     };
 
-    // 1. Map Xilnex Sales by outcode & sub_group
+    // 1. Map Xilnex Sales by outcode & sub_group (Consolidating MASTER + VISA + JCB + etc. per sales date)
+    const salesMap = {};
     (xilnexSales || []).forEach(item => {
         const outcode = (item.outcode || '').toUpperCase();
         if (!outcode) return;
         initOutcode(outcode);
         const sg = item.sub_group || 'OTHER';
+        const tgl = item.tanggal_jual || '';
+        const amount = item.card_amount || item.amount || 0;
+
         if (outcodePool[outcode].subGroups[sg]) {
-            const amount = item.card_amount || item.amount || 0;
-            outcodePool[outcode].subGroups[sg].sales.push({
-                ...item,
-                amount,
-                consumed: false
-            });
-            outcodePool[outcode].subGroups[sg].salesTotal += amount;
+            const key = `${outcode}_${sg}_${tgl}`;
+            if (!salesMap[key]) {
+                salesMap[key] = {
+                    ...item,
+                    outcode,
+                    sub_group: sg,
+                    tanggal_jual: tgl,
+                    amount: 0,
+                    consumed: false
+                };
+            }
+            salesMap[key].amount += amount;
+        }
+    });
+
+    Object.values(salesMap).forEach(s => {
+        if (outcodePool[s.outcode].subGroups[s.sub_group]) {
+            outcodePool[s.outcode].subGroups[s.sub_group].sales.push(s);
+            outcodePool[s.outcode].subGroups[s.sub_group].salesTotal += s.amount;
         }
     });
 
