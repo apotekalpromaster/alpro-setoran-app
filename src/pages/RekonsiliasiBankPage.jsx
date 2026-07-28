@@ -186,7 +186,13 @@ export default function RekonsiliasiBankPage() {
 
         if (startDate && endDate) {
             filteredSales = filteredSales.filter(s => s.tanggal_jual >= startDate && s.tanggal_jual <= endDate);
-            filteredMutations = filteredMutations.filter(m => m.tanggal_mutasi >= startDate && m.tanggal_mutasi <= endDate);
+            
+            // Mutasi bank diizinkan masuk sampai H+7 dari endDate agar settlement H+1..H+7 milik sales periode ini dapat ter-match presisi
+            const extEnd = new Date(endDate);
+            extEnd.setDate(extEnd.getDate() + 7);
+            const extEndStr = extEnd.toISOString().split('T')[0];
+
+            filteredMutations = filteredMutations.filter(m => m.tanggal_mutasi >= startDate && m.tanggal_mutasi <= extEndStr);
         }
 
         return computeReconciliation({
