@@ -1,3 +1,12 @@
+export const SUB_GROUPS = [
+    'BCA_DEBIT',
+    'BCA_QRIS',
+    'BCA_CREDIT',
+    'BRI_OFFUS',
+    'BRI_ONUS',
+    'BRI_QRIS'
+];
+
 import { supabase } from './supabaseClient';
 
 const MASTER_STORAGE_KEY = 'alpro_recon_master_mappings_v1';
