@@ -436,11 +436,23 @@ export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}, masterMapping
         const ddrMatch = desc.match(/(?:DDR|ADM):\s*([\d\.]+)/);
         const mdrAmount = ddrMatch ? parseNumber(ddrMatch[1]) : 0;
 
+        let explicitSalesDate = '';
+        if (isKrTanggal) {
+            const dateTagMatch = desc.match(/KR OTOMATIS TANGGAL\s*:\s*(\d{1,2})\/(\d{1,2})/i);
+            if (dateTagMatch) {
+                const tagDay = dateTagMatch[1].padStart(2, '0');
+                const tagMonth = dateTagMatch[2].padStart(2, '0');
+                const mutYear = dateStr ? dateStr.split('-')[0] : new Date().getFullYear().toString();
+                explicitSalesDate = `${mutYear}-${tagMonth}-${tagDay}`;
+            }
+        }
+
         const outcode = resolveOutcodeFromMid(rawMid || cleanMid, desc, bcaMidMap, masterMappings);
 
         records.push({
             bank_name: 'BCA',
             tanggal_mutasi: dateStr,
+            explicit_sales_date: explicitSalesDate,
             category_tag: tag,
             sub_group: subGroup,
             mid: cleanMid,

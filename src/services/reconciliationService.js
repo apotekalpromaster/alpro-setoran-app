@@ -237,9 +237,12 @@ export function computeReconciliation({
                 const mDate = m.tanggal_mutasi;
                 const mGross = m.gross_amount || 0;
 
-                // Candidate sales within H+0 to H+7 window
+                // Candidate sales within H+0 to H+7 window (respecting explicit_sales_date if available)
                 const candidates = sales.filter(s => {
                     if (s.consumed) return false;
+                    if (m.explicit_sales_date) {
+                        return s.tanggal_jual === m.explicit_sales_date;
+                    }
                     if (!s.tanggal_jual || !mDate) return true;
                     const sTime = new Date(s.tanggal_jual).getTime();
                     const mTime = new Date(mDate).getTime();
@@ -307,7 +310,7 @@ export function computeReconciliation({
                 // C. Unmatched Mutation Handling
                 // If mutation date matches sales date directly (H+0), or if there are no sales at all, treat as orphan mutation.
                 // Otherwise (H+1..H+7 unmatched entries), ignore it for this sales period since it belongs to sales of another date!
-                const isSameDate = sales.some(s => s.tanggal_jual === mDate);
+                const isSameDate = sales.some(s => s.tanggal_jual === mDate || (m.explicit_sales_date && s.tanggal_jual === m.explicit_sales_date));
                 if (isSameDate || sales.length === 0) {
                     sgBankGross += mGross;
                     sgBankMdr += (m.mdr_amount || 0);
