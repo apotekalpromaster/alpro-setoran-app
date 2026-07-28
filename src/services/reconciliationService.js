@@ -233,11 +233,51 @@ export function computeReconciliation({
             let sgBankMdr = 0;
             let sgBankNet = 0;
 
+            // Phase 1: Grouped Explicit Date Matching (1 Sales = N Mutations, e.g. QRISOnUs + QRISOffUs)
+            sales.forEach(s => {
+                if (s.consumed) return;
+
+                const explicitDateMutations = mutations.filter(m => !m.consumed && m.explicit_sales_date && m.explicit_sales_date === s.tanggal_jual);
+
+                if (explicitDateMutations.length > 0) {
+                    s.consumed = true;
+                    let sumGross = 0;
+                    let sumMdr = 0;
+                    let sumNet = 0;
+
+                    explicitDateMutations.forEach(m => {
+                        m.consumed = true;
+                        sumGross += (m.gross_amount || 0);
+                        sumMdr += (m.mdr_amount || 0);
+                        sumNet += (m.net_amount || 0);
+                    });
+
+                    sgBankGross += sumGross;
+                    sgBankMdr += sumMdr;
+                    sgBankNet += sumNet;
+
+                    matchedPairs.push({
+                        subGroup: sg,
+                        bankName: explicitDateMutations[0].bank_name,
+                        mutationDate: explicitDateMutations[0].tanggal_mutasi,
+                        mutationGross: sumGross,
+                        mutationMdr: sumMdr,
+                        mutationNet: sumNet,
+                        tag: explicitDateMutations.map(m => m.category_tag).join(' + '),
+                        matchStatus: explicitDateMutations.length > 1 ? 'Grouped Date Match (N:1)' : 'Explicit Date Match (1:1)',
+                        linkedSales: [s],
+                        rawBank: explicitDateMutations[0]
+                    });
+                }
+            });
+
+            // Phase 2: Single Mutation Exact & Window Candidate Matching (1:1 & N:1)
             mutations.forEach(m => {
+                if (m.consumed) return;
+
                 const mDate = m.tanggal_mutasi;
                 const mGross = m.gross_amount || 0;
 
-                // Candidate sales within H+0 to H+7 window (respecting explicit_sales_date if available)
                 const candidates = sales.filter(s => {
                     if (s.consumed) return false;
                     if (m.explicit_sales_date) {
@@ -271,31 +311,6 @@ export function computeReconciliation({
                         rawBank: m
                     });
                     return;
-                }
-
-                // A2. Explicit Sales Date Match (1:1)
-                if (m.explicit_sales_date) {
-                    const explicitMatch = sales.find(s => !s.consumed && s.tanggal_jual === m.explicit_sales_date);
-                    if (explicitMatch) {
-                        explicitMatch.consumed = true;
-                        m.consumed = true;
-                        sgBankGross += mGross;
-                        sgBankMdr += (m.mdr_amount || 0);
-                        sgBankNet += (m.net_amount || 0);
-                        matchedPairs.push({
-                            subGroup: sg,
-                            bankName: m.bank_name,
-                            mutationDate: mDate,
-                            mutationGross: mGross,
-                            mutationMdr: m.mdr_amount,
-                            mutationNet: m.net_amount,
-                            tag: m.category_tag,
-                            matchStatus: 'Explicit Date Match (1:1)',
-                            linkedSales: [explicitMatch],
-                            rawBank: m
-                        });
-                        return;
-                    }
                 }
 
                 // B. Accumulated match check (N sales = 1 mutation)
@@ -333,8 +348,6 @@ export function computeReconciliation({
                 }
 
                 // C. Unmatched Mutation Handling
-                // Unmatched mutations from H+1..H+7 or other dates are NOT added to Bank Gross of this sales period.
-                // They are tracked as Orphan Mutations only if sales is empty or explicit sales date matches.
                 const isSameDate = sales.some(s => s.tanggal_jual === mDate || (m.explicit_sales_date && s.tanggal_jual === m.explicit_sales_date));
                 if (isSameDate || sales.length === 0) {
                     orphanMutations.push({
@@ -344,54 +357,7 @@ export function computeReconciliation({
                 }
             });
 
-            // C2. Reverse Accumulated Match Check (1 Sales = N Mutations, e.g. OffUs 1 + OffUs 2 or QRISOffUs + QRISOnUs)
-            sales.forEach(s => {
-                if (s.consumed) return;
-                
-                const sameDateMutations = mutations.filter(m => {
-                    if (m.consumed) return false;
-                    if (m.explicit_sales_date) {
-                        return m.explicit_sales_date === s.tanggal_jual;
-                    }
-                    const sTime = new Date(s.tanggal_jual).getTime();
-                    const mTime = new Date(m.tanggal_mutasi).getTime();
-                    const diffDays = (mTime - sTime) / (1000 * 3600 * 24);
-                    return diffDays >= 0 && diffDays <= 7;
-                });
-
-                let sumMutGross = 0;
-                sameDateMutations.forEach(m => { sumMutGross += (m.gross_amount || 0); });
-
-                if (sameDateMutations.length > 0 && (Math.abs(sumMutGross - s.amount) < 0.01 || sameDateMutations.some(m => m.explicit_sales_date === s.tanggal_jual))) {
-                    s.consumed = true;
-                    let mutMdrTotal = 0;
-                    let mutNetTotal = 0;
-                    sameDateMutations.forEach(m => {
-                        m.consumed = true;
-                        mutMdrTotal += (m.mdr_amount || 0);
-                        mutNetTotal += (m.net_amount || 0);
-                    });
-
-                    sgBankGross += sumMutGross;
-                    sgBankMdr += mutMdrTotal;
-                    sgBankNet += mutNetTotal;
-
-                    matchedPairs.push({
-                        subGroup: sg,
-                        bankName: sameDateMutations[0].bank_name,
-                        mutationDate: sameDateMutations[0].tanggal_mutasi,
-                        mutationGross: sumMutGross,
-                        mutationMdr: mutMdrTotal,
-                        mutationNet: mutNetTotal,
-                        tag: sameDateMutations.map(m => m.category_tag).join(' + '),
-                        matchStatus: 'Accumulated (1 Sales : N Mutations)',
-                        linkedSales: [s],
-                        rawBank: sameDateMutations[0]
-                    });
-                }
-            });
-
-            // D. Collect unconsumed sales as Orphan Sales
+            // Phase 3: Collect unconsumed sales as Orphan Sales
             sales.forEach(s => {
                 if (!s.consumed) {
                     orphanSales.push({
