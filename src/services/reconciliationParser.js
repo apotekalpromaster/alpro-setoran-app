@@ -1,3 +1,54 @@
+
+// Helper function to resolve Outcode from MID with multi-strategy matching
+export function resolveOutcodeFromMid(rawMid, desc = "", primaryMidMap = {}, masterMappings = {}) {
+    const depositMap = masterMappings.deposit_cards || {};
+    const bcaMidMap = masterMappings.bca_mids || {};
+    const briMidMap = masterMappings.bri_mids || {};
+
+    const mapsToSearch = [primaryMidMap, depositMap, bcaMidMap, briMidMap];
+
+    if (rawMid) {
+        const strMid = rawMid.toString().trim();
+        const cleanMid = strMid.replace(/^0+/, '');
+        const last7 = cleanMid.length >= 7 ? cleanMid.slice(-7) : cleanMid;
+
+        // 1. Direct match
+        for (const m of mapsToSearch) {
+            if (!m) continue;
+            if (m[strMid]) return m[strMid];
+            if (m[cleanMid]) return m[cleanMid];
+            if (m[last7]) return m[last7];
+        }
+
+        // 2. Suffix / Substring match
+        for (const m of mapsToSearch) {
+            if (!m) continue;
+            for (const [key, val] of Object.entries(m)) {
+                if (!key || !val) continue;
+                const cleanKey = key.toString().replace(/^0+/, '');
+                if (cleanKey === cleanMid || (last7.length >= 7 && cleanKey.endsWith(last7)) || (cleanMid.length >= 7 && cleanKey.slice(-7) === last7)) {
+                    return val;
+                }
+            }
+        }
+    }
+
+    // 3. Fallback: match store name or outcode from description
+    if (desc) {
+        const descUpper = desc.toUpperCase();
+        const pkuMap = masterMappings.pku_cabang || {};
+        for (const [outcode, cabang] of Object.entries(pkuMap)) {
+            if (outcode && descUpper.includes(outcode.toUpperCase())) {
+                return outcode.toUpperCase();
+            }
+            if (cabang && descUpper.includes(cabang.toUpperCase())) {
+                return outcode.toUpperCase();
+            }
+        }
+    }
+
+    return '';
+}
 import * as XLSX from 'xlsx';
 
 /**
@@ -253,7 +304,7 @@ export function parsePkuCabangExcel(arrayBuffer) {
 // ============================================================
 // REFERENSI 5: BRI PKU JULI (Mutasi Bank BRI)
 // ============================================================
-export function parseBriMutationExcel(arrayBuffer, briMidMap = {}) {
+export function parseBriMutationExcel(arrayBuffer, briMidMap = {}, masterMappings = {}) {
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -306,7 +357,7 @@ export function parseBriMutationExcel(arrayBuffer, briMidMap = {}) {
         const mdrMatch = desc.match(/MDR:\s*([\d\.\,]+)/);
         const mdrAmount = mdrMatch ? parseNumber(mdrMatch[1].replace(/\./g, '').replace(',', '.')) : 0;
 
-        const outcode = briMidMap[cleanMid] || briMidMap[rawMid] || '';
+        const outcode = resolveOutcodeFromMid(rawMid || cleanMid, desc, briMidMap, masterMappings);
 
         records.push({
             bank_name: 'BRI',
@@ -328,7 +379,7 @@ export function parseBriMutationExcel(arrayBuffer, briMidMap = {}) {
 // ============================================================
 // REFERENSI 6: BCA PKU JULI (Mutasi Bank BCA)
 // ============================================================
-export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}) {
+export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}, masterMappings = {}) {
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -384,7 +435,7 @@ export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}) {
         const ddrMatch = desc.match(/(?:DDR|ADM):\s*([\d\.]+)/);
         const mdrAmount = ddrMatch ? parseNumber(ddrMatch[1]) : 0;
 
-        const outcode = bcaMidMap[cleanMid] || bcaMidMap[rawMid] || '';
+        const outcode = resolveOutcodeFromMid(rawMid || cleanMid, desc, bcaMidMap, masterMappings);
 
         records.push({
             bank_name: 'BCA',

@@ -105,12 +105,12 @@ export default function RekonsiliasiBankPage() {
             let newlyParsedMutations = [];
             if (fileBri) {
                 const buf = await fileBri.arrayBuffer();
-                const parsedBri = parseBriMutationExcel(buf, briMap);
+                const parsedBri = parseBriMutationExcel(buf, briMap, masterMappings);
                 newlyParsedMutations = newlyParsedMutations.concat(parsedBri);
             }
             if (fileBca) {
                 const buf = await fileBca.arrayBuffer();
-                const parsedBca = parseBcaMutationExcel(buf, bcaMap);
+                const parsedBca = parseBcaMutationExcel(buf, bcaMap, masterMappings);
                 newlyParsedMutations = newlyParsedMutations.concat(parsedBca);
             }
 
