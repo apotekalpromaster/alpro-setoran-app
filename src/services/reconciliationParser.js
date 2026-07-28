@@ -360,9 +360,20 @@ export function parseBriMutationExcel(arrayBuffer, briMidMap = {}, masterMapping
 
         const outcode = resolveOutcodeFromMid(rawMid || cleanMid, desc, briMidMap, masterMappings);
 
+        // Extract YYMMDD token from description (e.g., "OffUs 1 260717 ")
+        let briSalesDate = '';
+        const briDateMatch = desc.match(/(?:OffUs|OnUs|QRIS|TRSF)\s*\d*\s*(\d{2})(\d{2})(\d{2})/i) || desc.match(/\b(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b/);
+        if (briDateMatch) {
+            const yy = briDateMatch[1];
+            const mm = briDateMatch[2];
+            const dd = briDateMatch[3];
+            briSalesDate = `20${yy}-${mm}-${dd}`;
+        }
+
         records.push({
             bank_name: 'BRI',
             tanggal_mutasi: dateStr,
+            explicit_sales_date: briSalesDate,
             category_tag: tag,
             sub_group: subGroup,
             mid: cleanMid,
@@ -428,9 +439,22 @@ export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}, masterMapping
         const rawMid = midMatch ? midMatch[1] : '';
         const cleanMid = rawMid.replace(/^0+/, '');
 
-        // Gross TGH: TGH: 695086.00
-        const tghMatch = desc.match(/TGH:\s*([\d\.]+)/);
-        const grossAmount = tghMatch ? parseNumber(tghMatch[1]) : netCredit;
+        // Gross Amount extraction:
+        // Use TGH: if available. If no TGH:, extract value before DDR: or ADM: (do NOT use Column D Net Credit directly)
+        let grossAmount = 0;
+        const tghMatch = desc.match(/TGH:\s*([\d\.]+)/i);
+        if (tghMatch) {
+            grossAmount = parseNumber(tghMatch[1]);
+        } else {
+            const beforeDdrMatch = desc.match(/:\s*([\d\.]+)\s*(?:DDR|ADM):/i) || desc.match(/([\d\.]+)\s*(?:DDR|ADM):/i);
+            if (beforeDdrMatch) {
+                grossAmount = parseNumber(beforeDdrMatch[1]);
+            } else {
+                const ddrMatch = desc.match(/(?:DDR|ADM):\s*([\d\.]+)/i);
+                const mdrAmount = ddrMatch ? parseNumber(ddrMatch[1]) : 0;
+                grossAmount = netCredit > 0 ? (netCredit + mdrAmount) : netCredit;
+            }
+        }
 
         // MDR DDR/ADM: DDR: 1042.62
         const ddrMatch = desc.match(/(?:DDR|ADM):\s*([\d\.]+)/);
