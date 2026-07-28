@@ -132,39 +132,42 @@ export async function fetchMasterMappingsFromSupabase() {
     }
 }
 
-export function computeReconciliation({ xilnexSales, bankMutations, storeProfiles }) {
-    const masters = getStoredMasterMappings();
+export function computeReconciliation({
+    xilnexSales = [],
+    bankMutations = [],
+    storeProfiles = [],
+    masterMappings = getStoredMasterMappings()
+}) {
     const profileMap = {};
     (storeProfiles || []).forEach(p => {
-        if (p.kode_toko) {
-            profileMap[p.kode_toko.toUpperCase()] = p.username || p.kode_toko;
-        }
+        if (p.kode_toko) profileMap[p.kode_toko.toUpperCase()] = p.username || p.kode_toko;
     });
 
-    const SUB_GROUPS = ['BCA_DEBIT', 'BCA_QRIS', 'BCA_CREDIT', 'BRI_OFFUS', 'BRI_ONUS', 'BRI_QRIS'];
+    const masters = {
+        deposit_cards: masterMappings.deposit_cards || {},
+        bri_mids: masterMappings.bri_mids || {},
+        bca_mids: masterMappings.bca_mids || {},
+        pku_cabang: masterMappings.pku_cabang || {}
+    };
 
     const outcodePool = {};
 
-    function initOutcode(outcode) {
-        if (!outcodePool[outcode]) {
-            outcodePool[outcode] = {
-                outcode,
+    const initOutcode = (code) => {
+        if (!outcodePool[code]) {
+            outcodePool[code] = {
                 subGroups: {}
             };
             SUB_GROUPS.forEach(sg => {
-                outcodePool[outcode].subGroups[sg] = {
+                outcodePool[code].subGroups[sg] = {
                     sales: [],
                     mutations: [],
-                    salesTotal: 0,
-                    bankGross: 0,
-                    bankMdr: 0,
-                    bankNet: 0
+                    salesTotal: 0
                 };
             });
         }
-    }
+    };
 
-    // 1. Map Xilnex Cashless Sales
+    // 1. Map Xilnex Sales by outcode & sub_group
     (xilnexSales || []).forEach(item => {
         const outcode = (item.outcode || '').toUpperCase();
         if (!outcode) return;
@@ -181,7 +184,7 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
         }
     });
 
-    // 2. Map Bank Mutations
+    // 2. Map Candidate Bank Mutations (without summing bankGross upfront)
     (bankMutations || []).forEach(b => {
         const outcode = (b.outcode || 'UNMAPPED').toUpperCase();
         initOutcode(outcode);
@@ -191,15 +194,12 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
                 ...b,
                 consumed: false
             });
-            outcodePool[outcode].subGroups[sg].bankGross += (b.gross_amount || 0);
-            outcodePool[outcode].subGroups[sg].bankMdr += (b.mdr_amount || 0);
-            outcodePool[outcode].subGroups[sg].bankNet += (b.net_amount || 0);
         }
     });
 
     const results = [];
 
-    // 3. Perform Smart Greedy Matching per Outcode & Sub-Group
+    // 3. Match per Outcode & Sub-Group
     Object.keys(outcodePool).forEach(outcode => {
         const storeData = outcodePool[outcode];
         const cabangPku = masters.pku_cabang[outcode] || '';
@@ -220,27 +220,15 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
             const sales = sgData.sales.sort((a, b) => (a.tanggal_jual || '').localeCompare(b.tanggal_jual || ''));
             const mutations = sgData.mutations.sort((a, b) => (a.tanggal_mutasi || '').localeCompare(b.tanggal_mutasi || ''));
 
-            totalCashless += sgData.salesTotal;
-            totalBankGross += sgData.bankGross;
-            totalBankMdr += sgData.bankMdr;
-            totalBankNet += sgData.bankNet;
+            let sgBankGross = 0;
+            let sgBankMdr = 0;
+            let sgBankNet = 0;
 
-            const selisihSg = sgData.salesTotal - sgData.bankGross;
-
-            subGroupSummaries[sg] = {
-                salesTotal: sgData.salesTotal,
-                bankGross: sgData.bankGross,
-                bankMdr: sgData.bankMdr,
-                bankNet: sgData.bankNet,
-                selisih: selisihSg,
-                status: selisihSg === 0 ? 'Cocok' : 'Selisih'
-            };
-
-            // Smart Greedy Match Algorithm per sub_group
             mutations.forEach(m => {
                 const mDate = m.tanggal_mutasi;
                 const mGross = m.gross_amount || 0;
 
+                // Candidate sales within H+0 to H+7 window
                 const candidates = sales.filter(s => {
                     if (s.consumed) return false;
                     if (!s.tanggal_jual || !mDate) return true;
@@ -250,11 +238,14 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
                     return diffDays >= 0 && diffDays <= 7;
                 });
 
-                // A. Exact match check
+                // A. Exact match check (1:1)
                 const exactMatch = candidates.find(s => Math.abs(s.amount - mGross) < 0.01);
                 if (exactMatch) {
                     exactMatch.consumed = true;
                     m.consumed = true;
+                    sgBankGross += mGross;
+                    sgBankMdr += (m.mdr_amount || 0);
+                    sgBankNet += (m.net_amount || 0);
                     matchedPairs.push({
                         subGroup: sg,
                         bankName: m.bank_name,
@@ -286,6 +277,9 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
                 if (Math.abs(accumulated - mGross) < 0.01 && accumulatedSales.length > 0) {
                     accumulatedSales.forEach(s => { s.consumed = true; });
                     m.consumed = true;
+                    sgBankGross += mGross;
+                    sgBankMdr += (m.mdr_amount || 0);
+                    sgBankNet += (m.net_amount || 0);
                     matchedPairs.push({
                         subGroup: sg,
                         bankName: m.bank_name,
@@ -301,34 +295,22 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
                     return;
                 }
 
-                // C. Partial match check
-                if (accumulatedSales.length > 0) {
-                    accumulatedSales.forEach(s => { s.consumed = true; });
-                    m.consumed = true;
-                    matchedPairs.push({
+                // C. Unmatched Mutation Handling
+                // If mutation date matches sales date directly (H+0), or if there are no sales at all, treat as orphan mutation.
+                // Otherwise (H+1..H+7 unmatched entries), ignore it for this sales period since it belongs to sales of another date!
+                const isSameDate = sales.some(s => s.tanggal_jual === mDate);
+                if (isSameDate || sales.length === 0) {
+                    sgBankGross += mGross;
+                    sgBankMdr += (m.mdr_amount || 0);
+                    sgBankNet += (m.net_amount || 0);
+                    orphanMutations.push({
                         subGroup: sg,
-                        bankName: m.bank_name,
-                        mutationDate: mDate,
-                        mutationGross: mGross,
-                        mutationMdr: m.mdr_amount,
-                        mutationNet: m.net_amount,
-                        tag: m.category_tag,
-                        matchStatus: 'Partial',
-                        linkedSales: accumulatedSales,
-                        gap: mGross - accumulated,
-                        rawBank: m
+                        ...m
                     });
-                    return;
                 }
-
-                // D. Orphan Mutation
-                orphanMutations.push({
-                    subGroup: sg,
-                    ...m
-                });
             });
 
-            // E. Collect unconsumed sales as Orphan Sales
+            // D. Collect unconsumed sales as Orphan Sales
             sales.forEach(s => {
                 if (!s.consumed) {
                     orphanSales.push({
@@ -337,6 +319,22 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
                     });
                 }
             });
+
+            totalCashless += sgData.salesTotal;
+            totalBankGross += sgBankGross;
+            totalBankMdr += sgBankMdr;
+            totalBankNet += sgBankNet;
+
+            const selisihSg = sgData.salesTotal - sgBankGross;
+
+            subGroupSummaries[sg] = {
+                salesTotal: sgData.salesTotal,
+                bankGross: sgBankGross,
+                bankMdr: sgBankMdr,
+                bankNet: sgBankNet,
+                selisih: selisihSg,
+                status: selisihSg === 0 ? 'Cocok' : 'Selisih'
+            };
         });
 
         const totalSelisihNet = totalCashless - totalBankGross;
@@ -348,22 +346,21 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
         if (outcode === 'UNMAPPED') {
             status = 'Unmapped';
             statusLabel = 'MID Belum Terhubung';
-            badgeColor = 'bg-amber-100 text-amber-800 border-amber-300';
-        } else if (totalCashless > 0 && totalBankGross === 0) {
-            status = 'BelumMutasi';
-            statusLabel = 'Belum Ada Mutasi Bank';
-            badgeColor = 'bg-orange-100 text-orange-800 border-orange-300';
+            badgeColor = 'bg-gray-100 text-gray-800 border-gray-300';
         } else if (totalSelisihNet !== 0) {
             status = 'Selisih';
-            statusLabel = "Selisih Rp " + totalSelisihNet.toLocaleString('id-ID');
+            statusLabel = `Selisih Rp ${totalSelisihNet.toLocaleString('id-ID')}`;
             badgeColor = 'bg-red-100 text-red-800 border-red-300';
+        } else if (totalBankGross === 0 && totalCashless > 0) {
+            status = 'BelumMutasi';
+            statusLabel = 'Belum Ada Mutasi Bank';
+            badgeColor = 'bg-amber-100 text-amber-800 border-amber-300';
         }
 
         results.push({
             outcode,
             storeName,
             cabang_pku: cabangPku,
-            subGroups: subGroupSummaries,
             cashlessXilnex: totalCashless,
             totalBankGross,
             totalBankMdr,
@@ -372,38 +369,12 @@ export function computeReconciliation({ xilnexSales, bankMutations, storeProfile
             status,
             statusLabel,
             badgeColor,
+            subGroups: subGroupSummaries,
             matchedPairs,
             orphanSales,
             orphanMutations
         });
     });
 
-    results.sort((a, b) => a.outcode.localeCompare(b.outcode));
-
-    syncSummariesToSupabase(results).catch(() => {});
-
     return results;
-}
-
-export async function syncSummariesToSupabase(reconGrid) {
-    try {
-        if (!reconGrid || reconGrid.length === 0) return;
-        const rows = reconGrid.map(r => ({
-            recon_date: new Date().toISOString().split('T')[0],
-            outcode: r.outcode,
-            xilnex_cashless: r.cashlessXilnex,
-            bca_gross: (r.subGroups.BCA_DEBIT?.bankGross || 0) + (r.subGroups.BCA_QRIS?.bankGross || 0) + (r.subGroups.BCA_CREDIT?.bankGross || 0),
-            bca_mdr: (r.subGroups.BCA_DEBIT?.bankMdr || 0) + (r.subGroups.BCA_QRIS?.bankMdr || 0) + (r.subGroups.BCA_CREDIT?.bankMdr || 0),
-            bca_net: (r.subGroups.BCA_DEBIT?.bankNet || 0) + (r.subGroups.BCA_QRIS?.bankNet || 0) + (r.subGroups.BCA_CREDIT?.bankNet || 0),
-            bri_gross: (r.subGroups.BRI_OFFUS?.bankGross || 0) + (r.subGroups.BRI_ONUS?.bankGross || 0) + (r.subGroups.BRI_QRIS?.bankGross || 0),
-            bri_mdr: (r.subGroups.BRI_OFFUS?.bankMdr || 0) + (r.subGroups.BRI_ONUS?.bankMdr || 0) + (r.subGroups.BRI_QRIS?.bankMdr || 0),
-            bri_net: (r.subGroups.BRI_OFFUS?.bankNet || 0) + (r.subGroups.BRI_ONUS?.bankNet || 0) + (r.subGroups.BRI_QRIS?.bankNet || 0),
-            total_bank_gross: r.totalBankGross,
-            selisih_net: r.selisihNet,
-            status_matching: r.status
-        }));
-        await supabase.from('recon_daily_summaries').upsert(rows, { onConflict: 'recon_date,outcode' });
-    } catch (e) {
-        // Silent fallback
-    }
 }
