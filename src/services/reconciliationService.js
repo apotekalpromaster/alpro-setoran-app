@@ -319,6 +319,53 @@ export function computeReconciliation({
                 }
             });
 
+            // C2. Reverse Accumulated Match Check (1 Sales = N Mutations, e.g. OffUs 1 + OffUs 2 or QRISOffUs + QRISOnUs)
+            sales.forEach(s => {
+                if (s.consumed) return;
+                
+                const sameDateMutations = mutations.filter(m => {
+                    if (m.consumed) return false;
+                    if (m.explicit_sales_date) {
+                        return m.explicit_sales_date === s.tanggal_jual;
+                    }
+                    const sTime = new Date(s.tanggal_jual).getTime();
+                    const mTime = new Date(m.tanggal_mutasi).getTime();
+                    const diffDays = (mTime - sTime) / (1000 * 3600 * 24);
+                    return diffDays >= 0 && diffDays <= 7;
+                });
+
+                let sumMutGross = 0;
+                sameDateMutations.forEach(m => { sumMutGross += (m.gross_amount || 0); });
+
+                if (sameDateMutations.length > 0 && Math.abs(sumMutGross - s.amount) < 0.01) {
+                    s.consumed = true;
+                    let mutMdrTotal = 0;
+                    let mutNetTotal = 0;
+                    sameDateMutations.forEach(m => {
+                        m.consumed = true;
+                        mutMdrTotal += (m.mdr_amount || 0);
+                        mutNetTotal += (m.net_amount || 0);
+                    });
+
+                    sgBankGross += sumMutGross;
+                    sgBankMdr += mutMdrTotal;
+                    sgBankNet += mutNetTotal;
+
+                    matchedPairs.push({
+                        subGroup: sg,
+                        bankName: sameDateMutations[0].bank_name,
+                        mutationDate: sameDateMutations[0].tanggal_mutasi,
+                        mutationGross: sumMutGross,
+                        mutationMdr: mutMdrTotal,
+                        mutationNet: mutNetTotal,
+                        tag: sameDateMutations.map(m => m.category_tag).join(' + '),
+                        matchStatus: 'Accumulated (1 Sales : N Mutations)',
+                        linkedSales: [s],
+                        rawBank: sameDateMutations[0]
+                    });
+                }
+            });
+
             // D. Collect unconsumed sales as Orphan Sales
             sales.forEach(s => {
                 if (!s.consumed) {

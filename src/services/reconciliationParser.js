@@ -360,9 +360,9 @@ export function parseBriMutationExcel(arrayBuffer, briMidMap = {}, masterMapping
 
         const outcode = resolveOutcodeFromMid(rawMid || cleanMid, desc, briMidMap, masterMappings);
 
-        // Extract YYMMDD token from description (e.g., "OffUs 1 260717 ")
+        // Extract YYMMDD token from description (handles spaces and underscores, e.g. QRISOffUs_3_260720_ or OffUs 1 260720 )
         let briSalesDate = '';
-        const briDateMatch = desc.match(/(?:OffUs|OnUs|QRIS|TRSF)\s*\d*\s*(\d{2})(\d{2})(\d{2})/i) || desc.match(/\b(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b/);
+        const briDateMatch = desc.match(/(?:OffUs|OnUs|QRIS|TRSF)[\s\d_]*?(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])/i) || desc.match(/[\s_](\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[\s_]/);
         if (briDateMatch) {
             const yy = briDateMatch[1];
             const mm = briDateMatch[2];
