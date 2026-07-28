@@ -55,6 +55,33 @@ function extractOutcode(storeStr) {
     return clean;
 }
 
+/**
+ * Helper to determine Sub-Group key for Xilnex daily sales
+ */
+export function determineXilnexSubGroup(merchantBank, cardType) {
+    const bank = (merchantBank || '').toUpperCase();
+    const card = (cardType || '').toUpperCase();
+
+    const isBca = bank.includes('BCA');
+    const isBri = bank.includes('BRI');
+
+    if (isBca) {
+        if (card.includes('QRIS')) return 'BCA_QRIS';
+        if (card.includes('DEBIT')) return 'BCA_DEBIT';
+        return 'BCA_CREDIT';
+    }
+
+    if (isBri) {
+        if (card.includes('QRIS')) return 'BRI_QRIS';
+        if (card.includes('DEBIT BANK SAMA') || card.includes('DEBIT SAMA') || card.includes('ONUS')) {
+            return 'BRI_ONUS';
+        }
+        return 'BRI_OFFUS';
+    }
+
+    return 'OTHER';
+}
+
 // ============================================================
 // REFERENSI 1: Cash & Card Automation (Xilnex Daily Sales)
 // ============================================================
@@ -93,13 +120,15 @@ export function parseXilnexSalesExcel(arrayBuffer) {
 
         const dateStr = parseExcelDate(rawDate);
         const outcode = extractOutcode(rawStore);
+        const subGroup = determineXilnexSubGroup(merchantId, cardType);
 
         rows.push({
             tanggal_jual: dateStr,
             raw_store: rawStore,
             outcode: outcode.toUpperCase(),
-            merchant_bank: merchantId.toUpperCase(), // BRI / BCA / dll
+            merchant_bank: merchantId.toUpperCase(),
             card_type: cardType,
+            sub_group: subGroup,
             card_amount: cardAmount,
             other_amount: otherAmount,
             total_xilnex: cardAmount + otherAmount
@@ -154,7 +183,6 @@ export function parseBriMidExcel(arrayBuffer) {
         const outcode = (row[1] || '').toString().trim();
 
         if (mid && outcode) {
-            // Strip leading zeros for clean matching e.g. 001999633624 -> 1999633624
             const cleanMid = mid.replace(/^0+/, '');
             mappings.push({
                 mid_bri: cleanMid,
@@ -184,7 +212,6 @@ export function parseBcaMidExcel(arrayBuffer) {
         const outcode = (row[3] || '').toString().trim();
 
         if (mid && outcode) {
-            // BCA MID 7 digits
             const cleanMid = mid.replace(/^0+/, '');
             mappings.push({
                 mid_bca: cleanMid,
@@ -244,18 +271,30 @@ export function parseBriMutationExcel(arrayBuffer, briMidMap = {}) {
 
         if (!rawDate || !desc) continue;
 
-        // Filter: contains "OffUs", "OnUs", "QRIS"
-        const isOffUs = desc.includes('OffUs');
-        const isOnUs = desc.includes('OnUs');
-        const isQris = desc.includes('QRIS');
+        const hasQris = desc.includes('QRIS');
+        const hasOffUs = desc.includes('OffUs');
+        const hasOnUs = desc.includes('OnUs');
 
-        if (!isOffUs && !isOnUs && !isQris) continue;
+        if (!hasQris && !hasOffUs && !hasOnUs) continue;
 
-        const tag = isOnUs ? 'OnUs' : isOffUs ? 'OffUs' : 'QRIS';
+        let tag = 'BRI';
+        let subGroup = 'OTHER';
+
+        if (hasQris) {
+            tag = hasOffUs ? 'QRISOffUs' : hasOnUs ? 'QRISOnUs' : 'QRIS';
+            subGroup = 'BRI_QRIS';
+        } else if (hasOffUs) {
+            tag = 'OffUs';
+            subGroup = 'BRI_OFFUS';
+        } else if (hasOnUs) {
+            tag = 'OnUs';
+            subGroup = 'BRI_ONUS';
+        }
+
         const dateStr = parseExcelDate(rawDate);
 
         // Regex for MID: 10-12 digit number after transaction date token
-        const midMatch = desc.match(/\b0*(\d{10,12})\b/);
+        const midMatch = desc.match(/0*(\d{10,12})/);
         const rawMid = midMatch ? midMatch[1] : '';
         const cleanMid = rawMid.replace(/^0+/, '');
 
@@ -273,6 +312,7 @@ export function parseBriMutationExcel(arrayBuffer, briMidMap = {}) {
             bank_name: 'BRI',
             tanggal_mutasi: dateStr,
             category_tag: tag,
+            sub_group: subGroup,
             mid: cleanMid,
             outcode: outcode.toUpperCase(),
             gross_amount: grossAmount,
@@ -307,19 +347,31 @@ export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}) {
 
         if (!rawDate || !desc) continue;
 
-        // Filter: contains "KR OTOMATIS MID", "KARTU KREDIT", "KR OTOMATIS TANGGAL"
         const isKrMid = desc.includes('KR OTOMATIS MID');
         const isKartuKredit = desc.includes('KARTU KREDIT');
         const isKrTanggal = desc.includes('KR OTOMATIS TANGGAL');
 
         if (!isKrMid && !isKartuKredit && !isKrTanggal) continue;
 
-        const tag = isKrMid ? 'KR OTOMATIS MID' : isKartuKredit ? 'KARTU KREDIT' : 'KR OTOMATIS TANGGAL';
+        let tag = 'KARTU KREDIT MID';
+        let subGroup = 'BCA_CREDIT';
+
+        if (isKrMid) {
+            tag = 'KR OTOMATIS MID';
+            subGroup = 'BCA_DEBIT';
+        } else if (isKrTanggal) {
+            tag = 'KR OTOMATIS TANGGAL';
+            subGroup = 'BCA_QRIS';
+        } else if (isKartuKredit) {
+            tag = 'KARTU KREDIT MID';
+            subGroup = 'BCA_CREDIT';
+        }
+
         const dateStr = parseExcelDate(rawDate);
 
         // MID 7 digits
-        let midMatch = desc.match(/MID\s*:\s*\d*?(\d{7})\b/);
-        if (!midMatch) midMatch = desc.match(/\b(\d{7})\b/);
+        let midMatch = desc.match(/MID\s*:\s*\d*?(\d{7})/);
+        if (!midMatch) midMatch = desc.match(/(\d{7})/);
 
         const rawMid = midMatch ? midMatch[1] : '';
         const cleanMid = rawMid.replace(/^0+/, '');
@@ -338,6 +390,7 @@ export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}) {
             bank_name: 'BCA',
             tanggal_mutasi: dateStr,
             category_tag: tag,
+            sub_group: subGroup,
             mid: cleanMid,
             outcode: outcode.toUpperCase(),
             gross_amount: grossAmount,
