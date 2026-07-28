@@ -7,48 +7,49 @@ export function resolveOutcodeFromMid(rawMid, desc = "", primaryMidMap = {}, mas
 
     const mapsToSearch = [primaryMidMap, depositMap, bcaMidMap, briMidMap];
 
+    // Extract digit sequences from Keterangan (Kolom B Ref 6 / Kolom G Ref 5)
+    const descDigits = (desc || '').match(/\d+/g) || [];
+
+    // 1. Direct key match with extracted rawMid or cleanMid
     if (rawMid) {
         const strMid = rawMid.toString().trim();
         const cleanMid = strMid.replace(/^0+/, '');
-        const last7 = cleanMid.length >= 7 ? cleanMid.slice(-7) : cleanMid;
-
-        // 1. Direct match
         for (const m of mapsToSearch) {
             if (!m) continue;
             if (m[strMid]) return m[strMid];
             if (m[cleanMid]) return m[cleanMid];
-            if (m[last7]) return m[last7];
-        }
-
-        // 2. Suffix / Substring match
-        for (const m of mapsToSearch) {
-            if (!m) continue;
-            for (const [key, val] of Object.entries(m)) {
-                if (!key || !val) continue;
-                const cleanKey = key.toString().replace(/^0+/, '');
-                if (cleanKey === cleanMid || (last7.length >= 7 && cleanKey.endsWith(last7)) || (cleanMid.length >= 7 && cleanKey.slice(-7) === last7)) {
-                    return val;
-                }
-            }
         }
     }
 
-    // 3. Fallback: match store name or outcode from description
-    if (desc) {
-        const descUpper = desc.toUpperCase();
-        const pkuMap = masterMappings.pku_cabang || {};
-        for (const [outcode, cabang] of Object.entries(pkuMap)) {
-            if (outcode && descUpper.includes(outcode.toUpperCase())) {
-                return outcode.toUpperCase();
-            }
-            if (cabang && descUpper.includes(cabang.toUpperCase())) {
-                return outcode.toUpperCase();
+    // 2. Pure MID String Snippet Match between Master MIDs (Ref 2, 3, 4) and Keterangan text (Ref 5, 6)
+    for (const m of mapsToSearch) {
+        if (!m) continue;
+        for (const [key, outcode] of Object.entries(m)) {
+            if (!key || !outcode) continue;
+            const cleanKey = key.toString().trim().replace(/^0+/, '');
+
+            if (cleanKey.length >= 5) {
+                // A. Check if Keterangan string contains Master MID key snippet
+                if (desc.includes(cleanKey)) {
+                    return outcode;
+                }
+
+                // B. Check numeric digit snippets extracted from Keterangan
+                for (const d of descDigits) {
+                    const cleanD = d.replace(/^0+/, '');
+                    if (cleanD.length >= 5) {
+                        if (cleanD === cleanKey || cleanD.includes(cleanKey) || cleanKey.includes(cleanD)) {
+                            return outcode;
+                        }
+                    }
+                }
             }
         }
     }
 
     return '';
 }
+
 import * as XLSX from 'xlsx';
 
 /**
