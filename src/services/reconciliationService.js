@@ -273,6 +273,31 @@ export function computeReconciliation({
                     return;
                 }
 
+                // A2. Explicit Sales Date Match (1:1)
+                if (m.explicit_sales_date) {
+                    const explicitMatch = sales.find(s => !s.consumed && s.tanggal_jual === m.explicit_sales_date);
+                    if (explicitMatch) {
+                        explicitMatch.consumed = true;
+                        m.consumed = true;
+                        sgBankGross += mGross;
+                        sgBankMdr += (m.mdr_amount || 0);
+                        sgBankNet += (m.net_amount || 0);
+                        matchedPairs.push({
+                            subGroup: sg,
+                            bankName: m.bank_name,
+                            mutationDate: mDate,
+                            mutationGross: mGross,
+                            mutationMdr: m.mdr_amount,
+                            mutationNet: m.net_amount,
+                            tag: m.category_tag,
+                            matchStatus: 'Explicit Date Match (1:1)',
+                            linkedSales: [explicitMatch],
+                            rawBank: m
+                        });
+                        return;
+                    }
+                }
+
                 // B. Accumulated match check (N sales = 1 mutation)
                 let accumulated = 0;
                 const accumulatedSales = [];
@@ -337,7 +362,7 @@ export function computeReconciliation({
                 let sumMutGross = 0;
                 sameDateMutations.forEach(m => { sumMutGross += (m.gross_amount || 0); });
 
-                if (sameDateMutations.length > 0 && Math.abs(sumMutGross - s.amount) < 0.01) {
+                if (sameDateMutations.length > 0 && (Math.abs(sumMutGross - s.amount) < 0.01 || sameDateMutations.some(m => m.explicit_sales_date === s.tanggal_jual))) {
                     s.consumed = true;
                     let mutMdrTotal = 0;
                     let mutNetTotal = 0;
