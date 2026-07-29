@@ -178,15 +178,13 @@ serve(async (req: Request) => {
     // 3. Drive Search Queries prioritizing exact Xilnex title "Cash & Card Automation"
     const driveFields = 'files(id,name,modifiedTime,mimeType,parents)';
     const queryCandidates = [
+      `name contains 'Cash & Card Automation' and trashed = false`,
       `name contains 'Automation' and trashed = false`,
-      `name contains 'Cash' and trashed = false`,
-      `'${TARGET_FOLDER_ID}' in parents and trashed = false`,
-      `trashed = false`
+      `'${TARGET_FOLDER_ID}' in parents and trashed = false`
     ];
 
     let fetchedFiles: any[] = [];
     let matchedQuery = '';
-    const searchLogs: any[] = [];
 
     for (const qStr of queryCandidates) {
       const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qStr)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=modifiedTime%20desc&pageSize=500`;
@@ -195,13 +193,6 @@ serve(async (req: Request) => {
       });
       const resData = await resp.json();
 
-      searchLogs.push({
-        query: qStr,
-        status: resp.status,
-        count: resData.files ? resData.files.length : 0,
-        error: resData.error || null
-      });
-
       if (resp.ok && resData.files && resData.files.length > 0) {
         const excelOnly = resData.files.filter(isExcelFile);
         if (excelOnly.length > 0) {
@@ -209,14 +200,13 @@ serve(async (req: Request) => {
           matchedQuery = qStr;
           console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} valid Excel files using query: ${qStr}`);
           break;
-        } else if (fetchedFiles.length === 0) {
-          fetchedFiles = resData.files;
-          matchedQuery = `Raw (${qStr})`;
         }
+      } else if (!resp.ok) {
+        console.error(`[sync-pos-sales-from-drive] Search error for query '${qStr}':`, resData.error || resData);
       }
     }
 
-    const allFiles = fetchedFiles.filter(isExcelFile);
+    const allFiles = fetchedFiles;
     console.log(`[sync-pos-sales-from-drive] Total valid Excel files retrieved from Drive: ${allFiles.length}`);
 
     if (allFiles.length === 0) {
@@ -226,11 +216,9 @@ serve(async (req: Request) => {
           message: 'Tidak ada berkas Excel data POS yang ditemukan di Drive.', 
           processedFiles: 0, 
           totalUpserted: 0,
-          tokenScope,
           rawFilesCount: fetchedFiles.length,
           todayWib: todayWibStr,
           matchedQuery,
-          searchLogs,
           sampleFileNames: fetchedFiles.slice(0, 10).map(f => `${f.name} (${f.mimeType || 'unknown'})`)
         }),
         { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
@@ -294,9 +282,9 @@ serve(async (req: Request) => {
     let totalUpserted = 0;
     const processedReport: any[] = [];
 
-    // 6. Process Target Excel Files
+    // 6. Process Target Excel Files with Low-Memory Optimization Mode (dense: true, no styles/formulas/HTML)
     for (const fileItem of targetFiles) {
-      console.log(`[sync-pos-sales-from-drive] Downloading & parsing file: ${fileItem.name} (${fileItem.id})`);
+      console.log(`[sync-pos-sales-from-drive] Downloading & parsing file (Low-Memory Mode): ${fileItem.name} (${fileItem.id})`);
 
       const fileDownloadUrl = `https://www.googleapis.com/drive/v3/files/${fileItem.id}?alt=media&supportsAllDrives=true`;
       const dlResp = await fetch(fileDownloadUrl, {
@@ -309,13 +297,25 @@ serve(async (req: Request) => {
       }
 
       const fileBuffer = await dlResp.arrayBuffer();
-      const workbook = XLSX.read(new Uint8Array(fileBuffer), { type: 'array' });
+
+      // Memory optimization options for SheetJS:
+      // dense: true -> Uses 2D array representation instead of sparse cell objects (saves >90% memory)
+      // cellFormula: false, cellHTML: false, cellStyles: false, cellText: false -> Disables memory-heavy metadata
+      const workbook = XLSX.read(new Uint8Array(fileBuffer), {
+        type: 'array',
+        dense: true,
+        cellFormula: false,
+        cellHTML: false,
+        cellStyles: false,
+        cellText: false,
+        cellDates: false
+      });
 
       if (workbook.SheetNames.length === 0) continue;
 
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: false });
 
       if (rawRows.length < 2) continue;
 
@@ -426,7 +426,6 @@ serve(async (req: Request) => {
         todayWib: todayWibStr,
         tokenScope,
         matchedQuery,
-        searchLogs,
         sampleFileNames: targetFiles.slice(0, 10).map(f => `${f.name} (${f.mimeType || 'unknown'})`),
         details: processedReport,
       }),
