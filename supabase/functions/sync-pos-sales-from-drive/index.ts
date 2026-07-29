@@ -174,19 +174,19 @@ serve(async (req: Request) => {
 
     console.log(`[sync-pos-sales-from-drive] Today WIB: ${todayWibStr} | Patterns: ${patternDDMMYYYY}, ${patternDDMMYY}, ${patternYYYYMMDD}`);
 
-    // 3. Drive Search Queries with Server-Side Excel Filtering
+    // 3. Drive Search Queries prioritizing exact Xilnex filename "Automation" & "Cash & Card"
     const driveFields = 'files(id,name,modifiedTime,mimeType,parents)';
     const queryCandidates = [
-      // Candidate 1: Excel files inside target folder
-      `'${TARGET_FOLDER_ID}' in parents and trashed = false and (name contains '.xlsx' or name contains '.xls' or name contains '.csv')`,
-      // Candidate 2: All files in target folder
-      `'${TARGET_FOLDER_ID}' in parents and trashed = false`,
-      // Candidate 3: Files named Automation or Cash
+      // Candidate 1: Search directly for Xilnex export title "Automation"
       `name contains 'Automation' and trashed = false`,
-      `name contains 'Cash' and trashed = false`
+      // Candidate 2: Search for Xilnex export title "Cash & Card"
+      `name contains 'Cash & Card' and trashed = false`,
+      // Candidate 3: Search inside target folder
+      `'${TARGET_FOLDER_ID}' in parents and trashed = false`
     ];
 
     let fetchedFiles: any[] = [];
+    let matchedQuery = '';
 
     for (const qStr of queryCandidates) {
       const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qStr)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=modifiedTime%20desc&pageSize=500`;
@@ -196,11 +196,11 @@ serve(async (req: Request) => {
       const resData = await resp.json();
 
       if (resp.ok && resData.files && resData.files.length > 0) {
-        // Filter strictly for Excel files
         const excelOnly = resData.files.filter(isExcelFile);
         if (excelOnly.length > 0) {
           fetchedFiles = excelOnly;
-          console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} Excel files using query: ${qStr}`);
+          matchedQuery = qStr;
+          console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} valid Excel files using query: ${qStr}`);
           break;
         }
       } else if (!resp.ok) {
@@ -412,7 +412,7 @@ serve(async (req: Request) => {
         processedFiles: targetFiles.length,
         totalUpserted,
         todayWib: todayWibStr,
-        patterns: [patternDDMMYYYY, patternDDMMYY, patternYYYYMMDD],
+        matchedQuery,
         details: processedReport,
       }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
