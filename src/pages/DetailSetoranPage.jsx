@@ -6,7 +6,26 @@ import { parseRupiah, formatRupiah, validateSetoranData, NON_FINANCIAL_TYPES } f
 import UserLayout from '../components/UserLayout';
 import { supabase } from '../services/supabaseClient';
 
-const STEP_INFO = ['Detail Laporan', 'Detail Setoran', 'Ringkasan & Kirim'];
+const STEP_INFO = ['1. Informasi Sales & Metode', '2. Input Nominal & Bukti', '3. Periksa & Kirim'];
+
+// Tautan Foto Contoh Dokumen (Dapat diisi link URL foto fisik)
+const SAMPLE_DOCUMENT_IMAGES = {
+    slot1: {
+        title: "Contoh Struk Kutipan Harian Kasir",
+        url: "", // Tempel link URL foto contoh Struk Kutipan Harian Kasir di sini
+        description: "Pastikan foto menampilkan seluruh angka penjualan kasir dan tanggal dengan jelas."
+    },
+    slot2: {
+        title: "Contoh Struk Settlement Mesin EDC",
+        url: "", // Tempel link URL foto contoh Settlement EDC di sini
+        description: "Pastikan angka Grand Total Debit, Kredit, dan QRIS pada kertas settlement terlihat utuh."
+    },
+    slot3: {
+        title: "Contoh Struk / Resi Setoran Bank",
+        url: "", // Tempel link URL foto contoh Resi Setoran Bank/ATM di sini
+        description: "Pastikan tanggal setoran, nomor rekening, dan stempel/bukti transfer bank terbaca jelas."
+    }
+};
 
 export default function DetailSetoranPage() {
     const { profile } = useAuth();
@@ -16,18 +35,17 @@ export default function DetailSetoranPage() {
     const [globalError, setGlobalError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [stagedLightboxImg, setStagedLightboxImg] = useState(null);
+    const [sampleModalImg, setSampleModalImg] = useState(null);
     const [showCancelModal, setShowCancelModal] = useState(false);
 
     const jenis = formData.jenisPelaporan;
     const metode = formData.metodeSetoran;
     const isNonFinancial = NON_FINANCIAL_TYPES.includes(jenis);
-    const isUangLebih = jenis === 'Setoran Uang Lebih';
-    const isPotongan = jenis === 'Setoran Sales Dengan Potongan Penjualan';
+    const isPotongan = jenis?.includes('Dengan Potongan Penjualan');
     const isDepositCard = jenis?.includes('Deposit Card');
 
     // Build list of sales dates whose nominal needs to be entered
     const allSalesDates = [formData.tanggalPenjualan, ...(formData.tanggalPenjualanTambahan || [])].filter(Boolean);
-    const serializedSalesDates = allSalesDates.join(',');
 
     // Initialize nominalPenjualan array to match dates length
     useEffect(() => {
@@ -40,53 +58,6 @@ export default function DetailSetoranPage() {
         }
     }, []);
 
-    // Auto-fill nominal penjualan from POS sales data if available
-    useEffect(() => {
-        const fetchPOSSalesForDates = async () => {
-            if (!profile?.username || allSalesDates.length === 0) return;
-            const validTypes = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'];
-            if (!validTypes.includes(jenis)) return;
-
-            try {
-                const { data, error } = await supabase
-                    .from('pos_sales_data')
-                    .select('tanggal_jual, sales_pos')
-                    .eq('kode_cabang', profile.username)
-                    .in('tanggal_jual', allSalesDates);
-
-                if (error) throw error;
-
-                if (data && data.length > 0) {
-                    const posMap = {};
-                    data.forEach(item => {
-                        posMap[item.tanggal_jual] = item.sales_pos;
-                    });
-
-                    const currentNominals = Array.isArray(formData.nominalPenjualan)
-                        ? [...formData.nominalPenjualan]
-                        : Array(allSalesDates.length).fill('');
-
-                    const updatedNominals = allSalesDates.map((date, idx) => {
-                        const posSales = posMap[date];
-                        if (posSales !== undefined && posSales !== null) {
-                            return formatRupiah(posSales);
-                        }
-                        return currentNominals[idx] || '';
-                    });
-
-                    const hasChanged = updatedNominals.some((val, idx) => val !== currentNominals[idx]);
-                    if (hasChanged) {
-                        updateField({ nominalPenjualan: updatedNominals });
-                    }
-                }
-            } catch (err) {
-                console.error('Gagal mengambil data sales POS:', err.message);
-            }
-        };
-
-        fetchPOSSalesForDates();
-    }, [jenis, profile?.username, serializedSalesDates]);
-
     // Auto-fill deposit card and KCP from profile
     useEffect(() => {
         if (metode === 'ATM BCA Menggunakan Deposit Card' && profile?.deposit_card && !formData.nomorDepositCard) {
@@ -97,7 +68,7 @@ export default function DetailSetoranPage() {
         }
     }, []);
 
-    // --- Live calculator ---
+    // --- Live Tunai Calculator ---
     const totalPenjualan = Array.isArray(formData.nominalPenjualan)
         ? formData.nominalPenjualan.reduce((s, v) => s + parseRupiah(v), 0)
         : parseRupiah(formData.nominalPenjualan);
@@ -107,10 +78,22 @@ export default function DetailSetoranPage() {
     const selisih = danaTersedia - setoran;
 
     const selisihLabel = selisih > 0
-        ? { text: `${formatRupiah(selisih)} (Kurang)`, color: 'text-gray-800' }
+        ? { text: `Setoran Kurang ${formatRupiah(selisih)}`, color: 'text-red-600 font-bold' }
         : selisih < 0
-            ? { text: `${formatRupiah(Math.abs(selisih))} (Lebih)`, color: 'text-blue-600' }
-            : { text: 'Lunas (Rp 0)', color: 'text-green-600' };
+            ? { text: `Setoran Lebih ${formatRupiah(Math.abs(selisih))}`, color: 'text-blue-600 font-bold' }
+            : { text: 'Pas / Tidak Ada Selisih (Rp 0)', color: 'text-green-600 font-bold' };
+
+    // --- Live Non-Tunai Calculator ---
+    const totalNonTunai =
+        parseRupiah(formData.bcaDebit) +
+        parseRupiah(formData.bcaKredit) +
+        parseRupiah(formData.bcaQris) +
+        parseRupiah(formData.briDebit) +
+        parseRupiah(formData.briKredit) +
+        parseRupiah(formData.briQris) +
+        parseRupiah(formData.bankTransfer);
+
+    const grandTotalSales = totalPenjualan + totalNonTunai;
 
     // --- File upload staging (5 structured slots) ---
     const [stagedFiles, setStagedFiles] = useState(() => {
@@ -152,8 +135,7 @@ export default function DetailSetoranPage() {
         setIsSubmitting(true);
 
         try {
-            // Wajib Lampirkan Bukti Wajib pada Slot 1, 2, dan 3
-            const isSingleProofType = ['Setoran Uang Lebih', 'Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
+            const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
 
             if (isSingleProofType) {
                 if (!stagedFiles[0]) {
@@ -161,9 +143,9 @@ export default function DetailSetoranPage() {
                 }
             } else {
                 const missingSlots = [];
-                if (!stagedFiles[0]) missingSlots.push('Bukti 1 (Kutipan Harian Toko)');
-                if (!stagedFiles[1]) missingSlots.push('Bukti 2 (Settlement EDC)');
-                if (!stagedFiles[2]) missingSlots.push('Bukti 3 (Bukti Setoran Teller/ATM)');
+                if (!stagedFiles[0]) missingSlots.push('Bukti 1 (Struk Kutipan Harian Kasir)');
+                if (!stagedFiles[1]) missingSlots.push('Bukti 2 (Struk Settlement EDC)');
+                if (!stagedFiles[2]) missingSlots.push('Bukti 3 (Struk / Resi Setoran Bank)');
 
                 if (missingSlots.length > 0) {
                     throw new Error(`Anda belum melengkapi seluruh bukti wajib! Harap unggah: ${missingSlots.join(', ')}.`);
@@ -185,15 +167,13 @@ export default function DetailSetoranPage() {
         }
     };
 
-    const today = new Date().toISOString().split('T')[0];
-
     const labelPenjualan =
         jenis === 'Setoran Uang Pecahan Kecil' ? 'Nominal Pecahan Kecil' :
-            jenis === 'Pengembalian Petty Cash' ? 'Nominal Petty Cash Awal' : 'Nominal Penjualan Tunai';
+            jenis === 'Pengembalian Petty Cash' ? 'Nominal Petty Cash Awal' : 'Penjualan Tunai (Uang Cash Kasir)';
 
     return (
-        <UserLayout title="Detail Setoran" activeRoute="/setoran">
-            <div className="max-w-xl mx-auto">
+        <UserLayout title="Lapor Sales Toko" activeRoute="/setoran">
+            <div className="max-w-2xl mx-auto">
                 {/* Progress Bar */}
                 <div className="mb-8">
                     <div className="flex items-center justify-between mb-2">
@@ -211,7 +191,7 @@ export default function DetailSetoranPage() {
                     </div>
                 </div>
 
-                <form onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow-sm border border-gray-200 space-y-6">
+                <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-gray-200 space-y-8 animate-slide-in">
                     {/* Global error banner */}
                     {globalError && (
                         <div className="flex items-start gap-3 bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg">
@@ -223,14 +203,14 @@ export default function DetailSetoranPage() {
                         </div>
                     )}
 
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Detail Setoran</h2>
-                        <p className="text-sm text-gray-500 mt-1">Lengkapi detail nominal dan bukti di bawah ini.</p>
+                    <div className="border-b border-gray-100 pb-4">
+                        <h2 className="text-xl font-bold text-gray-900">Langkah 2: Input Nominal & Unggah Bukti</h2>
+                        <p className="text-sm text-gray-500 mt-1">Masukkan angka penjualan tunai, transaksi non-tunai, dan foto bukti pendukung.</p>
                     </div>
 
                     {/* ===== NON-FINANCIAL (Deposit Card) ===== */}
                     {isDepositCard && (
-                        <>
+                        <div className="space-y-6">
                             <InputField
                                 label="Nomor Deposit Card"
                                 value={formData.nomorDepositCard}
@@ -249,62 +229,162 @@ export default function DetailSetoranPage() {
                                 </>
                             )}
                             <TextareaField label="Penjelasan" value={formData.penjelasan} onChange={(v) => updateField({ penjelasan: v.toUpperCase() })} placeholder="Kronologi kejadian..." />
-                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} onPreviewClick={setStagedLightboxImg} />
-                        </>
+                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} onPreviewClick={setStagedLightboxImg} onOpenSampleModal={setSampleModalImg} />
+                        </div>
                     )}
 
-                    {/* ===== UANG LEBIH ===== */}
-                    {isUangLebih && !isDepositCard && (
-                        <>
-                            <CurrencyField label="Nominal Setoran" value={formData.nominalSetoran} onChange={(v) => updateField({ nominalSetoran: v })} />
-                            <TextareaField label="Penjelasan" value={formData.penjelasan} onChange={(v) => updateField({ penjelasan: v.toUpperCase() })} placeholder="Jelaskan sumber uang lebih" />
-                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} onPreviewClick={setStagedLightboxImg} />
-                        </>
-                    )}
-
-                    {/* ===== NORMAL FINANCIAL ===== */}
-                    {!isNonFinancial && !isUangLebih && (
-                        <>
-                            {allSalesDates.map((date, idx) => {
-                                const d = new Date(date);
-                                const dateLabel = !isNaN(d) ? d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-                                return (
-                                    <CurrencyField
-                                        key={idx}
-                                        label={`${labelPenjualan} (${dateLabel})`}
-                                        value={Array.isArray(formData.nominalPenjualan) ? formData.nominalPenjualan[idx] || '' : ''}
-                                        onChange={(v) => handleNominalPenjualanChange(idx, v)}
-                                    />
-                                );
-                            })}
-
-                            {isPotongan && (
-                                <CurrencyField label="Potongan Penjualan" value={formData.potonganPenjualan} onChange={(v) => updateField({ potonganPenjualan: v })} />
-                            )}
-
-                            <CurrencyField label="Nominal Yang Disetorkan" value={formData.nominalSetoran} onChange={(v) => updateField({ nominalSetoran: v })} />
-
-                            {/* Live Selisih Calculator */}
-                            {!isNonFinancial && (
-                                <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Selisih / Belum Disetor</label>
-                                    <p className={`text-lg font-bold ${selisihLabel.color}`}>{selisihLabel.text}</p>
+                    {/* ===== FINANCIAL REPORTING (TUNAI + NON-TUNAI) ===== */}
+                    {!isNonFinancial && (
+                        <div className="space-y-8">
+                            {/* BAGIAN 1: PENJUALAN TUNAI & SETORAN */}
+                            <section className="bg-gray-50/60 p-5 rounded-xl border border-gray-200 space-y-5">
+                                <div className="flex items-center gap-2 border-b border-gray-200 pb-3">
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white text-xs font-bold">1</span>
+                                    <h3 className="font-bold text-gray-800 text-base">Penjualan Tunai & Uang Setoran</h3>
                                 </div>
-                            )}
 
-                            {/* Conditional: Deposit Card / KCP / Nomor Referensi */}
-                            {metode === 'ATM BCA Menggunakan Deposit Card' && (
-                                <InputField label="Nomor Deposit Card" value={formData.nomorDepositCard} onChange={(v) => updateField({ nomorDepositCard: v.toUpperCase() })} placeholder="Nomor Kartu" readOnly={!!profile?.deposit_card} />
-                            )}
-                            {metode === 'Teller Bank' && (
-                                <InputField label="KCP Terdekat" value={formData.kcpTerdekat} onChange={(v) => updateField({ kcpTerdekat: v.toUpperCase() })} placeholder="KCP" readOnly={!!profile?.kcp_terdekat} />
-                            )}
-                            {metode === 'Metode Setoran Lain' && (
-                                <InputField label="Nomor Referensi Bank" value={formData.nomorMesinAtm} onChange={(v) => updateField({ nomorMesinAtm: v.toUpperCase() })} placeholder="Masukkan nomor referensi" />
-                            )}
+                                {allSalesDates.map((date, idx) => {
+                                    const d = new Date(date);
+                                    const dateLabel = !isNaN(d) ? d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                                    return (
+                                        <CurrencyField
+                                            key={idx}
+                                            label={`${labelPenjualan} (${dateLabel})`}
+                                            value={Array.isArray(formData.nominalPenjualan) ? formData.nominalPenjualan[idx] || '' : ''}
+                                            onChange={(v) => handleNominalPenjualanChange(idx, v)}
+                                        />
+                                    );
+                                })}
 
-                            <UploadSection stagedFiles={stagedFiles} onSlotChange={handleFileSlotChange} onSlotRemove={handleRemoveSlotFile} jenis={jenis} onPreviewClick={setStagedLightboxImg} />
-                        </>
+                                {isPotongan && (
+                                    <div>
+                                        <CurrencyField
+                                            label="Potongan Uang Sales (Untuk Top Up Petty Cash Toko)"
+                                            value={formData.potonganPenjualan}
+                                            onChange={(v) => updateField({ potonganPenjualan: v })}
+                                        />
+                                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200/80 p-2.5 rounded-lg mt-1.5 flex items-start gap-1.5">
+                                            <span className="material-symbols-outlined text-base flex-shrink-0 mt-0.5 text-amber-600">info</span>
+                                            <span>Isi jika ada uang sales tunai kasir yang dipakai untuk isi ulang (top up) petty cash toko.</span>
+                                        </p>
+                                    </div>
+                                )}
+
+                                <CurrencyField
+                                    label="Jumlah Uang Tunai Yang Disetor ke Bank"
+                                    value={formData.nominalSetoran}
+                                    onChange={(v) => updateField({ nominalSetoran: v })}
+                                />
+
+                                {/* Status Selisih Calculator */}
+                                <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide">Status Selisih Uang Tunai</label>
+                                        <p className={`text-base sm:text-lg font-bold mt-0.5 ${selisihLabel.color}`}>{selisihLabel.text}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-[10px] text-gray-400 block uppercase">Dana Uang Cash</span>
+                                        <span className="text-xs font-bold text-gray-700">{formatRupiah(danaTersedia)}</span>
+                                    </div>
+                                </div>
+
+                                {/* Conditional: Deposit Card / KCP / Nomor Referensi */}
+                                {metode === 'ATM BCA Menggunakan Deposit Card' && (
+                                    <InputField label="Nomor Deposit Card" value={formData.nomorDepositCard} onChange={(v) => updateField({ nomorDepositCard: v.toUpperCase() })} placeholder="Nomor Kartu" readOnly={!!profile?.deposit_card} />
+                                )}
+                                {metode === 'Teller Bank' && (
+                                    <InputField label="KCP Terdekat" value={formData.kcpTerdekat} onChange={(v) => updateField({ kcpTerdekat: v.toUpperCase() })} placeholder="KCP" readOnly={!!profile?.kcp_terdekat} />
+                                )}
+                                {metode === 'Metode Setoran Lain' && (
+                                    <InputField label="Nomor Referensi Bank" value={formData.nomorMesinAtm} onChange={(v) => updateField({ nomorMesinAtm: v.toUpperCase() })} placeholder="Masukkan nomor referensi" />
+                                )}
+                            </section>
+
+                            {/* BAGIAN 2: PENJUALAN NON-TUNAI (EDC & TRANSFER) */}
+                            <section className="bg-blue-50/40 p-5 rounded-xl border border-blue-100 space-y-5">
+                                <div className="border-b border-blue-200/60 pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold">2</span>
+                                        <h3 className="font-bold text-gray-800 text-base">Penjualan Non-Tunai (EDC & Transfer)</h3>
+                                    </div>
+                                    <p className="text-xs text-gray-600 mt-1 ml-8">
+                                        Masukkan total angka dari kertas settlement EDC BCA, EDC BRI, dan Transfer Bank. Jika tidak ada transaksi, biarkan Rp 0.
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {/* BCA Group */}
+                                    <div className="space-y-3 bg-white p-4 rounded-xl border border-blue-150 shadow-sm">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 uppercase tracking-wider border-b border-blue-50 pb-2">
+                                            <span className="material-symbols-outlined text-base">credit_card</span> EDC BCA
+                                        </div>
+                                        <CurrencyField label="BCA Debit" value={formData.bcaDebit} onChange={(v) => updateField({ bcaDebit: v })} />
+                                        <CurrencyField label="BCA Kredit" value={formData.bcaKredit} onChange={(v) => updateField({ bcaKredit: v })} />
+                                        <CurrencyField label="BCA QRIS" value={formData.bcaQris} onChange={(v) => updateField({ bcaQris: v })} />
+                                    </div>
+
+                                    {/* BRI Group */}
+                                    <div className="space-y-3 bg-white p-4 rounded-xl border border-blue-150 shadow-sm">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 uppercase tracking-wider border-b border-blue-50 pb-2">
+                                            <span className="material-symbols-outlined text-base">credit_card</span> EDC BRI
+                                        </div>
+                                        <CurrencyField label="BRI Debit" value={formData.briDebit} onChange={(v) => updateField({ briDebit: v })} />
+                                        <CurrencyField label="BRI Kredit" value={formData.briKredit} onChange={(v) => updateField({ briKredit: v })} />
+                                        <CurrencyField label="BRI QRIS" value={formData.briQris} onChange={(v) => updateField({ briQris: v })} />
+                                    </div>
+                                </div>
+
+                                {/* Bank Transfer Group */}
+                                <div className="bg-white p-4 rounded-xl border border-blue-150 shadow-sm">
+                                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 uppercase tracking-wider border-b border-emerald-50 pb-2 mb-3">
+                                        <span className="material-symbols-outlined text-base">account_balance</span> Transfer Bank
+                                    </div>
+                                    <CurrencyField label="Bank Transfer" value={formData.bankTransfer} onChange={(v) => updateField({ bankTransfer: v })} />
+                                </div>
+                            </section>
+
+                            {/* BAGIAN 3: UPLOAD BUKTI FOTO */}
+                            <section className="bg-white p-5 rounded-xl border border-gray-200 space-y-4">
+                                <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white text-xs font-bold">3</span>
+                                    <h3 className="font-bold text-gray-800 text-base">Upload Bukti Foto (Maksimal 5 Foto)</h3>
+                                </div>
+                                <UploadSection
+                                    stagedFiles={stagedFiles}
+                                    onSlotChange={handleFileSlotChange}
+                                    onSlotRemove={handleRemoveSlotFile}
+                                    jenis={jenis}
+                                    onPreviewClick={setStagedLightboxImg}
+                                    onOpenSampleModal={setSampleModalImg}
+                                />
+                            </section>
+
+                            {/* KARTU TOTAL SALES HARIAN (GRAND TOTAL) */}
+                            <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100/70 border-2 border-orange-300/80 rounded-2xl p-6 shadow-md space-y-4">
+                                <div className="flex items-center justify-between border-b border-orange-200/80 pb-3">
+                                    <h4 className="text-xs font-extrabold text-orange-900 uppercase tracking-wider flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-xl text-orange-600">analytics</span> TOTAL SALES HARIAN (Tunai + Non-Tunai)
+                                    </h4>
+                                    <span className="text-[10px] font-bold bg-orange-200/80 text-orange-900 px-2.5 py-1 rounded-full uppercase tracking-wider">Konsolidasi Omset</span>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-700">
+                                    <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs">
+                                        <span className="text-gray-500 block text-[11px]">Total Sales Tunai Kasir:</span>
+                                        <span className="font-bold text-base text-gray-900">{formatRupiah(totalPenjualan)}</span>
+                                    </div>
+                                    <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs">
+                                        <span className="text-gray-500 block text-[11px]">Total Sales Non-Tunai (EDC & Transfer):</span>
+                                        <span className="font-bold text-base text-blue-700">{formatRupiah(totalNonTunai)}</span>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t-2 border-orange-300 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
+                                    <span className="text-sm font-black text-orange-950 uppercase tracking-wide">GRAND TOTAL SALES</span>
+                                    <span className="text-2xl sm:text-3xl font-black text-orange-600 tracking-tight">{formatRupiah(grandTotalSales)}</span>
+                                </div>
+                            </div>
+                        </div>
                     )}
 
                     {/* Nav buttons */}
@@ -369,7 +449,7 @@ export default function DetailSetoranPage() {
                     <div className="relative max-w-3xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl space-y-3 p-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                             <h4 className="font-bold text-gray-900 text-sm flex items-center gap-2">
-                                <span className="material-symbols-outlined text-primary-600">image</span> Pratinjau Foto Berkas Staged
+                                <span className="material-symbols-outlined text-primary-600">image</span> Pratinjau Foto Berkas
                             </h4>
                             <button onClick={() => setStagedLightboxImg(null)} className="h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors">
                                 <span className="material-symbols-outlined text-sm">close</span>
@@ -381,18 +461,51 @@ export default function DetailSetoranPage() {
                     </div>
                 </div>
             )}
+
+            {/* Modal Pratinjau Contoh Struk */}
+            {sampleModalImg && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setSampleModalImg(null)}>
+                    <div className="relative max-w-lg w-full bg-white rounded-2xl overflow-hidden shadow-2xl p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                            <h4 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                                <span className="material-symbols-outlined text-blue-600">visibility</span> {sampleModalImg.title}
+                            </h4>
+                            <button onClick={() => setSampleModalImg(null)} className="h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors">
+                                <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                        </div>
+                        {sampleModalImg.url ? (
+                            <div className="max-h-[60vh] overflow-auto flex items-center justify-center bg-gray-900/5 rounded-xl p-2">
+                                <img src={sampleModalImg.url} alt={sampleModalImg.title} className="max-w-full max-h-[55vh] object-contain rounded-lg shadow-md" />
+                            </div>
+                        ) : (
+                            <div className="p-8 text-center bg-blue-50/50 rounded-xl border border-blue-100 space-y-2">
+                                <span className="material-symbols-outlined text-4xl text-blue-400">add_photo_alternate</span>
+                                <h5 className="font-bold text-gray-800 text-sm">{sampleModalImg.title}</h5>
+                                <p className="text-xs text-gray-500 leading-relaxed">{sampleModalImg.description}</p>
+                                <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200 mt-2">
+                                    *(Foto contoh acuan dokumen fisik akan segera diunggah oleh admin).*
+                                </p>
+                            </div>
+                        )}
+                        <div className="pt-2 text-right">
+                            <button type="button" onClick={() => setSampleModalImg(null)} className="btn-secondary text-xs py-2 px-4">
+                                Tutup
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </UserLayout>
     );
 }
 
-/* ==================================================================
-   Sub-components
-================================================================== */
+/* Sub-components */
 
 function InputField({ label, value, onChange, placeholder, readOnly }) {
     return (
         <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">{label}</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">{label}</label>
             <input
                 type="text"
                 value={value || ''}
@@ -413,7 +526,7 @@ function CurrencyField({ label, value, onChange }) {
     };
     return (
         <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">{label}</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">{label}</label>
             <input
                 type="text"
                 inputMode="numeric"
@@ -430,7 +543,7 @@ function CurrencyField({ label, value, onChange }) {
 function TextareaField({ label, value, onChange, placeholder }) {
     return (
         <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">{label}</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">{label}</label>
             <textarea
                 rows={3}
                 value={value || ''}
@@ -442,31 +555,28 @@ function TextareaField({ label, value, onChange, placeholder }) {
     );
 }
 
-function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis, onPreviewClick }) {
-    const isSingleProofType = ['Setoran Uang Lebih', 'Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
+function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis, onPreviewClick, onOpenSampleModal }) {
+    const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
 
     const slots = isSingleProofType
         ? [
-            { idx: 0, label: "Bukti 1 (Dokumentasi Utama)", required: true },
-            { idx: 1, label: "Bukti 2 (Pendukung)", required: false },
-            { idx: 2, label: "Bukti 3 (Pendukung)", required: false },
-            { idx: 3, label: "Bukti 4 (Opsional)", required: false },
-            { idx: 4, label: "Bukti 5 (Opsional)", required: false }
+            { idx: 0, label: "Bukti 1: Dokumentasi Utama", required: true },
+            { idx: 1, label: "Bukti 2: Lampiran Pendukung", required: false },
+            { idx: 2, label: "Bukti 3: Lampiran Pendukung", required: false },
+            { idx: 3, label: "Bukti 4: Opsional", required: false },
+            { idx: 4, label: "Bukti 5: Opsional", required: false }
           ]
         : [
-            { idx: 0, label: "Bukti 1 (Kutipan Harian Toko)", required: true },
-            { idx: 1, label: "Bukti 2 (Settlement EDC)", required: true },
-            { idx: 2, label: "Bukti 3 (Bukti Setoran Teller/ATM)", required: true },
-            { idx: 3, label: "Bukti 4", required: false },
-            { idx: 4, label: "Bukti 5", required: false }
+            { idx: 0, label: "Bukti 1: Struk Kutipan Harian Kasir", required: true, sampleKey: "slot1" },
+            { idx: 1, label: "Bukti 2: Struk Settlement EDC", required: true, sampleKey: "slot2" },
+            { idx: 2, label: "Bukti 3: Struk / Resi Setoran Bank", required: true, sampleKey: "slot3" },
+            { idx: 3, label: "Bukti 4: Foto Pendukung (Opsional)", required: false },
+            { idx: 4, label: "Bukti 5: Foto Pendukung (Opsional)", required: false }
           ];
 
     return (
-        <div className="space-y-4 pt-4 border-t border-gray-150">
-            <div className="flex flex-col gap-1">
-                <label className="text-sm font-bold text-gray-800">Upload Bukti Setoran (Maksimal 5 file)</label>
-                <p className="text-xs text-gray-500">Silakan unggah bukti setoran yang valid pada slot di bawah ini sesuai peruntukan.</p>
-            </div>
+        <div className="space-y-4">
+            <p className="text-xs text-gray-500">Unggah foto struk/resi yang jelas dan dapat dibaca sesuai slot di bawah ini.</p>
             
             <div className="grid grid-cols-1 gap-3.5">
                 {slots.map((slot) => {
@@ -487,9 +597,21 @@ function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis, onPrevi
                                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-gray-50 text-gray-500 border border-gray-200 uppercase tracking-wide">Opsional</span>
                                     )}
                                 </div>
-                                <h4 className="text-sm font-bold text-gray-800 leading-snug">
-                                    {slot.label}
-                                </h4>
+
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <h4 className="text-sm font-bold text-gray-800 leading-snug">
+                                        {slot.label}
+                                    </h4>
+                                    {slot.sampleKey && SAMPLE_DOCUMENT_IMAGES[slot.sampleKey] && (
+                                        <button
+                                            type="button"
+                                            onClick={() => onOpenSampleModal && onOpenSampleModal(SAMPLE_DOCUMENT_IMAGES[slot.sampleKey])}
+                                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold flex items-center gap-1 border border-blue-200 shadow-sm transition-all w-fit"
+                                        >
+                                            <span className="material-symbols-outlined text-sm text-blue-600">visibility</span> Lihat Contoh Struk
+                                        </button>
+                                    )}
+                                </div>
                                 
                                 {sf ? (
                                     <div className="flex items-center gap-3 text-xs text-gray-800 pt-2">

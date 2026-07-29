@@ -7,7 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { uploadToDrive } from '../services/driveService';
 import UserLayout from '../components/UserLayout';
 
-const STEP_INFO = ['Detail Laporan', 'Detail Setoran', 'Ringkasan & Kirim'];
+const STEP_INFO = ['1. Informasi Sales & Metode', '2. Input Nominal & Bukti', '3. Periksa & Kirim'];
 
 function formatDate(d) {
     return d ? new Date(d).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '-';
@@ -23,7 +23,6 @@ export default function RingkasanPage() {
     const [error, setError] = useState('');
     const [driveWarning, setDriveWarning] = useState('');
 
-
     const isNonFinancial = NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan);
 
     const nominals = Array.isArray(formData.nominalPenjualan)
@@ -37,8 +36,19 @@ export default function RingkasanPage() {
     const nominalSetoran = parseRupiah(formData.nominalSetoran);
     const selisih = danaTersedia - nominalSetoran;
 
+    const totalNonTunai =
+        parseRupiah(formData.bcaDebit) +
+        parseRupiah(formData.bcaKredit) +
+        parseRupiah(formData.bcaQris) +
+        parseRupiah(formData.briDebit) +
+        parseRupiah(formData.briKredit) +
+        parseRupiah(formData.briQris) +
+        parseRupiah(formData.bankTransfer);
+
+    const grandTotalSales = totalPenjualan + totalNonTunai;
+
     const handleKirim = async () => {
-        if (!window.confirm('Kirim laporan sekarang?')) return;
+        if (!window.confirm('Kirim laporan sales sekarang?')) return;
         setIsSubmitting(true);
         setError('');
 
@@ -82,6 +92,15 @@ export default function RingkasanPage() {
                 waktu_kejadian: formData.waktuKejadian || null,
                 bukti_urls: buktiUrls,
                 kcp_terdekat: formData.kcpTerdekat || null,
+                // Kolom Non-Tunai baru
+                bca_debit: i === 0 ? (parseRupiah(formData.bcaDebit) || 0) : 0,
+                bca_kredit: i === 0 ? (parseRupiah(formData.bcaKredit) || 0) : 0,
+                bca_qris: i === 0 ? (parseRupiah(formData.bcaQris) || 0) : 0,
+                bri_debit: i === 0 ? (parseRupiah(formData.briDebit) || 0) : 0,
+                bri_kredit: i === 0 ? (parseRupiah(formData.briKredit) || 0) : 0,
+                bri_qris: i === 0 ? (parseRupiah(formData.briQris) || 0) : 0,
+                bank_transfer: i === 0 ? (parseRupiah(formData.bankTransfer) || 0) : 0,
+                total_non_tunai: i === 0 ? (totalNonTunai || 0) : 0,
             }));
 
             const { error: insertError } = await supabase.from('laporan').insert(rows);
@@ -93,8 +112,6 @@ export default function RingkasanPage() {
                 formData.jenisPelaporan === 'Deposit Card Terblokir (Salah Input PIN 3x)';
 
             if (isCriticalIssue) {
-                // Jangan pakai 'await' agar berjalan non-blocking di background,
-                // tangkap error silently agar user form tidak terblokir
                 supabase.functions.invoke('send-critical-alert', {
                     body: {
                         cabang: profile?.username || 'Tidak Diketahui',
@@ -126,13 +143,13 @@ export default function RingkasanPage() {
     };
 
     return (
-        <UserLayout title="Ringkasan Laporan" activeRoute="/setoran">
+        <UserLayout title="Lapor Sales Toko" activeRoute="/setoran">
             <div className="max-w-4xl mx-auto">
                 {/* Progress Bar */}
                 <div className="mb-8">
                     <div className="flex items-center justify-between mb-2">
                         {STEP_INFO.map((label, i) => (
-                            <div key={i} className={`flex items-center gap-2 text-xs font-bold text-primary-600`}>
+                            <div key={i} className="flex items-center gap-2 text-xs font-bold text-primary-600">
                                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-500 text-white text-xs font-bold">
                                     {i < 2 ? <span className="material-symbols-outlined text-sm">check</span> : i + 1}
                                 </span>
@@ -146,8 +163,8 @@ export default function RingkasanPage() {
                 </div>
 
                 <div className="text-center mb-8">
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Ringkasan Laporan</h1>
-                    <p className="mt-2 text-gray-500 text-sm">Mohon periksa kembali detail setoran Anda.</p>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Periksa Ringkasan Laporan</h1>
+                    <p className="mt-2 text-gray-500 text-sm">Periksa kembali seluruh angka dan foto bukti sebelum mengirimkan laporan.</p>
                 </div>
 
                 {driveWarning && (
@@ -183,59 +200,116 @@ export default function RingkasanPage() {
                         </div>
                     </section>
 
-                    {/* Rincian Transaksi */}
-                    {!isNonFinancial && nominals.length > 0 && (
+                    {/* Rincian Transaksi Tunai & Non-Tunai */}
+                    {!isNonFinancial && (
                         <section>
                             <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-green-600">payments</span> Rincian Transaksi
+                                <span className="material-symbols-outlined text-green-600">payments</span> Rincian Omset Sales Harian
                             </h3>
-                            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden px-6 py-4">
+                            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden px-6 py-4 space-y-4">
                                 <table className="w-full border-collapse">
                                     <thead>
                                         <tr>
-                                            <th className="py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-left border-b-2 border-gray-100 w-3/4">Deskripsi</th>
-                                            <th className="py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right border-b-2 border-gray-100 w-1/4">Nominal</th>
+                                            <th className="py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider text-left border-b-2 border-gray-100 w-3/4">Deskripsi Rincian</th>
+                                            <th className="py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider text-right border-b-2 border-gray-100 w-1/4">Nominal</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {/* Sales Tunai */}
                                         {nominals.map((nom, idx) => (
                                             <tr key={idx}>
-                                                <td className="py-3 text-sm text-gray-700 border-b border-gray-50">Penjualan Tgl {formatDate(allDates[idx])}</td>
-                                                <td className="py-3 text-sm text-right font-medium text-gray-900 border-b border-gray-50">{formatRupiah(parseRupiah(nom))}</td>
+                                                <td className="py-2.5 text-sm text-gray-700">Penjualan Tunai Tgl {formatDate(allDates[idx])}</td>
+                                                <td className="py-2.5 text-sm text-right font-medium text-gray-900">{formatRupiah(parseRupiah(nom))}</td>
                                             </tr>
                                         ))}
                                         {potongan > 0 && (
                                             <tr>
-                                                <td className="py-3 text-sm text-red-500">Potongan Penjualan</td>
-                                                <td className="py-3 text-sm text-right font-medium text-red-500">({formatRupiah(potongan)})</td>
+                                                <td className="py-2.5 text-sm text-red-500">Potongan Uang Sales (Top Up Petty Cash)</td>
+                                                <td className="py-2.5 text-sm text-right font-medium text-red-500">({formatRupiah(potongan)})</td>
                                             </tr>
                                         )}
-                                        <tr>
-                                            <td className="py-3 text-sm font-bold text-gray-900 pt-4 border-t border-gray-200">Total Dana Tersedia</td>
-                                            <td className="py-3 text-sm text-right font-bold text-gray-900 pt-4 border-t border-gray-200">{formatRupiah(danaTersedia)}</td>
+                                        <tr className="bg-gray-50/70 font-semibold">
+                                            <td className="py-2 text-sm text-gray-800">Jumlah Setoran Tunai ke Bank</td>
+                                            <td className="py-2 text-sm text-right text-primary-600 font-bold">{formatRupiah(nominalSetoran)}</td>
                                         </tr>
-                                        <tr>
-                                            <td className="py-3 text-sm font-bold text-primary-600 border-none">Total Disetorkan</td>
-                                            <td className="py-3 text-lg text-right font-bold text-primary-600 border-none">{formatRupiah(nominalSetoran)}</td>
+
+                                        {/* Non-Tunai Breakdown */}
+                                        {totalNonTunai > 0 && (
+                                            <>
+                                                <tr className="border-t-2 border-gray-100">
+                                                    <td colSpan={2} className="pt-3 pb-1 text-xs font-bold text-blue-800 uppercase tracking-wider">
+                                                        Penjualan Non-Tunai (EDC & Transfer)
+                                                    </td>
+                                                </tr>
+                                                {parseRupiah(formData.bcaDebit) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BCA Debit</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.bcaDebit))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.bcaKredit) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BCA Kredit</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.bcaKredit))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.bcaQris) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BCA QRIS</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.bcaQris))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.briDebit) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BRI Debit</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.briDebit))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.briKredit) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BRI Kredit</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.briKredit))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.briQris) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BRI QRIS</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.briQris))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.bankTransfer) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• Transfer Bank</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.bankTransfer))}</td>
+                                                    </tr>
+                                                )}
+                                            </>
+                                        )}
+
+                                        {/* Grand Total */}
+                                        <tr className="border-t-2 border-orange-200 bg-orange-50/50">
+                                            <td className="py-3 text-sm font-extrabold text-orange-950">TOTAL SALES HARIAN (Tunai + Non-Tunai)</td>
+                                            <td className="py-3 text-lg text-right font-black text-orange-600">{formatRupiah(grandTotalSales)}</td>
                                         </tr>
                                     </tbody>
                                 </table>
+
                                 {selisih > 0 && (
-                                    <div className="mt-4 bg-yellow-50 border border-yellow-100 rounded-lg p-3 flex items-center justify-between">
+                                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-yellow-600 text-lg">warning</span>
-                                            <span className="text-yellow-800 font-bold text-xs uppercase tracking-wide">Kurang Setor</span>
+                                            <span className="material-symbols-outlined text-red-600 text-lg">warning</span>
+                                            <span className="text-red-800 font-bold text-xs uppercase tracking-wide">Status Selisih Tunai</span>
                                         </div>
-                                        <span className="text-yellow-900 font-bold text-sm">{formatRupiah(selisih)}</span>
+                                        <span className="text-red-900 font-bold text-sm">Setoran Kurang {formatRupiah(selisih)}</span>
                                     </div>
                                 )}
                                 {selisih < 0 && (
-                                    <div className="mt-4 bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-center justify-between">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <span className="material-symbols-outlined text-blue-600 text-lg">info</span>
-                                            <span className="text-blue-800 font-bold text-xs uppercase tracking-wide">Lebih Setor</span>
+                                            <span className="text-blue-800 font-bold text-xs uppercase tracking-wide">Status Selisih Tunai</span>
                                         </div>
-                                        <span className="text-blue-900 font-bold text-sm">{formatRupiah(Math.abs(selisih))}</span>
+                                        <span className="text-blue-900 font-bold text-sm">Setoran Lebih {formatRupiah(Math.abs(selisih))}</span>
                                     </div>
                                 )}
                             </div>
@@ -304,7 +378,7 @@ export default function RingkasanPage() {
                         {isSubmitting ? (
                             <><span className="material-symbols-outlined animate-spin text-lg">sync</span> {uploadStatus || 'Mengirim...'}</>
                         ) : (
-                            <><span className="material-symbols-outlined text-lg">send</span> Kirim Laporan</>
+                            <><span className="material-symbols-outlined text-lg">send</span> Kirim Lapor Sales</>
                         )}
                     </button>
                 </div>

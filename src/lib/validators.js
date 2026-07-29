@@ -94,6 +94,17 @@ export function validateSetoranData(data) {
         const potongan = parseRupiah(data.potonganPenjualan);
 
         if (nominalSetoran < 0) throw new Error('Nominal setoran tidak boleh negatif.');
+
+        const checkNonNegative = (val, label) => {
+            if (val && parseRupiah(val) < 0) throw new Error(`Nominal ${label} tidak boleh negatif.`);
+        };
+        checkNonNegative(data.bcaDebit, 'BCA Debit');
+        checkNonNegative(data.bcaKredit, 'BCA Kredit');
+        checkNonNegative(data.bcaQris, 'BCA QRIS');
+        checkNonNegative(data.briDebit, 'BRI Debit');
+        checkNonNegative(data.briKredit, 'BRI Kredit');
+        checkNonNegative(data.briQris, 'BRI QRIS');
+        checkNonNegative(data.bankTransfer, 'Bank Transfer');
         if (potongan < 0) throw new Error('Potongan tidak boleh negatif.');
 
         let totalPenjualan = 0;
