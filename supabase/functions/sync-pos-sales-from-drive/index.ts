@@ -10,11 +10,17 @@ const CORS = {
 
 const TARGET_FOLDER_ID = '1lreZQGF8F-3sFdPkQ1jzcQpVanz8ovY0';
 
+/**
+ * Helper to match store string from Excel (e.g., "0001-JKJSTT1" or "JKJSTT1") to DB profile username
+ */
 function getMatchedUsername(rawStoreStr: string, storeMap: { [key: string]: string }): string {
   if (!rawStoreStr) return '';
   const clean = rawStoreStr.trim().toLowerCase();
+
+  // 1. Direct match
   if (storeMap[clean]) return storeMap[clean];
 
+  // 2. Split by hyphen e.g. "0001-JKJSTT1" -> part 0: "0001", part 1: "jkjstt1"
   if (clean.includes('-')) {
     const parts = clean.split('-');
     const part0 = parts[0].trim();
@@ -22,9 +28,17 @@ function getMatchedUsername(rawStoreStr: string, storeMap: { [key: string]: stri
     if (storeMap[part0]) return storeMap[part0];
     if (storeMap[part1]) return storeMap[part1];
   }
+
+  // 3. Stripped alphanumeric match
+  const stripped = clean.replace(/[^a-z0-9]/g, '');
+  if (storeMap[stripped]) return storeMap[stripped];
+
   return '';
 }
 
+/**
+ * Helper to parse various Excel date formats into YYYY-MM-DD
+ */
 function parseFormattedDate(rawVal: any): string {
   if (!rawVal) return '';
   const strVal = rawVal.toString().trim();
@@ -51,30 +65,56 @@ function parseFormattedDate(rawVal: any): string {
     return `${year}-${month}-${day}`;
   }
 
+  // DD/MM/YY or DD-MM-YY
+  const ddmmyyMatch = strVal.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
+  if (ddmmyyMatch) {
+    const day = ddmmyyMatch[1].padStart(2, '0');
+    const month = ddmmyyMatch[2].padStart(2, '0');
+    const year = `20${ddmmyyMatch[3]}`;
+    return `${year}-${month}-${day}`;
+  }
+
   const d = new Date(strVal);
   if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
 
   return '';
 }
 
-function extractDateFromFilename(filename: string): string {
-  const matches = filename.match(/\d{8}/g);
-  if (!matches) return '';
+/**
+ * Helper to check if a file is an Excel file based on extension and MIME type
+ */
+function isExcelFile(file: any): boolean {
+  if (!file || !file.name) return false;
+  const lowerName = file.name.toLowerCase();
 
-  for (const match of matches) {
-    const dd = match.substring(0, 2);
-    const mm = match.substring(2, 4);
-    const yyyy = match.substring(4, 8);
-
-    const day = parseInt(dd, 10);
-    const month = parseInt(mm, 10);
-    const year = parseInt(yyyy, 10);
-
-    if (year >= 2020 && year <= 2035 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
-    }
+  // Exclude non-excel formats explicitly
+  if (lowerName.endsWith('.jpeg') || lowerName.endsWith('.jpg') || lowerName.endsWith('.png') || lowerName.endsWith('.pdf') || lowerName.endsWith('.webp')) {
+    return false;
   }
-  return '';
+
+  // Include excel extensions & spreadsheet mimeTypes
+  if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv')) {
+    return true;
+  }
+
+  if (file.mimeType && (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.mimeType.includes('csv'))) {
+    return true;
+  }
+
+  return false;
+}
+
+function parseNumberVal(raw: any): number {
+  if (raw === null || raw === undefined) return 0;
+  if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
+  const str = raw.toString().trim();
+  if (!str) return 0;
+  // Remove thousand separators and replace comma with dot if formatted
+  const clean = str.replace(/[^0-9\.\-\,]/g, '');
+  if (clean.includes(',') && !clean.includes('.')) {
+    return parseFloat(clean.replace(',', '.')) || 0;
+  }
+  return parseFloat(clean.replace(/,/g, '')) || 0;
 }
 
 serve(async (req: Request) => {
@@ -117,7 +157,7 @@ serve(async (req: Request) => {
 
     const accessToken = tokenData.access_token;
 
-    // 2. Compute today in WIB
+    // 2. Compute date patterns in WIB (UTC+7)
     const nowUtc = new Date();
     const wibOffsetMs = 7 * 60 * 60 * 1000;
     const nowWib = new Date(nowUtc.getTime() + wibOffsetMs);
@@ -126,58 +166,65 @@ serve(async (req: Request) => {
     const todayDD = String(nowWib.getUTCDate()).padStart(2, '0');
     const todayMM = String(nowWib.getUTCMonth() + 1).padStart(2, '0');
     const todayYYYY = String(nowWib.getUTCFullYear());
-    const todayDDMMYYYY = `${todayDD}${todayMM}${todayYYYY}`;
+    const todayYY = todayYYYY.substring(2, 4);
 
-    console.log(`[sync-pos-sales-from-drive] Today WIB: ${todayWibStr} | Pattern: ${todayDDMMYYYY}`);
+    const patternDDMMYYYY = `${todayDD}${todayMM}${todayYYYY}`; // 29072026
+    const patternDDMMYY = `${todayDD}${todayMM}${todayYY}`;     // 290726
+    const patternYYYYMMDD = `${todayYYYY}${todayMM}${todayDD}`; // 20260729
 
-    // 3. Drive Search Queries with Fallbacks (Support Shared Files & Parent Folders)
+    console.log(`[sync-pos-sales-from-drive] Today WIB: ${todayWibStr} | Patterns: ${patternDDMMYYYY}, ${patternDDMMYY}, ${patternYYYYMMDD}`);
+
+    // 3. Drive Search Queries (Strictly filtering out non-excel files)
     const driveFields = 'files(id,name,modifiedTime,mimeType,parents)';
-    
-    // Query List to try in sequence:
     const queryCandidates = [
-      // Candidate 1: Check folder parent OR shared files matching Cash & Card
-      `('${TARGET_FOLDER_ID}' in parents or name contains 'Cash') and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
-      // Candidate 2: Broad search by filename
-      `name contains 'Automation' and trashed = false`,
-      // Candidate 3: All non-trashed excel files
-      `trashed = false and (name contains 'xlsx' or mimeType contains 'spreadsheet')`
+      `('${TARGET_FOLDER_ID}' in parents or name contains 'Cash' or name contains 'Automation') and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
+      `trashed = false and (name contains 'xlsx' or name contains 'xls' or mimeType contains 'spreadsheet')`
     ];
 
-    let allFiles: any[] = [];
+    let fetchedFiles: any[] = [];
 
     for (const qStr of queryCandidates) {
       const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qStr)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=modifiedTime%20desc&pageSize=100`;
-      
       const resp = await fetch(driveSearchUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       const resData = await resp.json();
 
       if (resp.ok && resData.files && resData.files.length > 0) {
-        allFiles = resData.files;
-        console.log(`[sync-pos-sales-from-drive] Found ${allFiles.length} files using query: ${qStr}`);
+        fetchedFiles = resData.files;
+        console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} files using query: ${qStr}`);
         break;
       }
     }
 
-    console.log(`[sync-pos-sales-from-drive] Total files retrieved from Drive: ${allFiles.length}`);
+    // Filter strictly for Excel files only
+    const allFiles = fetchedFiles.filter(isExcelFile);
+    console.log(`[sync-pos-sales-from-drive] Total valid Excel files retrieved from Drive: ${allFiles.length}`);
 
     if (allFiles.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: 'Tidak ada berkas Excel yang ditemukan di Drive.', processedFiles: 0, totalUpserted: 0 }),
+        JSON.stringify({ success: true, message: 'Tidak ada berkas Excel data POS yang ditemukan di Drive.', processedFiles: 0, totalUpserted: 0 }),
         { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
       );
     }
 
-    // 4. Select Target Files (Strategy A: Filename Date Match, Strategy B: Today Modified, Strategy C: Latest)
+    // 4. Target File Selection Strategy
     let targetFiles: any[] = [];
 
-    const byFilenameDate = allFiles.filter(f => f.name.includes(todayDDMMYYYY));
+    // Strategy A: Filename Date Pattern Match (DDMMYYYY, DDMMYY, YYYYMMDD, YYYY-MM-DD)
+    const byFilenameDate = allFiles.filter(f => 
+      f.name.includes(patternDDMMYYYY) || 
+      f.name.includes(patternDDMMYY) || 
+      f.name.includes(patternYYYYMMDD) ||
+      f.name.includes(todayWibStr)
+    );
+
     if (byFilenameDate.length > 0) {
       targetFiles = byFilenameDate;
-      console.log(`[sync-pos-sales-from-drive] Selected by filename pattern "${todayDDMMYYYY}": ${targetFiles.map(f => f.name).join(', ')}`);
+      console.log(`[sync-pos-sales-from-drive] Selected by filename date pattern: ${targetFiles.map(f => f.name).join(', ')}`);
     }
 
+    // Strategy B: Files modified today in WIB
     if (targetFiles.length === 0) {
       const todayWibStartUtc = new Date(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate(), -7, 0, 0, 0).toISOString();
       const byModified = allFiles.filter(f => f.modifiedTime >= todayWibStartUtc);
@@ -187,12 +234,13 @@ serve(async (req: Request) => {
       }
     }
 
+    // Strategy C: Fallback to latest valid Excel file
     if (targetFiles.length === 0 && allFiles.length > 0) {
       targetFiles = [allFiles[0]];
-      console.log(`[sync-pos-sales-from-drive] Fallback to latest file: ${targetFiles[0].name}`);
+      console.log(`[sync-pos-sales-from-drive] Fallback to latest valid Excel file: ${targetFiles[0].name}`);
     }
 
-    // 5. Fetch Store Profiles
+    // 5. Fetch Store Profiles for Code Mapping
     const { data: profData, error: profErr } = await supabase
       .from('profiles')
       .select('id, username, kode_toko')
@@ -202,16 +250,24 @@ serve(async (req: Request) => {
 
     const storeMap: { [key: string]: string } = {};
     (profData || []).forEach((p) => {
-      if (p.kode_toko) storeMap[p.kode_toko.toString().trim().toLowerCase()] = p.username;
-      if (p.username) storeMap[p.username.toString().trim().toLowerCase()] = p.username;
+      if (p.kode_toko) {
+        const kt = p.kode_toko.toString().trim().toLowerCase();
+        storeMap[kt] = p.username;
+        storeMap[kt.replace(/[^a-z0-9]/g, '')] = p.username;
+      }
+      if (p.username) {
+        const un = p.username.toString().trim().toLowerCase();
+        storeMap[un] = p.username;
+        storeMap[un.replace(/[^a-z0-9]/g, '')] = p.username;
+      }
     });
 
     let totalUpserted = 0;
     const processedReport: any[] = [];
 
-    // 6. Process Target Files
+    // 6. Process Target Excel Files
     for (const fileItem of targetFiles) {
-      console.log(`[sync-pos-sales-from-drive] Processing file: ${fileItem.name} (${fileItem.id})`);
+      console.log(`[sync-pos-sales-from-drive] Downloading & parsing file: ${fileItem.name} (${fileItem.id})`);
 
       const fileDownloadUrl = `https://www.googleapis.com/drive/v3/files/${fileItem.id}?alt=media&supportsAllDrives=true`;
       const dlResp = await fetch(fileDownloadUrl, {
@@ -232,13 +288,25 @@ serve(async (req: Request) => {
       const worksheet = workbook.Sheets[sheetName];
       const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-      if (rawRows.length < 14) continue;
+      if (rawRows.length < 2) continue;
 
-      const row14Str = (rawRows[13] || []).map((c) => (c || '').toString().toLowerCase()).join(' ');
-      const isNewTemplate = row14Str.includes('date') && row14Str.includes('store') && row14Str.includes('cash amount');
-      const startRowIndex = isNewTemplate ? 14 : 13;
+      // Auto-detect template structure:
+      // Template Ref 1 (Xilnex Cash & Card Automation): Header at Row 14 (index 13)
+      // Template Simple Setoran POS: Header at Row 1 or 2
+      let isNewTemplate = false;
+      let startRowIndex = 1;
 
-      const rowsToUpsert: { kode_cabang: string; tanggal_jual: string; sales_pos: number }[] = [];
+      for (let r = 0; r < Math.min(rawRows.length, 20); r++) {
+        const rowStr = (rawRows[r] || []).map((c) => (c || '').toString().toLowerCase()).join(' ');
+        if (rowStr.includes('date') && rowStr.includes('store') && (rowStr.includes('cash amount') || rowStr.includes('card amount'))) {
+          isNewTemplate = true;
+          startRowIndex = r + 1;
+          break;
+        }
+      }
+
+      // Store aggregated sales per (kode_cabang, tanggal_jual)
+      const salesAggregator: { [key: string]: { kode_cabang: string; tanggal_jual: string; sales_pos: number } } = {};
 
       for (let i = startRowIndex; i < rawRows.length; i++) {
         const row = rawRows[i];
@@ -250,40 +318,53 @@ serve(async (req: Request) => {
 
         if (!rawDateVal || !rawStoreVal) continue;
 
+        const lowerA = rawDateVal.toLowerCase();
+        const lowerB = rawStoreVal.toLowerCase();
+        const lowerC = rawColCVal.toLowerCase();
+
+        // Skip header/summary/total rows
+        if (lowerA.includes('total') || lowerB.includes('total') || lowerC.includes('total') || lowerA.includes('grand total')) {
+          continue;
+        }
+
+        const matchedUsername = getMatchedUsername(rawStoreVal, storeMap);
+        if (!matchedUsername) continue;
+
+        const formattedDate = parseFormattedDate(rawDateVal);
+        if (!formattedDate) continue;
+
+        let cashAmount = 0;
+
         if (isNewTemplate) {
-          const lowerA = rawDateVal.toLowerCase();
-          const lowerB = rawStoreVal.toLowerCase();
-          const lowerC = rawColCVal.toLowerCase();
+          // In Xilnex Cash & Card Automation template:
+          // Col 4 (E): Cash Amount
+          // If Cash Amount > 0, take Cash Amount
+          const rawCashVal = row[4];
+          cashAmount = parseNumberVal(rawCashVal);
 
-          if (lowerA.includes('total') || lowerB.includes('total') || lowerC.includes('total')) continue;
-
-          const rawCashVal = (row[4] || '').toString().trim();
-          const cleanSales = parseInt(rawCashVal.toString().replace(/[^0-9\-]/g, ''), 10) || 0;
-          if (cleanSales === 0) continue;
-
-          const matchedUsername = getMatchedUsername(rawStoreVal, storeMap);
-          if (!matchedUsername) continue;
-
-          const formattedDate = parseFormattedDate(rawDateVal);
-          if (matchedUsername && formattedDate) {
-            rowsToUpsert.push({ kode_cabang: matchedUsername, tanggal_jual: formattedDate, sales_pos: cleanSales });
+          // If Col 2 (Card Type) is "CASH" or "SETORAN TUNAI" and Col 4 is 0, check Col 5/6
+          if (cashAmount === 0 && (lowerC.includes('cash') || lowerC.includes('tunai') || lowerC.includes('setoran'))) {
+            cashAmount = parseNumberVal(row[5]) || parseNumberVal(row[6]);
           }
         } else {
-          const lowerDate = rawDateVal.toLowerCase();
-          if (lowerDate.includes('total') || lowerDate.includes('grand total')) continue;
-
-          const rawSalesVal = (row[2] || '').toString().trim();
-          const matchedUsername = getMatchedUsername(rawStoreVal, storeMap);
-          if (!matchedUsername) continue;
-
-          const formattedDate = parseFormattedDate(rawDateVal);
-          const cleanSales = parseInt(rawSalesVal.toString().replace(/[^0-9\-]/g, ''), 10) || 0;
-
-          if (matchedUsername && formattedDate) {
-            rowsToUpsert.push({ kode_cabang: matchedUsername, tanggal_jual: formattedDate, sales_pos: cleanSales });
-          }
+          // Simple Setoran POS template (Date, Store, Sales Amount)
+          cashAmount = parseNumberVal(row[2]) || parseNumberVal(row[4]);
         }
+
+        if (cashAmount <= 0) continue;
+
+        const aggKey = `${matchedUsername}_${formattedDate}`;
+        if (!salesAggregator[aggKey]) {
+          salesAggregator[aggKey] = {
+            kode_cabang: matchedUsername,
+            tanggal_jual: formattedDate,
+            sales_pos: 0
+          };
+        }
+        salesAggregator[aggKey].sales_pos += cashAmount;
       }
+
+      const rowsToUpsert = Object.values(salesAggregator);
 
       if (rowsToUpsert.length > 0) {
         const chunkSize = 500;
@@ -302,6 +383,8 @@ serve(async (req: Request) => {
           modifiedTime: fileItem.modifiedTime,
           rowsCount: rowsToUpsert.length,
         });
+      } else {
+        console.warn(`[sync-pos-sales-from-drive] File ${fileItem.name} processed but 0 valid sales rows extracted.`);
       }
     }
 
@@ -312,7 +395,7 @@ serve(async (req: Request) => {
         processedFiles: targetFiles.length,
         totalUpserted,
         todayWib: todayWibStr,
-        pattern: todayDDMMYYYY,
+        patterns: [patternDDMMYYYY, patternDDMMYY, patternYYYYMMDD],
         details: processedReport,
       }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
