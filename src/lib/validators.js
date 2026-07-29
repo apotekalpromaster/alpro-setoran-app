@@ -26,9 +26,8 @@ export const DISCREPANCY_THRESHOLD = 50000;
 export const JENIS_PELAPORAN_LIST = [
     'Setoran Harian',
     'Setoran 3x Seminggu',
-    'Setoran Sales Dengan Potongan Penjualan',
+    'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)',
     'Setoran Uang Pecahan Kecil',
-    'Setoran Uang Lebih',
     'Pengembalian Petty Cash',
     'Deposit Card Terblokir (Salah Input PIN 3x)',
     'Deposit Card Tertelan Mesin ATM',
@@ -104,14 +103,11 @@ export function validateSetoranData(data) {
             totalPenjualan = parseRupiah(data.nominalPenjualan);
         }
 
-        // Khusus "Setoran Uang Lebih": skip math check, bisa lebih dari dana tersedia
-        if (data.jenisPelaporan !== 'Setoran Uang Lebih') {
-            const danaTersedia = totalPenjualan - potongan;
-            if (nominalSetoran > danaTersedia) {
-                throw new Error(
-                    `Nominal setoran (${formatRupiah(nominalSetoran)}) melebihi dana tersedia (${formatRupiah(danaTersedia)}).`
-                );
-            }
+        const danaTersedia = totalPenjualan - potongan;
+        if (nominalSetoran > danaTersedia) {
+            throw new Error(
+                `Nominal setoran (${formatRupiah(nominalSetoran)}) melebihi dana tersedia (${formatRupiah(danaTersedia)}).`
+            );
         }
     }
 }
