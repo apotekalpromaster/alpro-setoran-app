@@ -179,10 +179,12 @@ serve(async (req: Request) => {
     const queryCandidates = [
       // Candidate 1: Search directly for Xilnex export title "Automation"
       `name contains 'Automation' and trashed = false`,
-      // Candidate 2: Search for Xilnex export title "Cash & Card"
-      `name contains 'Cash & Card' and trashed = false`,
-      // Candidate 3: Search inside target folder
-      `'${TARGET_FOLDER_ID}' in parents and trashed = false`
+      // Candidate 2: Search inside target folder
+      `'${TARGET_FOLDER_ID}' in parents and trashed = false`,
+      // Candidate 3: Search for any xlsx files
+      `trashed = false and (name contains 'xlsx' or name contains 'xls' or name contains 'csv')`,
+      // Candidate 4: All accessible non-trashed files
+      `trashed = false`
     ];
 
     let fetchedFiles: any[] = [];
@@ -202,13 +204,17 @@ serve(async (req: Request) => {
           matchedQuery = qStr;
           console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} valid Excel files using query: ${qStr}`);
           break;
+        } else if (fetchedFiles.length === 0) {
+          // Keep raw files for diagnostic reporting if no excel files found
+          fetchedFiles = resData.files;
+          matchedQuery = `Raw (${qStr})`;
         }
       } else if (!resp.ok) {
         console.error(`[sync-pos-sales-from-drive] Search error for query '${qStr}':`, resData.error || resData);
       }
     }
 
-    const allFiles = fetchedFiles;
+    const allFiles = fetchedFiles.filter(isExcelFile);
     console.log(`[sync-pos-sales-from-drive] Total valid Excel files retrieved from Drive: ${allFiles.length}`);
 
     if (allFiles.length === 0) {
@@ -219,7 +225,9 @@ serve(async (req: Request) => {
           processedFiles: 0, 
           totalUpserted: 0,
           rawFilesCount: fetchedFiles.length,
-          todayWib: todayWibStr
+          todayWib: todayWibStr,
+          matchedQuery,
+          sampleFileNames: fetchedFiles.slice(0, 10).map(f => `${f.name} (${f.mimeType || 'unknown'})`)
         }),
         { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
       );
@@ -413,6 +421,7 @@ serve(async (req: Request) => {
         totalUpserted,
         todayWib: todayWibStr,
         matchedQuery,
+        sampleFileNames: fetchedFiles.slice(0, 10).map(f => `${f.name} (${f.mimeType || 'unknown'})`),
         details: processedReport,
       }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
