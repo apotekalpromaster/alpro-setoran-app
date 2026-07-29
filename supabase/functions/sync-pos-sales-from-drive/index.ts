@@ -174,11 +174,17 @@ serve(async (req: Request) => {
 
     console.log(`[sync-pos-sales-from-drive] Today WIB: ${todayWibStr} | Patterns: ${patternDDMMYYYY}, ${patternDDMMYY}, ${patternYYYYMMDD}`);
 
-    // 3. Drive Search Queries (Strictly filtering out non-excel files)
+    // 3. Drive Search Queries with Valid API v3 Syntax
     const driveFields = 'files(id,name,modifiedTime,mimeType,parents)';
     const queryCandidates = [
-      `('${TARGET_FOLDER_ID}' in parents or name contains 'Cash' or name contains 'Automation') and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
-      `trashed = false and (name contains 'xlsx' or name contains 'xls' or mimeType contains 'spreadsheet')`
+      // Candidate 1: Search directly in target folder
+      `'${TARGET_FOLDER_ID}' in parents and trashed = false`,
+      // Candidate 2: Search by filename "Cash"
+      `name contains 'Cash' and trashed = false`,
+      // Candidate 3: Search by filename "Automation"
+      `name contains 'Automation' and trashed = false`,
+      // Candidate 4: Broad non-folder search
+      `trashed = false and mimeType != 'application/vnd.google-apps.folder'`
     ];
 
     let fetchedFiles: any[] = [];
@@ -194,6 +200,8 @@ serve(async (req: Request) => {
         fetchedFiles = resData.files;
         console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} files using query: ${qStr}`);
         break;
+      } else if (!resp.ok) {
+        console.error(`[sync-pos-sales-from-drive] Search error for query '${qStr}':`, resData.error || resData);
       }
     }
 
@@ -203,7 +211,14 @@ serve(async (req: Request) => {
 
     if (allFiles.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: 'Tidak ada berkas Excel data POS yang ditemukan di Drive.', processedFiles: 0, totalUpserted: 0 }),
+        JSON.stringify({ 
+          success: true, 
+          message: 'Tidak ada berkas Excel data POS yang ditemukan di Drive.', 
+          processedFiles: 0, 
+          totalUpserted: 0,
+          rawFilesCount: fetchedFiles.length,
+          todayWib: todayWibStr
+        }),
         { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
       );
     }
