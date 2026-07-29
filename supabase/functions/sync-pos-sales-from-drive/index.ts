@@ -156,6 +156,7 @@ serve(async (req: Request) => {
     }
 
     const accessToken = tokenData.access_token;
+    const tokenScope = tokenData.scope || 'unknown';
 
     // 2. Compute date patterns in WIB (UTC+7)
     const nowUtc = new Date();
@@ -177,13 +178,15 @@ serve(async (req: Request) => {
     // 3. Drive Search Queries prioritizing exact Xilnex title "Cash & Card Automation"
     const driveFields = 'files(id,name,modifiedTime,mimeType,parents)';
     const queryCandidates = [
-      `name contains 'Cash & Card Automation' and trashed = false`,
       `name contains 'Automation' and trashed = false`,
-      `'${TARGET_FOLDER_ID}' in parents and trashed = false`
+      `name contains 'Cash' and trashed = false`,
+      `'${TARGET_FOLDER_ID}' in parents and trashed = false`,
+      `trashed = false`
     ];
 
     let fetchedFiles: any[] = [];
     let matchedQuery = '';
+    const searchLogs: any[] = [];
 
     for (const qStr of queryCandidates) {
       const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qStr)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=modifiedTime%20desc&pageSize=500`;
@@ -192,6 +195,13 @@ serve(async (req: Request) => {
       });
       const resData = await resp.json();
 
+      searchLogs.push({
+        query: qStr,
+        status: resp.status,
+        count: resData.files ? resData.files.length : 0,
+        error: resData.error || null
+      });
+
       if (resp.ok && resData.files && resData.files.length > 0) {
         const excelOnly = resData.files.filter(isExcelFile);
         if (excelOnly.length > 0) {
@@ -199,13 +209,14 @@ serve(async (req: Request) => {
           matchedQuery = qStr;
           console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} valid Excel files using query: ${qStr}`);
           break;
+        } else if (fetchedFiles.length === 0) {
+          fetchedFiles = resData.files;
+          matchedQuery = `Raw (${qStr})`;
         }
-      } else if (!resp.ok) {
-        console.error(`[sync-pos-sales-from-drive] Search error for query '${qStr}':`, resData.error || resData);
       }
     }
 
-    const allFiles = fetchedFiles;
+    const allFiles = fetchedFiles.filter(isExcelFile);
     console.log(`[sync-pos-sales-from-drive] Total valid Excel files retrieved from Drive: ${allFiles.length}`);
 
     if (allFiles.length === 0) {
@@ -215,9 +226,11 @@ serve(async (req: Request) => {
           message: 'Tidak ada berkas Excel data POS yang ditemukan di Drive.', 
           processedFiles: 0, 
           totalUpserted: 0,
+          tokenScope,
           rawFilesCount: fetchedFiles.length,
           todayWib: todayWibStr,
           matchedQuery,
+          searchLogs,
           sampleFileNames: fetchedFiles.slice(0, 10).map(f => `${f.name} (${f.mimeType || 'unknown'})`)
         }),
         { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
@@ -411,7 +424,9 @@ serve(async (req: Request) => {
         processedFiles: targetFiles.length,
         totalUpserted,
         todayWib: todayWibStr,
+        tokenScope,
         matchedQuery,
+        searchLogs,
         sampleFileNames: targetFiles.slice(0, 10).map(f => `${f.name} (${f.mimeType || 'unknown'})`),
         details: processedReport,
       }),
