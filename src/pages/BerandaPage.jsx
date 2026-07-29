@@ -128,7 +128,7 @@ export default function BerandaPage() {
                 {/* Welcome Banner */}
                 <div className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
                     <h2 className="text-2xl font-bold text-gray-800">Halo, {profile?.username || 'Tim Alpro'}!</h2>
-                    <p className="text-gray-500 mt-1">Selamat datang di Sistem Pelaporan Setoran Harian.</p>
+                    <p className="text-gray-500 mt-1">Selamat datang di Sistem Pelaporan Sales Harian.</p>
                 </div>
 
                 {/* ALERT BANNERS */}
@@ -142,9 +142,9 @@ export default function BerandaPage() {
                                     <ul className="list-disc pl-5 space-y-1">
                                         {hariBelumLapor > 0 && (
                                             <>
-                                                <li>Anda belum melakukan pelaporan setoran untuk <strong>{hariBelumLapor} hari penjualan (sales)</strong>.</li>
+                                                <li>Anda belum melakukan pelaporan sales untuk <strong>{hariBelumLapor} hari penjualan</strong>.</li>
                                                 <li>
-                                                    Tanggal penjualan (sales) yang belum dilaporkan: {' '}
+                                                    Tanggal sales yang belum dilaporkan: {' '}
                                                     <span className="font-extrabold text-red-950 underline decoration-red-400">
                                                         {tunggakanDates.map(d => d.formatted).join(', ')}
                                                     </span>
@@ -153,15 +153,15 @@ export default function BerandaPage() {
                                         )}
                                         {duplikatDates.length > 0 && (
                                             <li>
-                                                Terdapat pelaporan tanggal sales duplikat untuk tanggal {' '}
+                                                Terdapat laporan tanggal sales duplikat untuk tanggal {' '}
                                                 <span className="font-extrabold text-red-950 underline decoration-red-400">
                                                     {duplikatDates.map(d => d.formatted).join(', ')}
                                                 </span>
-                                                , harap periksa apakah ada kesalahan penginputan tanggal pada laporan Anda.
+                                                , mohon periksa kembali tanggal pada laporan Anda.
                                             </li>
                                         )}
                                         {hariBelumLapor > 0 && (
-                                            <li>Harap segera lengkapi laporan yang tertunda.</li>
+                                            <li>Mohon segera lengkapi laporan sales yang tertunda.</li>
                                         )}
                                     </ul>
                                 </div>
@@ -180,7 +180,7 @@ export default function BerandaPage() {
                             ) : (
                                 <h3 className="text-3xl font-extrabold text-gray-800 leading-none">{hariBelumLapor}</h3>
                             )}
-                            <p className="text-sm text-gray-500 mt-1 font-medium">Hari Belum Lapor (Tgl Sales)</p>
+                            <p className="text-sm text-gray-500 mt-1 font-medium">Hari Belum Lapor Sales</p>
                         </div>
                         <div className="h-12 w-12 rounded-full bg-orange-50 flex items-center justify-center flex-shrink-0">
                             <span className="material-symbols-outlined text-primary-500 text-2xl">assignment_late</span>
@@ -195,14 +195,14 @@ export default function BerandaPage() {
                             ) : (
                                 <h3 className="text-3xl font-extrabold text-gray-800 leading-none">{duplikatDates.length}</h3>
                             )}
-                            <p className="text-sm text-gray-500 mt-1 font-medium">Kasus Duplikasi Tanggal Sales</p>
+                            <p className="text-sm text-gray-500 mt-1 font-medium">Tanggal Sales Duplikat</p>
                         </div>
                         <div className="h-12 w-12 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
                             <span className="material-symbols-outlined text-red-500 text-2xl">warning</span>
                         </div>
                     </div>
 
-                    {/* KPI 3 : Laporan Terakhir */}
+                    {/* KPI 3 : Tanggal Sales Terakhir Dilaporkan */}
                     <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                         <div>
                             {loading ? (
@@ -228,7 +228,7 @@ export default function BerandaPage() {
                             onClick={() => navigate('/setoran')}
                             className="flex items-center gap-2 bg-primary-500 text-white font-semibold py-2.5 px-5 rounded-lg hover:bg-primary-600 transition-all shadow-md transform hover:-translate-y-0.5 text-sm"
                         >
-                            <span className="material-symbols-outlined text-xl">add_circle</span> Buat Laporan Baru
+                            <span className="material-symbols-outlined text-xl">add_circle</span> Lapor Sales Baru
                         </button>
                         <button
                             onClick={() => navigate('/riwayat')}
@@ -317,8 +317,8 @@ export default function BerandaPage() {
                             <div className="h-12 w-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
                                 <span className="material-symbols-outlined text-gray-400 text-2xl">description</span>
                             </div>
-                            <p className="text-gray-500 font-medium text-sm">Belum ada riwayat aktivitas.</p>
-                            <p className="text-gray-400 text-xs mt-1">Laporan Anda akan muncul di sini.</p>
+                            <p className="text-gray-500 font-medium text-sm">Belum ada riwayat laporan sales.</p>
+                            <p className="text-gray-400 text-xs mt-1">Riwayat laporan sales Anda akan muncul di sini.</p>
                         </div>
                     )}
                 </div>

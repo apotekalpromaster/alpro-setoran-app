@@ -8,7 +8,7 @@ import NotificationDrawer from './NotificationDrawer';
 /* ─── Navigation items ──────────────────────────────────────────────────────── */
 const NAV_ITEMS = [
     { label: 'Beranda', icon: 'home', path: '/beranda' },
-    { label: 'Lapor Setoran', icon: 'add_circle', path: '/setoran' },
+    { label: 'Lapor Sales', icon: 'add_circle', path: '/setoran' },
     { label: 'Riwayat Laporan', icon: 'history', path: '/riwayat' },
     { label: 'Koreksi Laporan', icon: 'edit_note', path: '/koreksi' },
     { label: 'Troubleshooting Bank', icon: 'troubleshoot', path: '/user/troubleshooting' },
