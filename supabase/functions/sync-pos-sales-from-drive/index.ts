@@ -93,11 +93,11 @@ function isExcelFile(file: any): boolean {
   }
 
   // Include excel extensions & spreadsheet mimeTypes
-  if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv')) {
+  if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv') || lowerName.includes('.xlsx') || lowerName.includes('.xls')) {
     return true;
   }
 
-  if (file.mimeType && (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.mimeType.includes('csv'))) {
+  if (file.mimeType && (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.mimeType.includes('csv') || file.mimeType.includes('officedocument'))) {
     return true;
   }
 
@@ -174,39 +174,41 @@ serve(async (req: Request) => {
 
     console.log(`[sync-pos-sales-from-drive] Today WIB: ${todayWibStr} | Patterns: ${patternDDMMYYYY}, ${patternDDMMYY}, ${patternYYYYMMDD}`);
 
-    // 3. Drive Search Queries with Valid API v3 Syntax
+    // 3. Drive Search Queries with Server-Side Excel Filtering
     const driveFields = 'files(id,name,modifiedTime,mimeType,parents)';
     const queryCandidates = [
-      // Candidate 1: Search directly in target folder
+      // Candidate 1: Excel files inside target folder
+      `'${TARGET_FOLDER_ID}' in parents and trashed = false and (name contains '.xlsx' or name contains '.xls' or name contains '.csv')`,
+      // Candidate 2: All files in target folder
       `'${TARGET_FOLDER_ID}' in parents and trashed = false`,
-      // Candidate 2: Search by filename "Cash"
-      `name contains 'Cash' and trashed = false`,
-      // Candidate 3: Search by filename "Automation"
+      // Candidate 3: Files named Automation or Cash
       `name contains 'Automation' and trashed = false`,
-      // Candidate 4: Broad non-folder search
-      `trashed = false and mimeType != 'application/vnd.google-apps.folder'`
+      `name contains 'Cash' and trashed = false`
     ];
 
     let fetchedFiles: any[] = [];
 
     for (const qStr of queryCandidates) {
-      const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qStr)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=modifiedTime%20desc&pageSize=100`;
+      const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qStr)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=modifiedTime%20desc&pageSize=500`;
       const resp = await fetch(driveSearchUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       const resData = await resp.json();
 
       if (resp.ok && resData.files && resData.files.length > 0) {
-        fetchedFiles = resData.files;
-        console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} files using query: ${qStr}`);
-        break;
+        // Filter strictly for Excel files
+        const excelOnly = resData.files.filter(isExcelFile);
+        if (excelOnly.length > 0) {
+          fetchedFiles = excelOnly;
+          console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} Excel files using query: ${qStr}`);
+          break;
+        }
       } else if (!resp.ok) {
         console.error(`[sync-pos-sales-from-drive] Search error for query '${qStr}':`, resData.error || resData);
       }
     }
 
-    // Filter strictly for Excel files only
-    const allFiles = fetchedFiles.filter(isExcelFile);
+    const allFiles = fetchedFiles;
     console.log(`[sync-pos-sales-from-drive] Total valid Excel files retrieved from Drive: ${allFiles.length}`);
 
     if (allFiles.length === 0) {
