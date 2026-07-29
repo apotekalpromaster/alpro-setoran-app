@@ -174,48 +174,32 @@ serve(async (req: Request) => {
 
     console.log(`[sync-pos-sales-from-drive] Today WIB: ${todayWibStr} | Patterns: ${patternDDMMYYYY}, ${patternDDMMYY}, ${patternYYYYMMDD}`);
 
-    // 3. Drive Search Queries prioritizing exact Xilnex filename "Automation" & "Cash & Card"
+    // 3. Strictly LOCKED Query targeting ONLY the specific target folder 1lreZQGF8F-3sFdPkQ1jzcQpVanz8ovY0
+    // Using corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true to fetch cross-account shared files
     const driveFields = 'files(id,name,modifiedTime,mimeType,parents)';
-    const queryCandidates = [
-      // Candidate 1: Search directly for Xilnex export title "Automation"
-      `name contains 'Automation' and trashed = false`,
-      // Candidate 2: Search inside target folder
-      `'${TARGET_FOLDER_ID}' in parents and trashed = false`,
-      // Candidate 3: Search for any xlsx files
-      `trashed = false and (name contains 'xlsx' or name contains 'xls' or name contains 'csv')`,
-      // Candidate 4: All accessible non-trashed files
-      `trashed = false`
-    ];
+    const targetFolderQuery = `'${TARGET_FOLDER_ID}' in parents and trashed = false`;
+
+    const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(targetFolderQuery)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&orderBy=modifiedTime%20desc&pageSize=500`;
+    
+    console.log(`[sync-pos-sales-from-drive] Querying strictly locked folder URL: ${driveSearchUrl}`);
+
+    const resp = await fetch(driveSearchUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const resData = await resp.json();
 
     let fetchedFiles: any[] = [];
-    let matchedQuery = '';
-
-    for (const qStr of queryCandidates) {
-      const driveSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(qStr)}&fields=${encodeURIComponent(driveFields)}&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=modifiedTime%20desc&pageSize=500`;
-      const resp = await fetch(driveSearchUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const resData = await resp.json();
-
-      if (resp.ok && resData.files && resData.files.length > 0) {
-        const excelOnly = resData.files.filter(isExcelFile);
-        if (excelOnly.length > 0) {
-          fetchedFiles = excelOnly;
-          matchedQuery = qStr;
-          console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} valid Excel files using query: ${qStr}`);
-          break;
-        } else if (fetchedFiles.length === 0) {
-          // Keep raw files for diagnostic reporting if no excel files found
-          fetchedFiles = resData.files;
-          matchedQuery = `Raw (${qStr})`;
-        }
-      } else if (!resp.ok) {
-        console.error(`[sync-pos-sales-from-drive] Search error for query '${qStr}':`, resData.error || resData);
-      }
+    if (resp.ok && resData.files) {
+      fetchedFiles = resData.files;
+      console.log(`[sync-pos-sales-from-drive] Found ${fetchedFiles.length} files inside locked target folder.`);
+    } else if (!resp.ok) {
+      console.error(`[sync-pos-sales-from-drive] Search error for locked target folder:`, resData.error || resData);
+      throw new Error(`Gagal mencari di Google Drive Folder: ${JSON.stringify(resData.error || resData)}`);
     }
 
+    // Filter strictly for Excel files inside target folder
     const allFiles = fetchedFiles.filter(isExcelFile);
-    console.log(`[sync-pos-sales-from-drive] Total valid Excel files retrieved from Drive: ${allFiles.length}`);
+    console.log(`[sync-pos-sales-from-drive] Total valid Excel files inside target folder: ${allFiles.length}`);
 
     if (allFiles.length === 0) {
       return new Response(
@@ -224,16 +208,16 @@ serve(async (req: Request) => {
           message: 'Tidak ada berkas Excel data POS yang ditemukan di Drive.', 
           processedFiles: 0, 
           totalUpserted: 0,
+          folderId: TARGET_FOLDER_ID,
           rawFilesCount: fetchedFiles.length,
           todayWib: todayWibStr,
-          matchedQuery,
           sampleFileNames: fetchedFiles.slice(0, 10).map(f => `${f.name} (${f.mimeType || 'unknown'})`)
         }),
         { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
       );
     }
 
-    // 4. Target File Selection Strategy
+    // 4. Target File Selection Strategy inside the locked folder
     let targetFiles: any[] = [];
 
     // Strategy A: Filename Date Pattern Match (DDMMYYYY, DDMMYY, YYYYMMDD, YYYY-MM-DD)
@@ -259,10 +243,10 @@ serve(async (req: Request) => {
       }
     }
 
-    // Strategy C: Fallback to latest valid Excel file
+    // Strategy C: Fallback to latest valid Excel file inside target folder
     if (targetFiles.length === 0 && allFiles.length > 0) {
       targetFiles = [allFiles[0]];
-      console.log(`[sync-pos-sales-from-drive] Fallback to latest valid Excel file: ${targetFiles[0].name}`);
+      console.log(`[sync-pos-sales-from-drive] Fallback to latest valid Excel file inside target folder: ${targetFiles[0].name}`);
     }
 
     // 5. Fetch Store Profiles for Code Mapping
@@ -290,7 +274,7 @@ serve(async (req: Request) => {
     let totalUpserted = 0;
     const processedReport: any[] = [];
 
-    // 6. Process Target Excel Files
+    // 6. Process Target Excel Files inside locked folder
     for (const fileItem of targetFiles) {
       console.log(`[sync-pos-sales-from-drive] Downloading & parsing file: ${fileItem.name} (${fileItem.id})`);
 
@@ -420,8 +404,8 @@ serve(async (req: Request) => {
         processedFiles: targetFiles.length,
         totalUpserted,
         todayWib: todayWibStr,
-        matchedQuery,
-        sampleFileNames: fetchedFiles.slice(0, 10).map(f => `${f.name} (${f.mimeType || 'unknown'})`),
+        folderId: TARGET_FOLDER_ID,
+        sampleFileNames: targetFiles.slice(0, 10).map(f => `${f.name} (${f.mimeType || 'unknown'})`),
         details: processedReport,
       }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
