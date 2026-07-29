@@ -11,8 +11,8 @@ const STEP_INFO = ['1. Informasi Sales & Metode', '2. Input Nominal & Bukti', '3
 // Tautan Foto Contoh Dokumen (Dapat diisi link URL foto fisik)
 const SAMPLE_DOCUMENT_IMAGES = {
     slot1: {
-        title: "Contoh Struk Kutipan Harian Kasir",
-        url: "", // Tempel link URL foto contoh Struk Kutipan Harian Kasir di sini
+        title: "Contoh Kutipan Harian Kasir",
+        url: "", // Tempel link URL foto contoh Kutipan Harian Kasir di sini
         description: "Pastikan foto menampilkan seluruh angka penjualan kasir dan tanggal dengan jelas."
     },
     slot2: {
@@ -143,7 +143,7 @@ export default function DetailSetoranPage() {
                 }
             } else {
                 const missingSlots = [];
-                if (!stagedFiles[0]) missingSlots.push('Bukti 1 (Struk Kutipan Harian Kasir)');
+                if (!stagedFiles[0]) missingSlots.push('Bukti 1 (Kutipan Harian Kasir)');
                 if (!stagedFiles[1]) missingSlots.push('Bukti 2 (Struk Settlement EDC)');
                 if (!stagedFiles[2]) missingSlots.push('Bukti 3 (Struk / Resi Setoran Bank)');
 
@@ -567,7 +567,7 @@ function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis, onPrevi
             { idx: 4, label: "Bukti 5: Opsional", required: false }
           ]
         : [
-            { idx: 0, label: "Bukti 1: Struk Kutipan Harian Kasir", required: true, sampleKey: "slot1" },
+            { idx: 0, label: "Bukti 1: Kutipan Harian Kasir", required: true, sampleKey: "slot1" },
             { idx: 1, label: "Bukti 2: Struk Settlement EDC", required: true, sampleKey: "slot2" },
             { idx: 2, label: "Bukti 3: Struk / Resi Setoran Bank", required: true, sampleKey: "slot3" },
             { idx: 3, label: "Bukti 4: Foto Pendukung (Opsional)", required: false },
