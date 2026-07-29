@@ -210,7 +210,7 @@ export default function BerandaPage() {
                             ) : (
                                 <h3 className="text-xl font-bold text-gray-800 leading-none mt-1.5">{formatDate(lastReportDate)}</h3>
                             )}
-                            <p className="text-sm text-gray-500 mt-2 font-medium">Laporan Terakhir</p>
+                            <p className="text-sm text-gray-500 mt-2 font-medium">Tanggal Sales Terakhir Dilaporkan</p>
                         </div>
                         <div className="h-12 w-12 rounded-full bg-green-50 flex items-center justify-center flex-shrink-0">
                             <span className="material-symbols-outlined text-green-500 text-2xl">event_available</span>
