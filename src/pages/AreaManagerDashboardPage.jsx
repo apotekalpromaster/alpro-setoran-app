@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -8,7 +8,7 @@ import UserLayout from '../components/UserLayout';
 const DISCREPANCY_THRESHOLD = 50000;
 const PAGE_SIZE = 500;
 
-// Global cache variables to prevent loading spinner flickers when navigating back to this tab
+// Global cache variables
 let cachedOutlets = [];
 let cachedReports = [];
 let cachedTunggakanReports = [];
@@ -21,27 +21,25 @@ const JELAS_TYPES = [
     { id: 'Setoran 3x Seminggu', label: 'Setoran 3x Seminggu' },
     { id: 'Setoran Sales Dengan Potongan Penjualan', label: 'Setoran Potongan' },
     { id: 'Belum Dilaporkan', label: 'Belum Dilaporkan' },
-    { id: 'Setoran Uang Pecahan Kecil', label: 'Uang Pecahan' },
-    { id: 'Setoran Uang Lebih', label: 'Uang Lebih' },
-    { id: 'Pengembalian Petty Cash', label: 'Petty Cash' },
-    { id: 'Deposit Card Terblokir (Salah Input PIN 3x)', label: 'Card Terblokir' },
-    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Card Tertelan' }
+    { id: 'Setoran Uang Pecahan Kecil', label: 'Setoran Uang Pecahan Kecil' },
+    { id: 'Pengembalian Petty Cash', label: 'Pengembalian Petty Cash' },
+    { id: 'Deposit Card Terblokir (Salah Input PIN 3x)', label: 'Deposit Card Terblokir' },
+    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Deposit Card Tertelan' }
 ];
 
 const BADGE_CONFIG = {
-    'Setoran Harian': { label: 'Harian', cls: 'badge-success' },
-    'Setoran 3x Seminggu': { label: '3x Seminggu', cls: 'badge-success' },
-    'Setoran Sales Dengan Potongan Penjualan': { label: 'Setoran Potongan', cls: 'badge-success' },
-    'Setoran Uang Pecahan Kecil': { label: 'Pecahan Kecil', cls: 'badge-warning' },
-    'Setoran Uang Lebih': { label: 'Uang Lebih', cls: 'badge-warning' },
-    'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'badge-warning' },
-    'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'badge-danger' },
-    'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'badge-danger' },
+    'Setoran Harian': { label: 'Setoran Harian', cls: 'bg-green-100 text-green-800 border border-green-200' },
+    'Setoran 3x Seminggu': { label: 'Setoran 3x Seminggu', cls: 'bg-green-100 text-green-800 border border-green-200' },
+    'Setoran Sales Dengan Potongan Penjualan': { label: 'Setoran Potongan', cls: 'bg-green-100 text-green-800 border border-green-200' },
+    'Setoran Uang Pecahan Kecil': { label: 'Uang Pecahan Kecil', cls: 'bg-orange-100 text-orange-800 border border-orange-200' },
+    'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'bg-amber-100 text-amber-800 border border-amber-200' },
+    'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'bg-red-100 text-red-800 border border-red-200' },
+    'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'bg-red-100 text-red-800 border border-red-200' },
     'Belum Dilaporkan': { label: 'Belum Lapor', cls: 'bg-amber-100 text-amber-800 border border-amber-200' }
 };
 
 function getBadge(jenis) {
-    return BADGE_CONFIG[jenis] || { label: jenis, cls: 'badge-normal' };
+    return BADGE_CONFIG[jenis] || { label: jenis, cls: 'bg-gray-100 text-gray-800 border border-gray-200' };
 }
 
 export default function AreaManagerDashboardPage() {
@@ -49,7 +47,7 @@ export default function AreaManagerDashboardPage() {
     const navigate = useNavigate();
     const today = new Date().toLocaleDateString('sv-SE');
 
-    // Default dates (Default to last 7 days of sales)
+    // Default dates
     const defaultStart = () => {
         if (cachedStartDate) return cachedStartDate;
         const d = new Date();
@@ -58,7 +56,7 @@ export default function AreaManagerDashboardPage() {
     };
     const defaultEnd = () => cachedEndDate || today;
 
-    // States initialized from cache if available
+    // States initialized from cache
     const [outlets, setOutlets] = useState(cachedOutlets);
     const [reports, setReports] = useState(cachedReports);
     const [tunggakanReports, setTunggakanReports] = useState(cachedTunggakanReports);
@@ -76,9 +74,8 @@ export default function AreaManagerDashboardPage() {
     const [showHighSelisih, setShowHighSelisih] = useState(false);
     const [selectedJenis, setSelectedJenis] = useState([]);
     const [showJenisDropdown, setShowJenisDropdown] = useState(false);
-    const [specialCase, setSpecialCase] = useState(''); // '' | 'telat_lapor' | 'selisih_sales' | 'selisih_setoran'
+    const [specialCase, setSpecialCase] = useState('');
 
-    // Fetch data on initial load when profile is ready
     useEffect(() => {
         if (profile?.username) {
             const hasCache = cachedOutlets.length > 0;
@@ -113,7 +110,7 @@ export default function AreaManagerDashboardPage() {
             const outletCodes = outletList.map(o => o.kode_toko).filter(Boolean);
             const searchKeys = [...new Set([...outletUsernames, ...outletCodes])];
 
-            // Fetch POS sales data for lookup (filtered by date range to prevent Supabase 1000-rows truncation limit)
+            // Fetch POS sales data for lookup
             if (searchKeys.length > 0 && (Object.keys(cachedPosSalesMap).length === 0 || !silent)) {
                 const { data: posData, error: posErr } = await supabase
                     .from('pos_sales_data')
@@ -132,7 +129,7 @@ export default function AreaManagerDashboardPage() {
                 }
             }
 
-            // 2. Fetch reports for these outlets within chosen date range (paginated loop to prevent 1000 rows cap limit)
+            // 2. Fetch reports for these outlets within chosen date range
             let allData = [];
             let from = 0;
             let done = false;
@@ -161,8 +158,13 @@ export default function AreaManagerDashboardPage() {
 
             const mappedReports = allData.map(row => {
                 const o = outletList.find(item => item.id === row.user_id) || {};
+                const totalNonTunai = Number(row.bca_debit || 0) + Number(row.bca_kredit || 0) + Number(row.bca_qris || 0) +
+                                      Number(row.bri_debit || 0) + Number(row.bri_kredit || 0) + Number(row.bri_qris || 0) +
+                                      Number(row.bank_transfer || 0) || Number(row.total_non_tunai || 0);
+
                 return {
                     ...row,
+                    total_non_tunai: totalNonTunai,
                     selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
                     username: o.username || '-',
                     kode_toko: o.kode_toko || '-'
@@ -174,7 +176,7 @@ export default function AreaManagerDashboardPage() {
             cachedStartDate = start;
             cachedEndDate = end;
 
-            // 3. Fetch tunggakan report metadata (all reports from minTanggalAktif up to yesterday)
+            // 3. Fetch tunggakan report metadata
             if (cachedTunggakanReports.length === 0 || !silent) {
                 const minTanggalAktif = outletList.reduce((min, o) => {
                     const act = o.tanggal_aktif || '2026-04-01';
@@ -235,11 +237,10 @@ export default function AreaManagerDashboardPage() {
             dates.push(currentLoop.toLocaleDateString('sv-SE'));
             currentLoop.setDate(currentLoop.getDate() + 1);
         }
-        dates.reverse();
         return dates;
     };
 
-    // Analyze each outlet's missing sales dates (filtered by search term as well)
+    // Analyze each outlet's missing sales dates (sorted chronologically Oldest -> Newest)
     const outletTunggakanList = useMemo(() => {
         const list = outlets.map(o => {
             const outletReports = tunggakanReports.filter(r => r.user_id === o.id);
@@ -255,9 +256,11 @@ export default function AreaManagerDashboardPage() {
                     missing.push({ date, formatted });
                 }
             });
+            // Sort dates chronologically Oldest -> Newest
+            const sortedMissing = [...missing].sort((a, b) => a.date.localeCompare(b.date));
             return {
                 ...o,
-                missingDates: missing
+                missingDates: sortedMissing
             };
         }).filter(o => o.missingDates.length > 0);
 
@@ -274,7 +277,6 @@ export default function AreaManagerDashboardPage() {
             reports.some(r => r.user_id === o.id && r.tanggal_setor === today)
         ).length;
         
-        // Non-filtered tunggakan list for absolute statistics
         const absoluteTunggakanList = outlets.map(o => {
             const outletReports = tunggakanReports.filter(r => r.user_id === o.id);
             const missing = [];
@@ -299,9 +301,9 @@ export default function AreaManagerDashboardPage() {
             totalTunggakan,
             totalDiscrepancies
         };
-    }, [outlets, reports, today]);
+    }, [outlets, reports, today, tunggakanReports]);
 
-    // 1. Cari tanggal duplikat untuk tipe pelaporan utama per outlet
+    // Cari tanggal duplikat untuk tipe pelaporan utama per outlet (Sorted Oldest -> Newest)
     const duplicateOutletDates = useMemo(() => {
         const counts = {};
         reports.forEach(r => {
@@ -311,15 +313,18 @@ export default function AreaManagerDashboardPage() {
                 counts[key] = (counts[key] || 0) + 1;
             }
         });
-        return Object.keys(counts).filter(k => counts[k] > 1).map(k => {
-            const idx = k.lastIndexOf('_');
-            const username = k.substring(0, idx);
-            const date = k.substring(idx + 1);
-            return { username, date };
-        });
+        return Object.keys(counts)
+            .filter(k => counts[k] > 1)
+            .map(k => {
+                const idx = k.lastIndexOf('_');
+                const username = k.substring(0, idx);
+                const date = k.substring(idx + 1);
+                return { username, date };
+            })
+            .sort((a, b) => a.date.localeCompare(b.date));
     }, [reports]);
 
-    // Client-side filter for report table & Injeksi Tanggal Unreported
+    // Client-side filter for report table
     const filteredReports = useMemo(() => {
         const cleanSearch = searchTerm.trim().toLowerCase();
 
@@ -433,6 +438,7 @@ export default function AreaManagerDashboardPage() {
                                     nominal_jual: 0,
                                     potongan: 0,
                                     nominal_setoran: 0,
+                                    total_non_tunai: 0,
                                     selisih: mockSelisih,
                                     s1,
                                     s2
@@ -457,8 +463,8 @@ export default function AreaManagerDashboardPage() {
         let totalSales = 0;
         let totalPotongan = 0;
         let totalSetor = 0;
+        let totalNonTunai = 0;
         let totalPosSales = 0;
-        let totalSalesForPos = 0;
         const seenOutletDates = new Set();
 
         filteredReports.forEach((r) => {
@@ -468,6 +474,8 @@ export default function AreaManagerDashboardPage() {
             }
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
+            totalNonTunai += Number(r.total_non_tunai || 0);
+
             const codeKey = r.kode_toko + '_' + r.tanggal_jual;
             const nameKey = r.username + '_' + r.tanggal_jual;
             const posVal = isValidTypeForPOS ? (posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey]) : undefined;
@@ -475,18 +483,15 @@ export default function AreaManagerDashboardPage() {
             const uniqKey = (r.kode_toko || r.username) + '_' + r.tanggal_jual;
             if (posVal !== undefined && posVal !== null && !seenOutletDates.has(uniqKey)) {
                 totalPosSales += Number(posVal);
-                totalSalesForPos += Number(r.nominal_jual || 0);
                 seenOutletDates.add(uniqKey);
             }
         });
 
-        // Compare grand total values directly to prevent double-counting of POS sales across multiple report types
         const totalSelisih1 = totalSales - totalPosSales;
         const totalSelisih2 = (totalPotongan + totalSetor) - totalPosSales;
         const hasAnyPosForTotals = totalPosSales > 0;
-        const hasAnyPosForTotals2 = totalPosSales > 0;
 
-        return { totalSales, totalPotongan, totalSetor, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals, hasAnyPosForTotals2 };
+        return { totalSales, totalPotongan, totalSetor, totalNonTunai, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals };
     }, [filteredReports, posSalesMap]);
 
     const handleCopyReminder = (outletName, missingDates, id) => {
@@ -508,8 +513,8 @@ export default function AreaManagerDashboardPage() {
 
     const selisihChipNew = (val) => {
         if (val === null || val === undefined) return <span className="text-gray-300">-</span>;
-        if (val < 0) return <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">-{formatRupiah(Math.abs(val))}</span>;
-        if (val > 0) return <span className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">+{formatRupiah(val)}</span>;
+        if (val < 0) return <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">-${formatRupiah(Math.abs(val))}</span>;
+        if (val > 0) return <span className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">+${formatRupiah(val)}</span>;
         return <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">Sesuai</span>;
     };
 
@@ -552,9 +557,9 @@ export default function AreaManagerDashboardPage() {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900">Selamat Datang, {profile?.username}!</h2>
-                        <p className="text-xs text-gray-500 mt-1">Gunakan dashboard ini untuk memantau kepatuhan pelaporan setoran harian di wilayah binaan Anda.</p>
+                        <p className="text-xs text-gray-500 mt-1">Gunakan dashboard ini untuk memantau kepatuhan pelaporan setoran harian dan melakukan audit data Xilnex di wilayah binaan Anda.</p>
                     </div>
-                    <button onClick={() => fetchData(reportsStartDate, reportsEndDate, false)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-700 border border-gray-200 rounded-lg transition-colors">
+                    <button onClick={() => fetchData(reportsStartDate, reportsEndDate, false)} className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-700 border border-gray-200 rounded-lg transition-colors cursor-pointer">
                         <span className="material-symbols-outlined text-sm">sync</span> Segarkan Data
                     </button>
                 </div>
@@ -579,7 +584,7 @@ export default function AreaManagerDashboardPage() {
                             <StatCard 
                                 icon="store" 
                                 color="bg-indigo-50 text-indigo-700" 
-                                title="Jumlah Outlet" 
+                                title="Jumlah Outlet Binaan" 
                                 value={stats.totalOutlets} 
                                 desc="Total cabang di bawah koordinasi" 
                             />
@@ -600,7 +605,7 @@ export default function AreaManagerDashboardPage() {
                             <StatCard 
                                 icon="error_outline" 
                                 color="bg-red-50 text-red-700" 
-                                title="Selisih > 50rb" 
+                                title="Selisih > Rp 50rb" 
                                 value={stats.totalDiscrepancies} 
                                 desc="Data laporan berselisih (periode terpilih)" 
                             />
@@ -612,11 +617,11 @@ export default function AreaManagerDashboardPage() {
                                 <div>
                                     <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
                                         <span className="material-symbols-outlined text-amber-500">warning</span>
-                                        Daftar Tunggakan Pelaporan Harian (Wilayah Anda)
+                                        Daftar Tunggakan Laporan Sales
                                     </h3>
-                                    <p className="text-[10px] text-gray-400 mt-0.5">Dihitung berdasarkan tanggal penjualan (sales) yang belum dilaporkan/disetor sejak tanggal aktif masing-masing outlet.</p>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">Daftar tanggal penjualan (sales) yang belum dilaporkan/disetor oleh masing-masing outlet binaan Anda.</p>
                                 </div>
-                                <span className="text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
+                                <span className="text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-0.5 rounded-full">
                                     {outletTunggakanList.length} Cabang Menunggak
                                 </span>
                             </div>
@@ -649,7 +654,7 @@ export default function AreaManagerDashboardPage() {
                                             </div>
                                             <button 
                                                 onClick={() => handleCopyReminder(o.username, o.missingDates, o.id)}
-                                                className={`w-full sm:w-auto h-8 px-4 flex items-center justify-center gap-1.5 text-xs font-bold rounded-lg border transition-all shadow-xs whitespace-nowrap flex-shrink-0 ${
+                                                className={`w-full sm:w-auto h-8 px-4 flex items-center justify-center gap-1.5 text-xs font-bold rounded-lg border transition-all shadow-xs whitespace-nowrap flex-shrink-0 cursor-pointer ${
                                                     copiedId === o.id 
                                                         ? 'bg-green-50 border-green-200 text-green-700'
                                                         : 'bg-primary-600 border-primary-700 text-white hover:bg-primary-700'
@@ -669,13 +674,12 @@ export default function AreaManagerDashboardPage() {
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                 <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
                                     <span className="material-symbols-outlined text-indigo-500">table_view</span>
-                                    Pemantauan Laporan Masuk (Berdasarkan Tanggal Penjualan)
+                                    Pemantauan & Audit Sales Masuk (Berdasarkan Tanggal Penjualan)
                                 </h3>
                             </div>
 
                             {/* FILTER CONTAINER */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
-                                {/* Row 1: Search and Date Range (3 columns grid) */}
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Cari Cabang</label>
@@ -691,7 +695,7 @@ export default function AreaManagerDashboardPage() {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Dari Tgl Jual</label>
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Dari Tgl Sales</label>
                                         <input 
                                             type="date" 
                                             value={tempStartDate} 
@@ -700,7 +704,7 @@ export default function AreaManagerDashboardPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Sampai Tgl Jual</label>
+                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Sampai Tgl Sales</label>
                                         <input 
                                             type="date" 
                                             value={tempEndDate} 
@@ -710,9 +714,7 @@ export default function AreaManagerDashboardPage() {
                                     </div>
                                 </div>
 
-                                {/* Row 2: Dropdowns for Filter (Grid 2 columns) */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-gray-100">
-                                    {/* Column 1: Jenis Pelaporan Multi-select Dropdown */}
                                     <div className="relative">
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Filter Jenis Pelaporan (Bisa pilih lebih dari 1)</label>
                                         <button
@@ -732,7 +734,6 @@ export default function AreaManagerDashboardPage() {
 
                                         {showJenisDropdown && (
                                             <>
-                                                {/* Overlay to close on outside click */}
                                                 <div 
                                                     className="fixed inset-0 z-20" 
                                                     onClick={() => setShowJenisDropdown(false)}
@@ -780,7 +781,6 @@ export default function AreaManagerDashboardPage() {
                                         )}
                                     </div>
 
-                                    {/* Column 2: Special Cases Dropdown */}
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 mb-1">Filter Kasus Khusus (Audit)</label>
                                         <select
@@ -791,15 +791,13 @@ export default function AreaManagerDashboardPage() {
                                             <option value="">Semua Laporan (Tanpa Filter Kasus)</option>
                                             <option value="belum_dilaporkan">Belum Dilaporkan (Tunggakan)</option>
                                             <option value="telat_lapor">Telat Lapor &gt; 4 Hari (Misal sales tgl 1, baru dilaporkan setelah tanggal 4)</option>
-                                            <option value="selisih_sales">Ada Selisih Data Sales (Xilnex) VS Nominal Sales</option>
-                                            <option value="selisih_setoran">Ada Selisih Data Sales (Xilnex) VS Potongan + Nominal Setor</option>
+                                            <option value="selisih_sales">Ada Selisih Sales Tunai (Xilnex VS Input Toko)</option>
+                                            <option value="selisih_setoran">Ada Selisih Setor Bank ((Setor+Potong) VS Xilnex)</option>
                                         </select>
                                     </div>
                                 </div>
 
-                                {/* Row 3: Action Buttons & Toggle (Premium Layout) */}
                                 <div className="flex flex-col sm:flex-row items-center justify-between pt-3 border-t border-gray-100 gap-4">
-                                    {/* Left side: Selisih toggle */}
                                     <div className="w-full sm:w-auto">
                                         <label className="flex items-center gap-2.5 cursor-pointer select-none">
                                             <div
@@ -808,23 +806,22 @@ export default function AreaManagerDashboardPage() {
                                             >
                                                 <div className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full shadow-xs transition-transform ${showHighSelisih ? 'translate-x-4' : ''}`} />
                                             </div>
-                                            <span className="text-xs font-bold text-gray-700">Selisih &gt; 50rb</span>
+                                            <span className="text-xs font-bold text-gray-700">Selisih &gt; Rp 50rb</span>
                                         </label>
                                     </div>
 
-                                    {/* Right side: Action buttons */}
                                     <div className="flex gap-2 w-full sm:w-auto">
                                         {(searchTerm || showHighSelisih || selectedJenis.length > 0 || specialCase || reportsStartDate !== defaultStart() || reportsEndDate !== today) && (
                                             <button 
                                                 onClick={handleResetFilters}
-                                                className="flex-1 sm:flex-initial flex items-center justify-center gap-1 h-9 px-4 border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-red-500 rounded-lg transition-colors"
+                                                className="flex-1 sm:flex-initial flex items-center justify-center gap-1 h-9 px-4 border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-red-500 rounded-lg transition-colors cursor-pointer"
                                             >
                                                 <span className="material-symbols-outlined text-sm">clear_all</span> Reset
                                             </button>
                                         )}
                                         <button 
                                             onClick={handleApplyFilter} 
-                                            className="flex-1 sm:flex-initial bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-9 px-5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                                            className="flex-1 sm:flex-initial bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-9 px-5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                                         >
                                             <span className="material-symbols-outlined text-sm">filter_list</span> Terapkan Filter
                                         </button>
@@ -861,39 +858,39 @@ export default function AreaManagerDashboardPage() {
                                     </div>
                                 ) : (
                                     <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
-                                        <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1400px] border-collapse">
+                                        <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1500px] border-collapse">
                                             <colgroup>
-                                                <col style={{ width: '180px' }} />
+                                                <col style={{ width: '170px' }} />
                                                 <col style={{ width: '90px' }} />
                                                 <col style={{ width: '135px' }} />
+                                                <col style={{ width: '110px' }} />
+                                                <col style={{ width: '120px' }} />
+                                                <col style={{ width: '110px' }} />
+                                                <col style={{ width: '120px' }} />
+                                                <col style={{ width: '130px' }} />
                                                 <col style={{ width: '135px' }} />
-                                                <col style={{ width: '110px' }} />
-                                                <col style={{ width: '110px' }} />
-                                                <col style={{ width: '140px' }} />
-                                                <col style={{ width: '110px' }} />
-                                                <col style={{ width: '160px' }} />
-                                                <col style={{ width: '160px' }} />
+                                                <col style={{ width: '135px' }} />
                                                 <col style={{ width: '60px' }} />
                                             </colgroup>
-                                            <thead className="text-xs font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-20 border-b border-gray-200">
+                                            <thead className="text-xs font-bold text-gray-700 uppercase tracking-wider sticky top-0 z-20 border-b border-gray-200 bg-gray-100">
                                                 <tr>
-                                                    <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nama Apotek</th>
-                                                    <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Tgl Sales</th>
-                                                    <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Jenis Laporan</th>
-                                                    <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Metode</th>
-                                                    <th className="px-3 py-3 text-right bg-blue-50 text-blue-700 font-bold sticky top-0 z-20 border-b border-gray-200">Data Sales (Xilnex)</th>
-                                                    <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nominal Sales</th>
-                                                    <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Potongan Penjualan (Petty Cash)</th>
-                                                    <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nominal Setor</th>
-                                                    <th className="px-3 py-3 text-center bg-red-50 text-red-700 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Data Sales (Xilnex) VS Nominal Sales</th>
-                                                    <th className="px-3 py-3 text-center bg-orange-50 text-orange-700 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Data Sales (Xilnex) VS Potongan + Nominal Setor</th>
-                                                    <th className="px-3 py-3 text-center bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
+                                                    <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Nama Apotek</th>
+                                                    <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Tgl Sales</th>
+                                                    <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Jenis & Metode</th>
+                                                    <th className="px-3 py-3 text-right bg-blue-50 text-blue-900 font-bold sticky top-0 z-20 border-b border-gray-200">Sales Tunai (Xilnex)</th>
+                                                    <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Sales Tunai Toko</th>
+                                                    <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Potongan Sales</th>
+                                                    <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Setoran Tunai Bank</th>
+                                                    <th className="px-3 py-3 text-right bg-blue-50/50 text-blue-900 font-bold sticky top-0 z-20 border-b border-gray-200">Total Non-Tunai Toko</th>
+                                                    <th className="px-3 py-3 text-center bg-red-50 text-red-800 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Sales Tunai</th>
+                                                    <th className="px-3 py-3 text-center bg-orange-50 text-orange-800 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Setor Bank</th>
+                                                    <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
                                                 {filteredReports.map((row) => {
                                                     const badge = getBadge(row.jenis_pelaporan);
-                                                    const isAnomali = badge.cls === 'badge-danger';
+                                                    const isAnomali = badge.cls.includes('bg-red-100');
 
                                                     const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(row.jenis_pelaporan);
                                                     const codeKey = `${row.kode_toko}_${row.tanggal_jual}`;
@@ -909,25 +906,31 @@ export default function AreaManagerDashboardPage() {
 
                                                     return (
                                                         <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (row.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}>
-                                                            <td className="px-3 py-3 font-bold text-gray-900 text-xs break-words" title={row.username}>{row.username}</td>
+                                                            <td className="px-3 py-3 font-bold text-gray-900 text-xs break-words" title={row.username}>
+                                                                <div>{row.username}</div>
+                                                                <div className="text-[10px] text-gray-400 font-mono font-normal">({row.kode_toko})</div>
+                                                            </td>
                                                             <td className="px-3 py-3 font-bold text-gray-900 text-xs">
                                                                 {new Date(row.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                             </td>
                                                             <td className="px-3 py-3 text-xs">
                                                                 <div>
-                                                                    <p className="font-semibold text-gray-800 text-[12px] break-words" title={row.jenis_pelaporan}>{row.jenis_pelaporan}</p>
+                                                                    <p className="font-semibold text-gray-800 text-[11px] break-words" title={row.jenis_pelaporan}>{row.jenis_pelaporan}</p>
                                                                     <span className={'inline-block text-[9px] font-bold px-2 py-0.25 rounded-full mt-0.5 ' + badge.cls}>
                                                                         {badge.label}
                                                                     </span>
+                                                                    {row.metode_setoran && row.metode_setoran !== '-' && (
+                                                                        <span className="block text-[10px] text-gray-400 mt-0.5">{row.metode_setoran}</span>
+                                                                    )}
                                                                 </div>
                                                             </td>
-                                                            <td className="px-3 py-3 text-xs text-gray-500 break-words" title={row.metode_setoran}>{row.metode_setoran}</td>
                                                             <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
                                                                 {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
                                                             </td>
                                                             <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_jual || 0)}</td>
-                                                            <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.potongan || 0)}</td>
-                                                            <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_setoran || 0)}</td>
+                                                            <td className="px-3 py-3 text-right text-red-600 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.potongan || 0)}</td>
+                                                            <td className="px-3 py-3 text-right font-bold text-green-700 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_setoran || 0)}</td>
+                                                            <td className="px-3 py-3 text-right font-bold text-blue-800 font-mono text-xs bg-blue-50/20">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.total_non_tunai || 0)}</td>
                                                             <td className="px-3 py-3 text-center font-mono text-xs bg-red-50/10">
                                                                 {selisihChipNew(s1)}
                                                             </td>
@@ -941,7 +944,7 @@ export default function AreaManagerDashboardPage() {
                                                                     <button
                                                                         title="Lihat Detail"
                                                                         onClick={() => navigate("/riwayat/" + row.id)}
-                                                                        className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
+                                                                        className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white cursor-pointer"
                                                                     >
                                                                         <span className="material-symbols-outlined text-base">visibility</span>
                                                                     </button>
@@ -951,30 +954,33 @@ export default function AreaManagerDashboardPage() {
                                                     );
                                                 })}
                                             </tbody>
-                                            <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300 text-gray-900 text-xs sticky bottom-0 z-20">
+                                            <tfoot className="bg-orange-100 font-bold border-t-2 border-orange-300 text-gray-900 text-xs sticky bottom-0 z-20 shadow-md">
                                                 <tr>
-                                                    <td colSpan="4" className="px-3 py-3 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
-                                                        Grand Total
+                                                    <td colSpan="3" className="px-3 py-3 text-left font-extrabold text-gray-900 uppercase tracking-wider text-[11px]">
+                                                        GRAND TOTAL
                                                     </td>
-                                                    <td className="px-3 py-3 text-right font-extrabold text-blue-800 font-mono bg-blue-100">
+                                                    <td className="px-3 py-3 text-right font-extrabold text-blue-900 font-mono bg-blue-200/50">
                                                         {formatRupiah(tableTotals.totalPosSales)}
                                                     </td>
-                                                    <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
+                                                    <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono">
                                                         {formatRupiah(tableTotals.totalSales)}
                                                     </td>
-                                                    <td className="px-3 py-3 text-right font-extrabold text-gray-600 font-mono bg-gray-100">
+                                                    <td className="px-3 py-3 text-right font-extrabold text-red-700 font-mono">
                                                         {formatRupiah(tableTotals.totalPotongan)}
                                                     </td>
-                                                    <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
+                                                    <td className="px-3 py-3 text-right font-extrabold text-green-800 font-mono">
                                                         {formatRupiah(tableTotals.totalSetor)}
                                                     </td>
-                                                    <td className="px-3 py-3 text-center font-extrabold font-mono bg-red-100">
+                                                    <td className="px-3 py-3 text-right font-extrabold text-blue-900 font-mono bg-blue-200/30">
+                                                        {formatRupiah(tableTotals.totalNonTunai)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-center font-extrabold font-mono bg-red-200/50">
                                                         {tableTotals.hasAnyPosForTotals ? selisihChipNew(tableTotals.totalSelisih1) : <span className="text-gray-300">-</span>}
                                                     </td>
-                                                    <td className="px-3 py-3 text-center font-extrabold font-mono bg-orange-100">
-                                                        {tableTotals.hasAnyPosForTotals2 ? selisihChipNew(tableTotals.totalSelisih2) : <span className="text-gray-300">-</span>}
+                                                    <td className="px-3 py-3 text-center font-extrabold font-mono bg-orange-200/60">
+                                                        {tableTotals.hasAnyPosForTotals ? selisihChipNew(tableTotals.totalSelisih2) : <span className="text-gray-300">-</span>}
                                                     </td>
-                                                    <td className="px-3 py-3 bg-gray-100"></td>
+                                                    <td className="px-3 py-3 bg-orange-100"></td>
                                                 </tr>
                                             </tfoot>
                                         </table>
@@ -1004,4 +1010,3 @@ function StatCard({ icon, color, title, value, desc }) {
         </div>
     );
 }
-
