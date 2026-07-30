@@ -25,13 +25,16 @@ export default function BerandaPage() {
             setFetchError(null);
             try {
                 // Fetch ALL reports for this user to calculate total missed working dates accurately
-                const { data, error } = await supabase
-                    .from('laporan')
-                    .select('*')
-                    .eq('user_id', profile.id)
-                    .order('tanggal_setor', { ascending: false })
-                    .order('tanggal_jual', { ascending: false, nullsFirst: false })
-                    .order('id', { ascending: false });
+                const { data, error } = await safeSupabaseQuery(
+                    supabase
+                        .from('laporan')
+                        .select('*')
+                        .eq('user_id', profile.id)
+                        .order('tanggal_setor', { ascending: false })
+                        .order('tanggal_jual', { ascending: false, nullsFirst: false })
+                        .order('id', { ascending: false }),
+                    6000
+                );
 
                 if (error) throw error;
 
