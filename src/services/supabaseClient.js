@@ -11,8 +11,9 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
 
 /**
  * Utility helper to execute Supabase database queries with a mandatory safety timeout.
+ * Converts Supabase Postgrest thenables into native JavaScript Promises.
  * Prevents UI from being stuck in skeleton loading state if network or token refresh stalls.
- * @param {Promise} queryPromise - Supabase query promise (e.g. supabase.from(...).select(...))
+ * @param {Promise|Object} queryPromise - Supabase query promise or builder (e.g. supabase.from(...).select(...))
  * @param {number} timeoutMs - Max wait time in milliseconds (default: 6000ms)
  * @returns {Promise} Resolves with Supabase query response or throws timeout error
  */
@@ -25,7 +26,8 @@ export async function safeSupabaseQuery(queryPromise, timeoutMs = 6000) {
     });
 
     try {
-        const result = await Promise.race([queryPromise, timeoutPromise]);
+        const actualPromise = Promise.resolve(queryPromise);
+        const result = await Promise.race([actualPromise, timeoutPromise]);
         clearTimeout(timer);
         return result;
     } catch (err) {

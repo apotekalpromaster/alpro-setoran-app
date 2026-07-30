@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../services/supabaseClient';
+import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { useAuth } from './AuthContext';
 
 const NotificationContext = createContext();
@@ -12,12 +12,9 @@ export function NotificationProvider({ children }) {
     const [unreadTroubleshootingCount, setUnreadTroubleshootingCount] = useState(0);
     const [loading, setLoading] = useState(false);
 
-    // Use stable IDs only after authReady to prevent double-subscribe
+    // Use stable IDs only after authReady
     const storeCode = authReady ? (profile?.kode_toko || profile?.username || '') : '';
     const userId = authReady ? user?.id : null;
-
-    // Track active channel to prevent duplicate WebSocket subscriptions
-    const channelRef = useRef(null);
 
     const fetchNotifications = useCallback(async () => {
         if (!userId && !storeCode) return;
@@ -37,7 +34,7 @@ export function NotificationProvider({ children }) {
                 query = query.eq('kode_toko', storeCode);
             }
 
-            const { data, error } = await query;
+            const { data, error } = await safeSupabaseQuery(query, 5000);
             if (error) {
                 console.warn('Gagal memuat notifikasi:', error.message);
                 return;
@@ -51,42 +48,40 @@ export function NotificationProvider({ children }) {
             setUnreadKoreksiCount(unread.filter(n => n.category === 'koreksi').length);
             setUnreadTroubleshootingCount(unread.filter(n => n.category === 'troubleshooting').length);
         } catch (err) {
-            console.error('Error fetching notifications:', err);
+            console.warn('Error fetching notifications (safe fallback):', err.message);
         } finally {
             setLoading(false);
         }
     }, [userId, storeCode]);
 
-    // Only subscribe after authReady is true — prevents double-subscribe from cache+server update
+    // Smart Polling & Focus Refresh (Replaces WebSocket to prevent client connection locks when idle)
     useEffect(() => {
         if (!authReady || (!userId && !storeCode)) return;
 
+        // Fetch immediately on mount / login
         fetchNotifications();
 
-        // Remove any existing channel before creating a new one
-        if (channelRef.current) {
-            supabase.removeChannel(channelRef.current);
-            channelRef.current = null;
-        }
+        // 1. Polling interval every 45 seconds ONLY if tab is active
+        const intervalId = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                fetchNotifications();
+            }
+        }, 45000);
 
-        const channel = supabase
-            .channel(`user_notifications_${userId}_${storeCode}`)
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'user_notifications' },
-                () => { fetchNotifications(); }
-            )
-            .subscribe();
-
-        channelRef.current = channel;
-
-        return () => {
-            if (channelRef.current) {
-                supabase.removeChannel(channelRef.current);
-                channelRef.current = null;
+        // 2. Instant fetch on tab focus / visibility change
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                fetchNotifications();
             }
         };
-    }, [authReady, userId, storeCode]);
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [authReady, userId, storeCode, fetchNotifications]);
 
     const markAsRead = async (notifId) => {
         try {

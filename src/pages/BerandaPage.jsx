@@ -10,6 +10,7 @@ export default function BerandaPage() {
 
     const [recentReports, setRecentReports] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState(null);
     const [hariBelumLapor, setHariBelumLapor] = useState(0);
     const [lastReportDate, setLastReportDate] = useState(null);
     const [tunggakanDates, setTunggakanDates] = useState([]);
@@ -21,6 +22,7 @@ export default function BerandaPage() {
             return;
         }
             setLoading(true);
+            setFetchError(null);
             try {
                 // Fetch ALL reports for this user to calculate total missed working dates accurately
                 const { data, error } = await supabase
@@ -96,6 +98,7 @@ export default function BerandaPage() {
 
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
+                setFetchError("Gagal memuat data penjualan. Silakan periksa koneksi internet Anda.");
             } finally {
                 setLoading(false);
             }
@@ -170,6 +173,24 @@ export default function BerandaPage() {
                     </div>
                 )}
 
+                {fetchError && (
+                    <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl flex items-center justify-between shadow-sm animate-fade-in">
+                        <div className="flex items-center gap-3">
+                            <span className="material-symbols-outlined text-orange-600">wifi_off</span>
+                            <div>
+                                <p className="text-sm font-bold text-orange-900">{fetchError}</p>
+                                <p className="text-xs text-orange-700">Koneksi sempat terputus saat aplikasi idle.</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={fetchData}
+                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                        >
+                            <span className="material-symbols-outlined text-sm">refresh</span> Muat Ulang Data
+                        </button>
+                    </div>
+                )}
+                
                 {/* KPI CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* KPI 1 : Hari Belum Lapor */}
