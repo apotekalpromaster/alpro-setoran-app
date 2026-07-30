@@ -22,6 +22,7 @@ export default function RingkasanPage() {
     const [uploadStatus, setUploadStatus] = useState('');
     const [error, setError] = useState('');
     const [driveWarning, setDriveWarning] = useState('');
+    const [lightboxImg, setLightboxImg] = useState(null);
 
     const isNonFinancial = NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan);
 
@@ -46,6 +47,24 @@ export default function RingkasanPage() {
         parseRupiah(formData.bankTransfer);
 
     const grandTotalSales = totalPenjualan + totalNonTunai;
+
+    // Mapping label tag slot bukti yang spesifik & mudah dipahami
+    const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(formData.jenisPelaporan);
+    const slotLabels = isSingleProofType
+        ? [
+            "Bukti 1: Dokumentasi Utama",
+            "Bukti 2: Lampiran Pendukung",
+            "Bukti 3: Lampiran Pendukung",
+            "Bukti 4: Foto Pendukung",
+            "Bukti 5: Foto Pendukung"
+          ]
+        : [
+            "Bukti 1: Kutipan Harian Kasir",
+            "Bukti 2: Struk Settlement EDC",
+            "Bukti 3: Struk / Resi Setoran Bank",
+            "Bukti 4: Foto Pendukung",
+            "Bukti 5: Foto Pendukung"
+          ];
 
     const handleKirim = async () => {
         if (!window.confirm('Kirim laporan sales sekarang?')) return;
@@ -163,8 +182,8 @@ export default function RingkasanPage() {
                 </div>
 
                 <div className="text-center mb-8">
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Periksa Ringkasan Laporan</h1>
-                    <p className="mt-2 text-gray-500 text-sm">Periksa kembali seluruh angka dan foto bukti sebelum mengirimkan laporan.</p>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Langkah 3: Periksa & Kirim Lapor Sales</h1>
+                    <p className="mt-2 text-gray-500 text-sm">Periksa kembali seluruh angka penjualan dan foto bukti sebelum dikirimkan.</p>
                 </div>
 
                 {driveWarning && (
@@ -185,10 +204,10 @@ export default function RingkasanPage() {
                 )}
 
                 <div className="space-y-6 animate-slide-in">
-                    {/* Informasi Laporan */}
+                    {/* Informasi Laporan Sales */}
                     <section>
                         <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                            <span className="material-symbols-outlined text-primary-500">info</span> Informasi Laporan
+                            <span className="material-symbols-outlined text-primary-500">info</span> Informasi Laporan Sales
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <InfoCard icon="person" label="Nama Pelapor" value={profile?.username || '-'} />
@@ -200,7 +219,7 @@ export default function RingkasanPage() {
                         </div>
                     </section>
 
-                    {/* Rincian Transaksi Tunai & Non-Tunai */}
+                    {/* Rincian Omset Sales Harian */}
                     {!isNonFinancial && (
                         <section>
                             <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
@@ -337,28 +356,49 @@ export default function RingkasanPage() {
                         </section>
                     )}
 
-                    {/* Bukti Foto */}
+                    {/* Bukti Lampiran Foto */}
                     {formData.buktiFiles?.filter(Boolean).length > 0 && (
                         <section>
-                            <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-blue-500">attach_file</span> Bukti Lampiran
-                            </h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                {formData.buktiFiles.filter(Boolean).map((f, i) => (
-                                    <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-gray-50 flex items-center justify-center">
-                                        {f.preview ? (
-                                            <img src={f.preview} alt={f.name} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 p-2">
-                                                <span className="material-symbols-outlined text-3xl">description</span>
-                                                <span className="text-[10px] mt-1 font-semibold truncate max-w-full text-center" title={f.name}>{f.name}</span>
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-blue-500">attach_file</span> Bukti Lampiran Foto (Struk & Resi)
+                                </h3>
+                                <span className="text-[11px] font-semibold text-gray-400">Klik foto untuk perbesar</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                                {formData.buktiFiles.map((f, slotIdx) => {
+                                    if (!f) return null;
+                                    const tagLabel = slotLabels[slotIdx] || `Bukti ${slotIdx + 1}`;
+                                    return (
+                                        <div
+                                            key={slotIdx}
+                                            onClick={() => f.preview && setLightboxImg({ url: f.preview, name: f.name, label: tagLabel })}
+                                            className="relative group aspect-[4/3] rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-gray-900 cursor-pointer hover:shadow-md transition-all transform hover:-translate-y-0.5"
+                                        >
+                                            {f.preview ? (
+                                                <img src={f.preview} alt={f.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                            ) : (
+                                                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 p-3 bg-gray-50">
+                                                    <span className="material-symbols-outlined text-4xl text-red-500">picture_as_pdf</span>
+                                                    <span className="text-[11px] font-bold mt-1 text-gray-700 truncate max-w-full" title={f.name}>{f.name}</span>
+                                                </div>
+                                            )}
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent p-3 flex flex-col justify-between opacity-95 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex justify-end">
+                                                    <span className="bg-black/60 backdrop-blur-xs text-white text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1 border border-white/20 font-medium">
+                                                        <span className="material-symbols-outlined text-[13px]">zoom_in</span> Pratinjau
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="inline-block bg-primary-600/90 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md tracking-wide mb-1 border border-white/10">
+                                                        {tagLabel}
+                                                    </span>
+                                                    <p className="text-gray-200 text-[11px] truncate font-medium drop-shadow-sm" title={f.name}>{f.name}</p>
+                                                </div>
                                             </div>
-                                        )}
-                                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5">
-                                            <p className="text-white text-[10px] font-bold truncate">Bukti #{i + 1}</p>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </section>
                     )}
@@ -383,6 +423,32 @@ export default function RingkasanPage() {
                     </button>
                 </div>
             </div>
+
+            {/* Modal Lightbox Pratinjau Foto Penuh */}
+            {lightboxImg && (
+                <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setLightboxImg(null)}>
+                    <div className="relative max-w-4xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl space-y-3 p-5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                            <div>
+                                <span className="text-[11px] font-bold text-primary-600 uppercase tracking-wider block">{lightboxImg.label}</span>
+                                <h4 className="font-bold text-gray-900 text-sm truncate max-w-md" title={lightboxImg.name}>{lightboxImg.name}</h4>
+                            </div>
+                            <button onClick={() => setLightboxImg(null)} className="h-9 w-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors">
+                                <span className="material-symbols-outlined text-base">close</span>
+                            </button>
+                        </div>
+                        <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-gray-950 rounded-xl p-2 shadow-inner">
+                            <img src={lightboxImg.url} alt={lightboxImg.name} className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg" />
+                        </div>
+                        <div className="pt-1 flex justify-between items-center text-xs text-gray-500">
+                            <span>Periksa kejelasan angka penjualan pada foto struk di atas.</span>
+                            <button type="button" onClick={() => setLightboxImg(null)} className="btn-secondary py-1.5 px-4 text-xs">
+                                Tutup Pratinjau
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </UserLayout>
     );
 }
