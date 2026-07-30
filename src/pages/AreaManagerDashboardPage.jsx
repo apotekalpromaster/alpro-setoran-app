@@ -270,13 +270,20 @@ export default function AreaManagerDashboardPage() {
         return list.filter(o => o.username.toLowerCase().includes(cleanSearch));
     }, [outlets, tunggakanReports, searchTerm]);
 
-    // Overall stats calculations
+    // Overall stats calculations (Refined for 100% accuracy)
     const stats = useMemo(() => {
         const totalOutlets = outlets.length;
+        
+        // 2. Submitted Today Count: Stores that submitted ANY report today or for today's sales
         const submittedTodayCount = outlets.filter(o => 
-            reports.some(r => r.user_id === o.id && r.tanggal_setor === today)
+            reports.some(r => r.user_id === o.id && (
+                r.tanggal_setor === today || 
+                r.tanggal_jual === today || 
+                (r.created_at && r.created_at.startsWith(today))
+            ))
         ).length;
         
+        // 3. Total Tunggakan Days across all stores
         const absoluteTunggakanList = outlets.map(o => {
             const outletReports = tunggakanReports.filter(r => r.user_id === o.id);
             const missing = [];
@@ -293,7 +300,20 @@ export default function AreaManagerDashboardPage() {
             return missing.length;
         });
         const totalTunggakan = absoluteTunggakanList.reduce((sum, count) => sum + count, 0);
-        const totalDiscrepancies = reports.filter(r => Math.abs(r.selisih) > DISCREPANCY_THRESHOLD).length;
+
+        // 4. Discrepancies > Rp 50.000: Checks Xilnex vs Sales, Xilnex vs Deposit, and Manual Discrepancy
+        const totalDiscrepancies = reports.filter(r => {
+            const codeKey = `${r.kode_toko}_${r.tanggal_jual}`;
+            const nameKey = `${r.username}_${r.tanggal_jual}`;
+            const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(r.jenis_pelaporan);
+
+            const s1 = isValidTypeForPOS && posVal !== undefined && posVal !== null ? Math.abs((r.nominal_jual || 0) - posVal) : 0;
+            const s2 = isValidTypeForPOS && posVal !== undefined && posVal !== null ? Math.abs(((r.potongan || 0) + (r.nominal_setoran || 0)) - posVal) : 0;
+            const sManual = Math.abs((r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0));
+
+            return s1 > DISCREPANCY_THRESHOLD || s2 > DISCREPANCY_THRESHOLD || sManual > DISCREPANCY_THRESHOLD;
+        }).length;
 
         return {
             totalOutlets,
@@ -301,7 +321,7 @@ export default function AreaManagerDashboardPage() {
             totalTunggakan,
             totalDiscrepancies
         };
-    }, [outlets, reports, today, tunggakanReports]);
+    }, [outlets, reports, today, tunggakanReports, posSalesMap]);
 
     // Cari tanggal duplikat untuk tipe pelaporan utama per outlet (Sorted Oldest -> Newest)
     const duplicateOutletDates = useMemo(() => {
@@ -359,7 +379,7 @@ export default function AreaManagerDashboardPage() {
             };
         }).filter(r => {
             const matchName = !cleanSearch || r.username.toLowerCase().includes(cleanSearch);
-            const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD;
+            const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD || (r.s1 !== null && Math.abs(r.s1) > DISCREPANCY_THRESHOLD) || (r.s2 !== null && Math.abs(r.s2) > DISCREPANCY_THRESHOLD);
             const matchJenis = selectedJenis.length === 0 || selectedJenis.includes(r.jenis_pelaporan);
             
             let matchSpecial = true;
@@ -678,7 +698,7 @@ export default function AreaManagerDashboardPage() {
                                 </h3>
                             </div>
 
-                            {/* FILTER CONTAINER */}
+                            {/* FILTER CONTAINER - SYMMETRIC FORM INPUTS */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
                                     <div>
@@ -686,7 +706,7 @@ export default function AreaManagerDashboardPage() {
                                         <select 
                                             value={searchTerm} 
                                             onChange={(e) => setSearchTerm(e.target.value)} 
-                                            className="form-input w-full py-1.5 px-3 bg-gray-50 text-xs cursor-pointer font-bold text-gray-800"
+                                            className="w-full h-10 px-3 bg-gray-50 text-xs cursor-pointer font-bold text-gray-800 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none"
                                         >
                                             <option value="">Semua Cabang</option>
                                             {outlets.map(o => (
@@ -700,7 +720,7 @@ export default function AreaManagerDashboardPage() {
                                             type="date" 
                                             value={tempStartDate} 
                                             onChange={(e) => setTempStartDate(e.target.value)} 
-                                            className="form-input w-full py-1.5 px-3 text-xs" 
+                                            className="w-full h-10 px-3 bg-white text-xs font-medium border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" 
                                         />
                                     </div>
                                     <div>
@@ -709,7 +729,7 @@ export default function AreaManagerDashboardPage() {
                                             type="date" 
                                             value={tempEndDate} 
                                             onChange={(e) => setTempEndDate(e.target.value)} 
-                                            className="form-input w-full py-1.5 px-3 text-xs" 
+                                            className="w-full h-10 px-3 bg-white text-xs font-medium border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none" 
                                         />
                                     </div>
                                 </div>
@@ -720,7 +740,7 @@ export default function AreaManagerDashboardPage() {
                                         <button
                                             type="button"
                                             onClick={() => setShowJenisDropdown(p => !p)}
-                                            className="form-input w-full py-1.5 px-3 bg-gray-50 text-xs font-bold text-gray-800 flex justify-between items-center cursor-pointer min-h-[34px]"
+                                            className="w-full h-10 px-3 bg-gray-50 text-xs font-bold text-gray-800 border border-gray-300 rounded-lg flex justify-between items-center cursor-pointer focus:ring-2 focus:ring-primary-500"
                                         >
                                             <span className="truncate">
                                                 {selectedJenis.length === 0 
@@ -786,7 +806,7 @@ export default function AreaManagerDashboardPage() {
                                         <select
                                             value={specialCase}
                                             onChange={(e) => setSpecialCase(e.target.value)}
-                                            className="form-input w-full py-1.5 px-3 bg-gray-50 text-xs cursor-pointer font-bold text-gray-800"
+                                            className="w-full h-10 px-3 bg-gray-50 text-xs cursor-pointer font-bold text-gray-800 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none"
                                         >
                                             <option value="">Semua Laporan (Tanpa Filter Kasus)</option>
                                             <option value="belum_dilaporkan">Belum Dilaporkan (Tunggakan)</option>
