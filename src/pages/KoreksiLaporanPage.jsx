@@ -46,7 +46,7 @@ export default function KoreksiLaporanPage() {
     // Mode State: 'edit' | 'delete'
     const [requestType, setRequestType] = useState('edit');
 
-    // Poka Yoke Checkbox Section Toggles (User chooses what to edit)
+    // Checkbox Section Toggles (User chooses what to edit)
     const [toggleTunai, setToggleTunai] = useState(false);
     const [toggleNonTunai, setToggleNonTunai] = useState(false);
     const [toggleMeta, setToggleMeta] = useState(false);
@@ -110,7 +110,7 @@ export default function KoreksiLaporanPage() {
                 setNewTanggalSetor(report.tanggal_setor || '');
                 setNewJenisPelaporan(report.jenis_pelaporan || '');
                 
-                // Reset toggles to false (Poka Yoke: user must consciously toggle what they want to change)
+                // Reset toggles to false
                 setToggleTunai(false);
                 setToggleNonTunai(false);
                 setToggleMeta(false);
@@ -172,7 +172,6 @@ export default function KoreksiLaporanPage() {
                     tanggal_jual_baru,
                     tanggal_setor_baru,
                     bukti_urls_baru,
-                    catatan_admin,
                     laporan (
                         tanggal_jual,
                         jenis_pelaporan,
@@ -233,7 +232,7 @@ export default function KoreksiLaporanPage() {
         setLoading(true);
 
         try {
-            // Determine proposed values based on Poka Yoke toggles
+            // Determine proposed values based on toggles
             let finalJual = selectedReport.nominal_jual || 0;
             let finalSetoran = selectedReport.nominal_setoran || 0;
             let finalPotongan = selectedReport.potongan || 0;
@@ -322,8 +321,8 @@ export default function KoreksiLaporanPage() {
 
             setSuccessMsg(
                 requestType === 'delete'
-                    ? 'Permohonan hapus laporan berhasil dikirim dan menunggu persetujuan Area Manager / Finance.'
-                    : 'Permohonan koreksi laporan berhasil dikirim dan menunggu persetujuan Area Manager / Finance.'
+                    ? 'Permohonan hapus laporan berhasil dikirim dan menunggu persetujuan Area Manager.'
+                    : 'Permohonan koreksi laporan berhasil dikirim dan menunggu persetujuan Area Manager.'
             );
             setExplanation('');
             setSelectedReportId('');
@@ -438,18 +437,18 @@ export default function KoreksiLaporanPage() {
                                                 Anda mengajukan permohonan untuk <strong>MENGHAPUS secara permanen</strong> laporan <strong>{selectedReport.jenis_pelaporan}</strong> tanggal sales <strong>{new Date(selectedReport.tanggal_jual).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</strong> dari sistem.
                                             </p>
                                             <p className="text-xs font-semibold text-red-700">
-                                                *Tindakan ini memerlukan peninjauan dan persetujuan dari Area Manager / Finance.
+                                                *Tindakan ini memerlukan peninjauan dan persetujuan dari Area Manager.
                                             </p>
                                         </div>
                                     ) : (
                                         <div className="space-y-6">
-                                            {/* POKA YOKE BANNER GUIDANCE */}
+                                            {/* BANNER GUIDANCE */}
                                             <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl text-amber-900 text-xs flex items-start gap-2.5">
-                                                <span className="material-symbols-outlined text-amber-600 flex-shrink-0 mt-0.5">verified</span>
+                                                <span className="material-symbols-outlined text-amber-600 flex-shrink-0 mt-0.5">lightbulb</span>
                                                 <div>
-                                                    <p className="font-bold">Prinsip Poka Yoke (Hanya Centang Yang Ingin Diubah):</p>
+                                                    <p className="font-bold">Petunjuk Pengisian Koreksi:</p>
                                                     <p className="mt-0.5 text-amber-800 leading-relaxed">
-                                                        Centang opsi bagian di bawah ini <strong>hanya untuk data yang ingin Anda perbaiki</strong>. Bagian yang tidak Anda centang akan secara otomatis dipertahankan memakai data lama saat ini.
+                                                        Centang pilihan di bawah ini <strong>hanya untuk data yang ingin Anda perbaiki</strong>. Bagian yang tidak Anda centang akan secara otomatis tetap menggunakan data lama yang tersimpan.
                                                     </p>
                                                 </div>
                                             </div>
@@ -469,7 +468,7 @@ export default function KoreksiLaporanPage() {
                                                     </span>
                                                     {!toggleTunai && (
                                                         <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
-                                                            Tetap Menggunakan Data Lama
+                                                            Data lama tetap dipertahankan
                                                         </span>
                                                     )}
                                                 </label>
@@ -531,7 +530,7 @@ export default function KoreksiLaporanPage() {
                                                     </span>
                                                     {!toggleNonTunai && (
                                                         <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
-                                                            Tetap Menggunakan Data Lama
+                                                            Data lama tetap dipertahankan
                                                         </span>
                                                     )}
                                                 </label>
@@ -582,7 +581,7 @@ export default function KoreksiLaporanPage() {
                                                     </span>
                                                     {!toggleMeta && (
                                                         <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
-                                                            Tetap Menggunakan Data Lama
+                                                            Data lama tetap dipertahankan
                                                         </span>
                                                     )}
                                                 </label>
@@ -633,7 +632,7 @@ export default function KoreksiLaporanPage() {
                                                     </span>
                                                     {!toggleBukti && (
                                                         <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
-                                                            Tetap Menggunakan Foto Lama
+                                                            Foto lama tetap dipertahankan
                                                         </span>
                                                     )}
                                                 </label>
@@ -749,7 +748,7 @@ export default function KoreksiLaporanPage() {
                             </p>
                             <ul className="list-disc pl-4 space-y-1.5 text-[11px] text-amber-900">
                                 <li>Data lama di database <strong>TIDAK langsung berubah</strong> secara otomatis.</li>
-                                <li>Permohonan Anda harus diverifikasi dan disetujui terlebih dahulu oleh Area Manager / Finance.</li>
+                                <li>Permohonan Anda harus diverifikasi dan disetujui terlebih dahulu oleh Area Manager.</li>
                                 <li>Isi penjelasan alasan koreksi secara jujur dan detail demi akuntabilitas keuangan apotek.</li>
                             </ul>
                         </div>
@@ -792,24 +791,15 @@ export default function KoreksiLaporanPage() {
 
                                         let statusBadge = '';
                                         if (item.status === 'Approved') {
-                                            statusBadge = <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-green-50 text-green-700 border border-green-200 shadow-xs">Disetujui</span>;
+                                            statusBadge = <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-green-50 text-green-700 border border-green-200 shadow-xs">Disetujui Area Manager</span>;
                                         } else if (item.status === 'Rejected') {
-                                            const rejectionReason = item.catatan_admin || 'Tidak ada catatan spesifik.';
                                             statusBadge = (
-                                                <div className="relative group inline-block">
-                                                    <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-red-50 text-red-700 border border-red-200 shadow-xs cursor-help inline-flex items-center gap-1">
-                                                        <span className="material-symbols-outlined text-xs">info</span> Ditolak
-                                                    </span>
-                                                    <div className="absolute right-0 top-full mt-1.5 hidden group-hover:block z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-xl shadow-xl border border-gray-700 text-left animate-fade-in">
-                                                        <p className="font-bold text-red-400 mb-1 flex items-center gap-1">
-                                                            <span className="material-symbols-outlined text-xs">cancel</span> Alasan Penolakan:
-                                                        </p>
-                                                        <p className="text-gray-200 italic leading-relaxed">"{rejectionReason}"</p>
-                                                    </div>
-                                                </div>
+                                                <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-red-50 text-red-700 border border-red-200 shadow-xs inline-flex items-center gap-1">
+                                                    <span className="material-symbols-outlined text-xs">cancel</span> Ditolak Area Manager
+                                                </span>
                                             );
                                         } else {
-                                            statusBadge = <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-yellow-50 text-yellow-800 border border-yellow-200 shadow-xs">Menunggu</span>;
+                                            statusBadge = <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-yellow-50 text-yellow-800 border border-yellow-200 shadow-xs">Menunggu Persetujuan AM</span>;
                                         }
 
                                         return (
