@@ -11,6 +11,7 @@ const BADGE_CONFIG = {
     'Setoran Harian': { label: 'Harian', cls: 'badge-normal' },
     'Setoran 3x Seminggu': { label: '3x Seminggu', cls: 'badge-normal' },
     'Setoran Sales Dengan Potongan Penjualan': { label: 'Potongan', cls: 'badge-warning' },
+    'Setoran Uang Pecahan Kecil': { label: 'Uang Pecahan', cls: 'badge-normal' },
     'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'badge-purple' },
     'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'badge-danger' },
     'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'badge-danger' },
@@ -21,6 +22,7 @@ const JELAS_TYPES = [
     { id: 'Setoran Harian', label: 'Setoran Harian' },
     { id: 'Setoran 3x Seminggu', label: 'Setoran 3x Seminggu' },
     { id: 'Setoran Sales Dengan Potongan Penjualan', label: 'Setoran Sales Dgn Potongan (Top Up Petty Cash)' },
+    { id: 'Setoran Uang Pecahan Kecil', label: 'Setoran Uang Pecahan Kecil' },
     { id: 'Pengembalian Petty Cash', label: 'Pengembalian Petty Cash' },
     { id: 'Deposit Card Terblokir (Salah Input PIN 3x)', label: 'Deposit Card Terblokir' },
     { id: 'Deposit Card Tertelan Mesin ATM', label: 'Deposit Card Tertelan' }
@@ -112,7 +114,7 @@ export default function RiwayatPage() {
         }
     };
 
-    // 1. Cari tanggal duplikat untuk tipe pelaporan utama
+    // 1. Cari tanggal duplikat untuk tipe pelaporan utama, diurutkan kronologis (Oldest -> Newest)
     const duplicateDates = useMemo(() => {
         const counts = {};
         reports.forEach(r => {
@@ -121,7 +123,7 @@ export default function RiwayatPage() {
                 counts[r.tanggal_jual] = (counts[r.tanggal_jual] || 0) + 1;
             }
         });
-        return Object.keys(counts).filter(d => counts[d] > 1);
+        return Object.keys(counts).filter(d => counts[d] > 1).sort((a, b) => a.localeCompare(b));
     }, [reports]);
 
     // Client-side filtering & Injeksi Tanggal Unreported
@@ -241,8 +243,12 @@ export default function RiwayatPage() {
         return [...actualFiltered, ...unreportedList].sort((a, b) => b.tanggal_jual.localeCompare(a.tanggal_jual));
     }, [reports, activeFilters, profile]);
 
+    // Tanggal belum dilaporkan diurutkan kronologis dari paling lampau (Oldest -> Newest)
     const unreportedDates = useMemo(() => {
-        return filteredReports.filter(r => r.isUnreported).map(r => r.tanggal_jual);
+        return filteredReports
+            .filter(r => r.isUnreported)
+            .map(r => r.tanggal_jual)
+            .sort((a, b) => a.localeCompare(b));
     }, [filteredReports]);
 
     // Grand Totals for the entire filtered set
@@ -346,20 +352,20 @@ export default function RiwayatPage() {
                             <label className="block text-xs font-medium text-gray-500 mb-1">Cari Laporan</label>
                             <input
                                 type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Cari jenis atau nominal..."
+                                placeholder="Cari nama jenis laporan atau nominal..."
                                 className="form-input w-full py-2 px-3 text-xs"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Dari Tanggal</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Dari Tanggal Penjualan</label>
                             <input type="date" value={startDate} min="2026-04-01" onChange={(e) => setStartDate(e.target.value)} className="form-input w-full py-2 px-3 text-xs" />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Sampai Tanggal</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Sampai Tanggal Penjualan</label>
                             <input type="date" value={endDate} min="2026-04-01" onChange={(e) => setEndDate(e.target.value)} className="form-input w-full py-2 px-3 text-xs" />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Metode Setoran</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Metode Penyetoran Uang</label>
                             <select value={methodeFilter} onChange={(e) => setMethodeFilter(e.target.value)} className="form-input w-full py-2 px-3 bg-gray-50 text-xs">
                                 <option value="">Semua Metode</option>
                                 <option value="Teller Bank">Teller Bank</option>
@@ -458,9 +464,9 @@ export default function RiwayatPage() {
                                         <div className="flex items-start gap-3">
                                             <span className="material-symbols-outlined text-red-500 flex-shrink-0 mt-0.5">warning</span>
                                             <div>
-                                                <p className="text-xs font-bold text-red-800 uppercase">Peringatan Duplikasi Tanggal Sales</p>
+                                                <p className="text-xs font-bold text-red-800 uppercase tracking-wide">PERINGATAN DUPLIKASI TANGGAL SALES</p>
                                                 <p className="text-xs text-red-700 mt-1">
-                                                    Terdapat pelaporan tanggal sales duplikat untuk tanggal <strong>{duplicateDates.map(d => formatDisplayDate(d)).join(', ')}</strong>. Harap periksa apakah ada kesalahan penginputan tanggal pada laporan Anda.
+                                                    Terdapat laporan ganda (duplikat) untuk tanggal penjualan berikut: <strong>{duplicateDates.map(d => formatDisplayDate(d)).join(', ')}</strong>. Mohon periksa kembali penginputan laporan Anda.
                                                 </p>
                                             </div>
                                         </div>
@@ -469,9 +475,9 @@ export default function RiwayatPage() {
                                         <div className="flex items-start gap-3 border-t border-red-100/50 pt-2 mt-1 first:border-0 first:pt-0 first:mt-0">
                                             <span className="material-symbols-outlined text-orange-500 flex-shrink-0 mt-0.5">notification_important</span>
                                             <div>
-                                                <p className="text-xs font-bold text-orange-800 uppercase">Tanggal Penjualan Belum Dilaporkan</p>
+                                                <p className="text-xs font-bold text-orange-800 uppercase tracking-wide">TANGGAL PENJUALAN BELUM DILAPORKAN</p>
                                                 <p className="text-xs text-red-700 mt-1">
-                                                    Tanggal penjualan (sales) yang belum dilaporkan: <strong>{unreportedDates.map(d => formatDisplayDate(d)).join(', ')}</strong>. Harap segera melakukan pelaporan setoran untuk tanggal tersebut.
+                                                    Berikut adalah tanggal penjualan (sales) yang belum Anda laporkan: <strong>{unreportedDates.map(d => formatDisplayDate(d)).join(', ')}</strong>. Mohon segera lengkapi pelaporan setoran tersebut.
                                                 </p>
                                             </div>
                                         </div>
@@ -484,12 +490,12 @@ export default function RiwayatPage() {
                                 <table className="w-full text-xs text-left text-gray-600 min-w-[1780px] border-collapse">
                                     <thead className="text-[11px] font-extrabold text-gray-700 uppercase tracking-wider sticky top-0 z-20 bg-gray-100 shadow-xs border-b border-gray-200">
                                         <tr>
-                                            <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 whitespace-nowrap">Tgl Sales</th>
+                                            <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 whitespace-nowrap">Tanggal Sales</th>
                                             <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20">Jenis Laporan</th>
                                             <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20">Metode Setor</th>
                                             <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20">Sales Tunai (Rp)</th>
-                                            <th className="px-3 py-3 text-right bg-red-50/70 text-red-800 sticky top-0 z-20">Potongan (Petty Cash)</th>
-                                            <th className="px-3 py-3 text-right bg-green-50/70 text-green-800 sticky top-0 z-20">Setoran Tunai Bank</th>
+                                            <th className="px-3 py-3 text-right bg-red-50/70 text-red-800 sticky top-0 z-20">Potongan Sales (Petty Cash)</th>
+                                            <th className="px-3 py-3 text-right bg-green-50/70 text-green-800 sticky top-0 z-20">Setoran Tunai ke Bank</th>
                                             
                                             {/* Non-Tunai Columns */}
                                             <th className="px-3 py-3 text-right bg-blue-50/40 text-blue-900 sticky top-0 z-20">BCA Debit</th>
@@ -502,7 +508,7 @@ export default function RiwayatPage() {
                                             <th className="px-3 py-3 text-right bg-blue-100/60 text-blue-950 font-black sticky top-0 z-20">Total Non-Tunai</th>
                                             
                                             {/* Grand Total Column */}
-                                            <th className="px-3 py-3 text-right bg-orange-100/80 text-orange-950 font-black sticky top-0 z-20">TOTAL SALES HARIAN</th>
+                                            <th className="px-3 py-3 text-right bg-orange-100/80 text-orange-950 font-black sticky top-0 z-20">TOTAL SALES HARIAN (Tunai + Non-Tunai)</th>
                                             <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20">Aksi</th>
                                         </tr>
                                     </thead>
