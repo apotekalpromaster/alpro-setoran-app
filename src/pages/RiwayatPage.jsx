@@ -601,7 +601,7 @@ export default function RiwayatPage() {
                                     </tbody>
 
                                     {/* STICKY GRAND TOTAL FOOTER */}
-                                    <tfoot className="bg-orange-100/90 font-extrabold border-t-2 border-orange-300 text-orange-950 text-xs sticky bottom-0 z-20 shadow-md">
+                                    <tfoot className="bg-orange-100 font-extrabold border-t-2 border-orange-300 text-orange-950 text-xs sticky bottom-0 z-20 shadow-md">
                                         <tr>
                                             <td colSpan="3" className="px-3 py-3 text-left font-black uppercase tracking-wider text-[11px]">
                                                 GRAND TOTAL

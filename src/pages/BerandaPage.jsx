@@ -90,7 +90,7 @@ export default function BerandaPage() {
                         counts[r.tanggal_jual] = (counts[r.tanggal_jual] || 0) + 1;
                     }
                 });
-                const duplicates = Object.keys(counts).filter(d => counts[d] > 1).map(d => {
+                const duplicates = Object.keys(counts).filter(d => counts[d] > 1).sort((a, b) => a.localeCompare(b)).map(d => {
                     const formatted = new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
                     return { date: d, formatted };
                 });
