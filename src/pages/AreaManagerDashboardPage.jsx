@@ -188,6 +188,11 @@ export default function AreaManagerDashboardPage() {
                 let tunggakanData = [];
                 let tFrom = 0;
                 let tDone = false;
+                const PRIMARY_TYPES = [
+                    'Setoran Harian',
+                    'Setoran 3x Seminggu',
+                    'Setoran Sales Dengan Potongan Penjualan'
+                ];
 
                 while (!tDone) {
                     const tTo = tFrom + PAGE_SIZE - 1;
@@ -195,8 +200,10 @@ export default function AreaManagerDashboardPage() {
                         .from('laporan')
                         .select('user_id, tanggal_jual, jenis_pelaporan')
                         .in('user_id', outletIds)
+                        .in('jenis_pelaporan', PRIMARY_TYPES)
                         .gte('tanggal_jual', minTanggalAktif)
                         .lte('tanggal_jual', yesterdayStr)
+                        .order('tanggal_jual', { ascending: false })
                         .range(tFrom, tTo);
 
                     if (tErr) throw tErr;
@@ -242,8 +249,9 @@ export default function AreaManagerDashboardPage() {
 
     // Analyze each outlet's missing sales dates (sorted chronologically Oldest -> Newest)
     const outletTunggakanList = useMemo(() => {
+        const combinedReports = [...tunggakanReports, ...reports];
         const list = outlets.map(o => {
-            const outletReports = tunggakanReports.filter(r => r.user_id === o.id);
+            const outletReports = combinedReports.filter(r => r.user_id === o.id);
             const missing = [];
             const dates = getOutletTargetDates(o);
             dates.forEach(date => {
