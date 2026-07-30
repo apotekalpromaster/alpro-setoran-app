@@ -1,7 +1,7 @@
-﻿import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../services/supabaseClient';
+import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
 
@@ -11,8 +11,6 @@ const BADGE_CONFIG = {
     'Setoran Harian': { label: 'Harian', cls: 'badge-normal' },
     'Setoran 3x Seminggu': { label: '3x Seminggu', cls: 'badge-normal' },
     'Setoran Sales Dengan Potongan Penjualan': { label: 'Potongan', cls: 'badge-warning' },
-    'Setoran Uang Pecahan Kecil': { label: 'Pecahan Kecil', cls: 'badge-normal' },
-    'Setoran Uang Lebih': { label: 'Uang Lebih', cls: 'badge-info' },
     'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'badge-purple' },
     'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'badge-danger' },
     'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'badge-danger' },
@@ -22,12 +20,10 @@ const BADGE_CONFIG = {
 const JELAS_TYPES = [
     { id: 'Setoran Harian', label: 'Setoran Harian' },
     { id: 'Setoran 3x Seminggu', label: 'Setoran 3x Seminggu' },
-    { id: 'Setoran Sales Dengan Potongan Penjualan', label: 'Setoran Potongan' },
-    { id: 'Setoran Uang Pecahan Kecil', label: 'Uang Pecahan' },
-    { id: 'Setoran Uang Lebih', label: 'Uang Lebih' },
-    { id: 'Pengembalian Petty Cash', label: 'Petty Cash' },
-    { id: 'Deposit Card Terblokir (Salah Input PIN 3x)', label: 'Card Terblokir' },
-    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Card Tertelan' }
+    { id: 'Setoran Sales Dengan Potongan Penjualan', label: 'Setoran Sales Dgn Potongan (Top Up Petty Cash)' },
+    { id: 'Pengembalian Petty Cash', label: 'Pengembalian Petty Cash' },
+    { id: 'Deposit Card Terblokir (Salah Input PIN 3x)', label: 'Deposit Card Terblokir' },
+    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Deposit Card Tertelan' }
 ];
 
 function getBadge(jenis) {
@@ -47,7 +43,6 @@ export default function RiwayatPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const [posSalesMap, setPosSalesMap] = useState({});
     const [isOpenJenis, setIsOpenJenis] = useState(false);
     const dropdownRef = useRef(null);
 
@@ -93,35 +88,19 @@ export default function RiwayatPage() {
             setError('');
         }
         try {
-            const reportsPromise = supabase
+            const query = supabase
                 .from('laporan')
                 .select('*')
                 .eq('user_id', profile.id)
                 .order('tanggal_jual', { ascending: false })
                 .limit(5000);
 
-            const posPromise = profile?.username
-                ? supabase
-                    .from('pos_sales_data')
-                    .select('tanggal_jual, sales_pos')
-                    .eq('kode_cabang', profile.username)
-                : Promise.resolve({ data: [], error: null });
-
-            const [reportsRes, posRes] = await Promise.all([reportsPromise, posPromise]);
+            const { data, error: fetchErr } = await safeSupabaseQuery(query, 6000);
 
             if (!isMounted.current) return;
+            if (fetchErr) throw fetchErr;
 
-            if (reportsRes.error) throw reportsRes.error;
-
-            setReports(reportsRes.data || []);
-
-            if (!posRes.error && posRes.data) {
-                const map = {};
-                posRes.data.forEach(item => {
-                    map[item.tanggal_jual] = item.sales_pos;
-                });
-                setPosSalesMap(map);
-            }
+            setReports(data || []);
         } catch (e) {
             if (isMounted.current) {
                 setError('Gagal memuat riwayat: ' + e.message);
@@ -132,6 +111,7 @@ export default function RiwayatPage() {
             }
         }
     };
+
     // 1. Cari tanggal duplikat untuk tipe pelaporan utama
     const duplicateDates = useMemo(() => {
         const counts = {};
@@ -144,17 +124,38 @@ export default function RiwayatPage() {
         return Object.keys(counts).filter(d => counts[d] > 1);
     }, [reports]);
 
-    // Client-side filtering (applied on Apply click) & Injeksi Tanggal Unreported
+    // Client-side filtering & Injeksi Tanggal Unreported
     const filteredReports = useMemo(() => {
-        const actualFiltered = reports.map(r => ({
-            ...r,
-            selisih: (r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0)
-        })).filter((item) => {
+        const actualFiltered = reports.map(r => {
+            const bcaDb = Number(r.bca_debit || 0);
+            const bcaKr = Number(r.bca_kredit || 0);
+            const bcaQr = Number(r.bca_qris || 0);
+            const briDb = Number(r.bri_debit || 0);
+            const briKr = Number(r.bri_kredit || 0);
+            const briQr = Number(r.bri_qris || 0);
+            const trf = Number(r.bank_transfer || 0);
+            const totalNonTunai = Number(r.total_non_tunai || (bcaDb + bcaKr + bcaQr + briDb + briKr + briQr + trf));
+            const grandTotalSales = Number(r.nominal_jual || 0) + totalNonTunai;
+
+            return {
+                ...r,
+                bca_debit: bcaDb,
+                bca_kredit: bcaKr,
+                bca_qris: bcaQr,
+                bri_debit: briDb,
+                bri_kredit: briKr,
+                bri_qris: briQr,
+                bank_transfer: trf,
+                total_non_tunai: totalNonTunai,
+                grand_total_sales: grandTotalSales
+            };
+        }).filter((item) => {
             const term = activeFilters.search.toLowerCase();
             const matchSearch =
                 !term ||
                 (item.jenis_pelaporan || '').toLowerCase().includes(term) ||
-                formatRupiah(item.nominal_setoran || 0).toLowerCase().includes(term);
+                formatRupiah(item.nominal_setoran || 0).toLowerCase().includes(term) ||
+                formatRupiah(item.grand_total_sales || 0).toLowerCase().includes(term);
 
             const matchMethode =
                 !activeFilters.methode ||
@@ -177,7 +178,7 @@ export default function RiwayatPage() {
         });
 
         const showSales = activeFilters.jenis.length === 0 || activeFilters.jenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(j));
-        
+
         let unreportedList = [];
         if (showSales) {
             const yesterday = new Date();
@@ -205,7 +206,7 @@ export default function RiwayatPage() {
                         const dd = String(cur.getDate()).padStart(2, '0');
                         const dateStr = `${yyyy}-${mm}-${dd}`;
 
-                        const hasPrimaryReport = reports.some(r => 
+                        const hasPrimaryReport = reports.some(r =>
                             r.tanggal_jual === dateStr &&
                             ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
                         );
@@ -224,7 +225,10 @@ export default function RiwayatPage() {
                                     metode_setoran: '-',
                                     nominal_jual: 0,
                                     potongan: 0,
-                                    nominal_setoran: 0
+                                    nominal_setoran: 0,
+                                    bca_debit: 0, bca_kredit: 0, bca_qris: 0,
+                                    bri_debit: 0, bri_kredit: 0, bri_qris: 0,
+                                    bank_transfer: 0, total_non_tunai: 0, grand_total_sales: 0
                                 });
                             }
                         }
@@ -243,40 +247,64 @@ export default function RiwayatPage() {
 
     // Grand Totals for the entire filtered set
     const tableTotals = useMemo(() => {
-        let totalSales = 0;
+        let totalSalesTunai = 0;
         let totalPotongan = 0;
-        let totalSetor = 0;
-        let totalPosSales = 0;
-        let totalSalesForPos = 0;
-
-        const seenDates = new Set();
+        let totalSetorTunai = 0;
+        let totalBcaDebit = 0;
+        let totalBcaKredit = 0;
+        let totalBcaQris = 0;
+        let totalBriDebit = 0;
+        let totalBriKredit = 0;
+        let totalBriQris = 0;
+        let totalBankTransfer = 0;
+        let totalNonTunai = 0;
+        let totalGrandSales = 0;
 
         filteredReports.forEach((r) => {
-            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(r.jenis_pelaporan);
-            
-            if (isValidTypeForPOS && !r.isUnreported) {
-                totalSales += Number(r.nominal_jual || 0);
-            }
-            totalPotongan += Number(r.potongan || 0);
-            totalSetor += Number(r.nominal_setoran || 0);
+            if (!r.isUnreported) {
+                const tunai = Number(r.nominal_jual || 0);
+                const pot = Number(r.potongan || 0);
+                const setor = Number(r.nominal_setoran || 0);
+                const bcaDb = Number(r.bca_debit || 0);
+                const bcaKr = Number(r.bca_kredit || 0);
+                const bcaQr = Number(r.bca_qris || 0);
+                const briDb = Number(r.bri_debit || 0);
+                const briKr = Number(r.bri_kredit || 0);
+                const briQr = Number(r.bri_qris || 0);
+                const trf = Number(r.bank_transfer || 0);
+                const nonTunai = Number(r.total_non_tunai || (bcaDb + bcaKr + bcaQr + briDb + briKr + briQr + trf));
+                const grandSales = tunai + nonTunai;
 
-            const posVal = isValidTypeForPOS ? posSalesMap[r.tanggal_jual] : undefined;
-
-            if (posVal !== undefined && posVal !== null && !seenDates.has(r.tanggal_jual)) {
-                totalPosSales += Number(posVal);
-                totalSalesForPos += Number(r.nominal_jual || 0);
-                seenDates.add(r.tanggal_jual);
+                totalSalesTunai += tunai;
+                totalPotongan += pot;
+                totalSetorTunai += setor;
+                totalBcaDebit += bcaDb;
+                totalBcaKredit += bcaKr;
+                totalBcaQris += bcaQr;
+                totalBriDebit += briDb;
+                totalBriKredit += briKr;
+                totalBriQris += briQr;
+                totalBankTransfer += trf;
+                totalNonTunai += nonTunai;
+                totalGrandSales += grandSales;
             }
         });
 
-        // Compare grand total values directly to prevent double-counting of POS sales across multiple report types
-        const totalSelisih1 = totalSales - totalPosSales;
-        const totalSelisih2 = (totalPotongan + totalSetor) - totalPosSales;
-        const hasAnyPosForTotals = totalPosSales > 0;
-        const hasAnyPosForTotals2 = totalPosSales > 0;
-
-        return { totalSales, totalPotongan, totalSetor, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals, hasAnyPosForTotals2 };
-    }, [filteredReports, posSalesMap]);
+        return {
+            totalSalesTunai,
+            totalPotongan,
+            totalSetorTunai,
+            totalBcaDebit,
+            totalBcaKredit,
+            totalBcaQris,
+            totalBriDebit,
+            totalBriKredit,
+            totalBriQris,
+            totalBankTransfer,
+            totalNonTunai,
+            totalGrandSales
+        };
+    }, [filteredReports]);
 
     const totalPages = Math.ceil(filteredReports.length / ITEMS_PER_PAGE);
     const paginatedReports = filteredReports.slice(
@@ -302,21 +330,15 @@ export default function RiwayatPage() {
         );
     };
 
-    const selisihChipNew = (val) => {
-        if (val === null || val === undefined) return <span className="text-gray-300">-</span>;
-        if (val < 0) return <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">-{formatRupiah(Math.abs(val))}</span>;
-        if (val > 0) return <span className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">+{formatRupiah(val)}</span>;
-        return <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">Sesuai</span>;
-    };
     return (
         <UserLayout title="Riwayat Laporan" activeRoute="/riwayat">
-            <div className="max-w-screen-xl mx-auto space-y-6">
+            <div className="max-w-screen-2xl mx-auto space-y-6">
 
                 {/* FILTER SECTION */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
-                            <span className="material-symbols-outlined text-primary-500">filter_list</span> Filter Riwayat
+                            <span className="material-symbols-outlined text-primary-500">filter_list</span> Filter Riwayat Laporan
                         </h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -324,21 +346,21 @@ export default function RiwayatPage() {
                             <label className="block text-xs font-medium text-gray-500 mb-1">Cari Laporan</label>
                             <input
                                 type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Jenis laporan atau nominal"
-                                className="form-input w-full py-2 px-3"
+                                placeholder="Cari jenis atau nominal..."
+                                className="form-input w-full py-2 px-3 text-xs"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Dari Tanggal Sales</label>
-                            <input type="date" value={startDate} min="2026-04-01" onChange={(e) => setStartDate(e.target.value)} className="form-input w-full py-2 px-3" />
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Dari Tanggal</label>
+                            <input type="date" value={startDate} min="2026-04-01" onChange={(e) => setStartDate(e.target.value)} className="form-input w-full py-2 px-3 text-xs" />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Sampai</label>
-                            <input type="date" value={endDate} min="2026-04-01" onChange={(e) => setEndDate(e.target.value)} className="form-input w-full py-2 px-3" />
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Sampai Tanggal</label>
+                            <input type="date" value={endDate} min="2026-04-01" onChange={(e) => setEndDate(e.target.value)} className="form-input w-full py-2 px-3 text-xs" />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Metode Setoran</label>
-                            <select value={methodeFilter} onChange={(e) => setMethodeFilter(e.target.value)} className="form-input w-full py-2 px-3 bg-gray-50">
+                            <select value={methodeFilter} onChange={(e) => setMethodeFilter(e.target.value)} className="form-input w-full py-2 px-3 bg-gray-50 text-xs">
                                 <option value="">Semua Metode</option>
                                 <option value="Teller Bank">Teller Bank</option>
                                 <option value="ATM BCA Menggunakan Deposit Card">ATM Deposit Card</option>
@@ -346,11 +368,11 @@ export default function RiwayatPage() {
                             </select>
                         </div>
                         <div className="relative" ref={dropdownRef}>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Jenis Pelaporan</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Jenis Laporan</label>
                             <button
                                 type="button"
                                 onClick={() => setIsOpenJenis(!isOpenJenis)}
-                                className="form-input w-full py-2 px-3 bg-gray-50 flex items-center justify-between text-left text-sm"
+                                className="form-input w-full py-2 px-3 bg-gray-50 flex items-center justify-between text-left text-xs"
                             >
                                 <span className="truncate">
                                     {selectedJenis.length === 0
@@ -387,13 +409,15 @@ export default function RiwayatPage() {
                     </div>
 
                     <div className="mt-4 flex justify-end gap-3 pt-3 border-t border-gray-100">
-                        <button type="button" onClick={resetFilters} className="btn-secondary py-2 px-5 text-sm flex items-center gap-1.5">
+                        <button type="button" onClick={resetFilters} className="btn-secondary py-2 px-5 text-xs flex items-center gap-1.5">
                             <span className="material-symbols-outlined text-sm">restart_alt</span> Reset Filter
                         </button>
-                        <button type="button" onClick={applyFilters} className="btn-primary py-2 px-6 text-sm flex items-center gap-2">
+                        <button type="button" onClick={applyFilters} className="btn-primary py-2 px-6 text-xs flex items-center gap-2">
                             <span className="material-symbols-outlined text-sm">search</span> Terapkan Filter
                         </button>
-                    </div>                </div>
+                    </div>
+                </div>
+
                 {/* TABLE SECTION */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     {loading ? (
@@ -409,9 +433,14 @@ export default function RiwayatPage() {
                             ))}
                         </div>
                     ) : error ? (
-                        <div className="flex items-center gap-3 text-red-600 bg-red-50 border border-red-200 p-4 rounded-xl">
-                            <span className="material-symbols-outlined">error</span>
-                            <p className="text-sm">{error}</p>
+                        <div className="flex items-center justify-between text-red-600 bg-red-50 border border-red-200 p-4 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <span className="material-symbols-outlined">wifi_off</span>
+                                <p className="text-sm font-bold">{error}</p>
+                            </div>
+                            <button onClick={fetchReports} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs flex items-center gap-1">
+                                <span className="material-symbols-outlined text-sm">refresh</span> Muat Ulang
+                            </button>
                         </div>
                     ) : paginatedReports.length === 0 ? (
                         <div className="bg-gray-50 p-10 rounded-xl text-center border border-gray-200">
@@ -449,135 +478,169 @@ export default function RiwayatPage() {
                                     )}
                                 </div>
                             )}
-                            <div className="overflow-auto max-h-[600px] border border-gray-200 rounded-lg shadow-inner bg-white">
-                            <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1240px] border-collapse">
-                                <colgroup>
-                                    <col style={{ width: '90px' }} />
-                                    <col style={{ width: '130px' }} />
-                                    <col style={{ width: '130px' }} />
-                                    <col style={{ width: '110px' }} />
-                                    <col style={{ width: '110px' }} />
-                                    <col style={{ width: '140px' }} />
-                                    <col style={{ width: '110px' }} />
-                                    <col style={{ width: '170px' }} />
-                                    <col style={{ width: '170px' }} />
-                                    <col style={{ width: '60px' }} />
-                                </colgroup>
-                                <thead className="text-xs font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-20 border-b border-gray-200">
-                                    <tr>
-                                        <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200 whitespace-nowrap">Tgl Sales</th>
-                                        <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Jenis Laporan</th>
-                                        <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Metode</th>
-                                        <th className="px-3 py-3 text-right bg-blue-50 text-blue-700 font-bold sticky top-0 z-20 border-b border-gray-200">Data Sales (Xilnex)</th>
-                                        <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nominal Sales</th>
-                                        <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Potongan Penjualan (Petty Cash)</th>
-                                        <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nominal Setor</th>
-                                        <th className="px-3 py-3 text-center bg-red-50 text-red-700 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Data Sales (Xilnex) VS Nominal Sales</th>
-                                        <th className="px-3 py-3 text-center bg-orange-50 text-orange-700 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Data Sales (Xilnex) VS Potongan + Nominal Setor</th>
-                                        <th className="px-3 py-3 text-center bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
-                                    {paginatedReports.map((item, idx) => {
-                                        const badge = getBadge(item.jenis_pelaporan);
-                                        const isAnomali = badge.cls === 'badge-danger';
-                                        
-                                        const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(item.jenis_pelaporan);
-                                        const posValAll = posSalesMap[item.tanggal_jual];
-                                        const posVal1 = isValidTypeForPOS ? posValAll : undefined;
 
-                                        const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
-                                        const hasPOSAll = posValAll !== undefined && posValAll !== null;
+                            {/* TABEL DATA SCROLLABLE DENGAN STICKY HEADER & FOOTER */}
+                            <div className="overflow-x-auto max-h-[650px] border border-gray-200 rounded-xl shadow-inner bg-white">
+                                <table className="w-full text-xs text-left text-gray-600 min-w-[1780px] border-collapse">
+                                    <thead className="text-[11px] font-extrabold text-gray-700 uppercase tracking-wider sticky top-0 z-20 bg-gray-100 shadow-xs border-b border-gray-200">
+                                        <tr>
+                                            <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 whitespace-nowrap">Tgl Sales</th>
+                                            <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20">Jenis Laporan</th>
+                                            <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20">Metode Setor</th>
+                                            <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20">Sales Tunai (Rp)</th>
+                                            <th className="px-3 py-3 text-right bg-red-50/70 text-red-800 sticky top-0 z-20">Potongan (Petty Cash)</th>
+                                            <th className="px-3 py-3 text-right bg-green-50/70 text-green-800 sticky top-0 z-20">Setoran Tunai Bank</th>
+                                            
+                                            {/* Non-Tunai Columns */}
+                                            <th className="px-3 py-3 text-right bg-blue-50/40 text-blue-900 sticky top-0 z-20">BCA Debit</th>
+                                            <th className="px-3 py-3 text-right bg-blue-50/40 text-blue-900 sticky top-0 z-20">BCA Kredit</th>
+                                            <th className="px-3 py-3 text-right bg-blue-50/40 text-blue-900 sticky top-0 z-20">BCA QRIS</th>
+                                            <th className="px-3 py-3 text-right bg-blue-50/40 text-blue-900 sticky top-0 z-20">BRI Debit</th>
+                                            <th className="px-3 py-3 text-right bg-blue-50/40 text-blue-900 sticky top-0 z-20">BRI Kredit</th>
+                                            <th className="px-3 py-3 text-right bg-blue-50/40 text-blue-900 sticky top-0 z-20">BRI QRIS</th>
+                                            <th className="px-3 py-3 text-right bg-blue-50/40 text-blue-900 sticky top-0 z-20">Transfer Bank</th>
+                                            <th className="px-3 py-3 text-right bg-blue-100/60 text-blue-950 font-black sticky top-0 z-20">Total Non-Tunai</th>
+                                            
+                                            {/* Grand Total Column */}
+                                            <th className="px-3 py-3 text-right bg-orange-100/80 text-orange-950 font-black sticky top-0 z-20">TOTAL SALES HARIAN</th>
+                                            <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
+                                        {paginatedReports.map((item) => {
+                                            const badge = getBadge(item.jenis_pelaporan);
+                                            const isAnomali = badge.cls === 'badge-danger';
 
-                                        const s1 = hasPOS1 ? (item.nominal_jual || 0) - posVal1 : null;
-                                        const s2 = hasPOSAll ? ((item.potongan || 0) + (item.nominal_setoran || 0)) - posValAll : null;
+                                            return (
+                                                <tr
+                                                    key={item.id}
+                                                    className={'hover:bg-gray-50/80 transition-colors ' + (item.isUnreported ? 'bg-amber-50/20 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}
+                                                >
+                                                    <td className="px-3 py-3 font-bold text-gray-900 whitespace-nowrap">
+                                                        {formatDisplayDate(item.tanggal_jual)}
+                                                    </td>
+                                                    <td className="px-3 py-3">
+                                                        <div>
+                                                            <p className="font-semibold text-gray-800 text-[11px] truncate max-w-[140px]" title={item.jenis_pelaporan}>{item.jenis_pelaporan}</p>
+                                                            <span className={'inline-block text-[9px] font-bold px-2 py-0.25 rounded-full mt-0.5 ' + badge.cls}>
+                                                                {badge.label}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 py-3 text-gray-500 truncate max-w-[120px]" title={item.metode_setoran}>
+                                                        {item.metode_setoran}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-900 font-medium">
+                                                        {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.nominal_jual || 0)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-red-600 font-medium bg-red-50/20">
+                                                        {item.isUnreported || !item.potongan ? <span className="text-gray-300">-</span> : `(${formatRupiah(item.potongan)})`}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-green-700 font-bold bg-green-50/20">
+                                                        {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.nominal_setoran || 0)}
+                                                    </td>
+                                                    
+                                                    {/* Non-Tunai Cells */}
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.bca_debit > 0 ? formatRupiah(item.bca_debit) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.bca_kredit > 0 ? formatRupiah(item.bca_kredit) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.bca_qris > 0 ? formatRupiah(item.bca_qris) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.bri_debit > 0 ? formatRupiah(item.bri_debit) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.bri_kredit > 0 ? formatRupiah(item.bri_kredit) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.bri_qris > 0 ? formatRupiah(item.bri_qris) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.bank_transfer > 0 ? formatRupiah(item.bank_transfer) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono font-bold text-blue-900 bg-blue-50/30">
+                                                        {item.total_non_tunai > 0 ? formatRupiah(item.total_non_tunai) : <span className="text-gray-300">-</span>}
+                                                    </td>
 
-                                        return (
-                                            <tr
-                                                key={item.id}
-                                                className={'hover:bg-gray-50/50 transition-colors group ' + (item.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}
-                                            >
-                                                <td className="px-3 py-3 font-bold text-gray-900 text-xs">
-                                                    {formatDisplayDate(item.tanggal_jual)}
-                                                </td>
-                                                <td className="px-3 py-3 text-xs">
-                                                    <div>
-                                                        <p className="font-semibold text-gray-800 text-[12px] break-words" title={item.jenis_pelaporan}>{item.jenis_pelaporan}</p>
-                                                        <span className={'inline-block text-[9px] font-bold px-2 py-0.25 rounded-full mt-0.5 ' + badge.cls}>
-                                                            {badge.label}
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-3 py-3 text-xs text-gray-500 break-words" title={item.metode_setoran}>
-                                                    {item.metode_setoran}
-                                                </td>
-                                                <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
-                                                    {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
-                                                </td>
-                                                <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">
-                                                    {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.nominal_jual || 0)}
-                                                </td>
-                                                <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">
-                                                    {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.potongan || 0)}
-                                                </td>
-                                                <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">
-                                                    {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.nominal_setoran || 0)}
-                                                </td>
-                                                <td className="px-3 py-3 text-center font-mono text-xs bg-red-50/10">
-                                                    {selisihChipNew(s1)}
-                                                </td>
-                                                <td className="px-3 py-3 text-center font-mono text-xs bg-orange-50/10">
-                                                    {selisihChipNew(s2)}
-                                                </td>
-                                                <td className="px-3 py-3 text-center">
-                                                    {item.isUnreported ? (
-                                                        <button
-                                                            onClick={() => navigate('/setoran')}
-                                                            className="px-2.5 py-1 text-[10px] font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg shadow-sm transition-colors"
-                                                        >
-                                                            Lapor
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => navigate('/riwayat/' + item.id)}
-                                                            className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
-                                                        >
-                                                            <span className="material-symbols-outlined text-base">chevron_right</span>
-                                                        </button>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                                <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300 text-gray-900 text-xs sticky bottom-0 z-20">
-                                    <tr>
-                                        <td colSpan="3" className="px-3 py-3 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
-                                            Grand Total
-                                        </td>
-                                        <td className="px-3 py-3 text-right font-extrabold text-blue-800 font-mono bg-blue-100">
-                                            {formatRupiah(tableTotals.totalPosSales)}
-                                        </td>
-                                        <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
-                                            {formatRupiah(tableTotals.totalSales)}
-                                        </td>
-                                        <td className="px-3 py-3 text-right font-extrabold text-gray-600 font-mono bg-gray-100">
-                                            {formatRupiah(tableTotals.totalPotongan)}
-                                        </td>
-                                        <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
-                                            {formatRupiah(tableTotals.totalSetor)}
-                                        </td>
-                                        <td className="px-3 py-3 text-center font-extrabold font-mono bg-red-100">
-                                            {tableTotals.hasAnyPosForTotals ? selisihChipNew(tableTotals.totalSelisih1) : <span className="text-gray-300">-</span>}
-                                        </td>
-                                        <td className="px-3 py-3 text-center font-extrabold font-mono bg-orange-100">
-                                            {tableTotals.hasAnyPosForTotals2 ? selisihChipNew(tableTotals.totalSelisih2) : <span className="text-gray-300">-</span>}
-                                        </td>
-                                        <td className="px-3 py-3 bg-gray-100"></td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
+                                                    {/* Grand Total Cell */}
+                                                    <td className="px-3 py-3 text-right font-mono font-black text-orange-600 bg-orange-50/40 text-xs">
+                                                        {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.grand_total_sales)}
+                                                    </td>
+
+                                                    <td className="px-3 py-3 text-center">
+                                                        {item.isUnreported ? (
+                                                            <button
+                                                                onClick={() => navigate('/setoran')}
+                                                                className="px-2.5 py-1 text-[10px] font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg shadow-sm transition-colors cursor-pointer"
+                                                            >
+                                                                Lapor
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => navigate('/riwayat/' + item.id)}
+                                                                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white cursor-pointer"
+                                                                title="Lihat Detail"
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">chevron_right</span>
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+
+                                    {/* STICKY GRAND TOTAL FOOTER */}
+                                    <tfoot className="bg-orange-100/90 font-extrabold border-t-2 border-orange-300 text-orange-950 text-xs sticky bottom-0 z-20 shadow-md">
+                                        <tr>
+                                            <td colSpan="3" className="px-3 py-3 text-left font-black uppercase tracking-wider text-[11px]">
+                                                GRAND TOTAL
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono font-black">
+                                                {formatRupiah(tableTotals.totalSalesTunai)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono font-black text-red-700">
+                                                {tableTotals.totalPotongan > 0 ? `(${formatRupiah(tableTotals.totalPotongan)})` : 'Rp 0'}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono font-black text-green-800">
+                                                {formatRupiah(tableTotals.totalSetorTunai)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalBcaDebit)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalBcaKredit)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalBcaQris)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalBriDebit)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalBriKredit)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalBriQris)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalBankTransfer)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono font-black text-blue-950">
+                                                {formatRupiah(tableTotals.totalNonTunai)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono font-black text-orange-600 bg-orange-200/80 text-sm">
+                                                {formatRupiah(tableTotals.totalGrandSales)}
+                                            </td>
+                                            <td className="px-3 py-3"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
                         </>
                     )}
 
@@ -587,17 +650,17 @@ export default function RiwayatPage() {
                             <button
                                 disabled={currentPage === 1}
                                 onClick={() => setCurrentPage(p => p - 1)}
-                                className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-600 bg-white rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200"
+                                className="flex items-center gap-1 px-4 py-2 text-xs font-medium text-gray-600 bg-white rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 cursor-pointer"
                             >
                                 <span className="material-symbols-outlined text-sm">arrow_back</span> Sebelumnya
                             </button>
-                            <span className="text-sm text-gray-700 font-bold bg-white border border-gray-200 px-3 py-1 rounded-md">
+                            <span className="text-xs text-gray-700 font-bold bg-white border border-gray-200 px-3 py-1 rounded-md">
                                 {currentPage} / {totalPages}
                             </span>
                             <button
                                 disabled={currentPage === totalPages}
                                 onClick={() => setCurrentPage(p => p + 1)}
-                                className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-600 bg-white rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200"
+                                className="flex items-center gap-1 px-4 py-2 text-xs font-medium text-gray-600 bg-white rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed border border-gray-200 cursor-pointer"
                             >
                                 Selanjutnya <span className="material-symbols-outlined text-sm">arrow_forward</span>
                             </button>
@@ -608,5 +671,3 @@ export default function RiwayatPage() {
         </UserLayout>
     );
 }
-
-
