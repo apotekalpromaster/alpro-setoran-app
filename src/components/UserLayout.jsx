@@ -11,7 +11,7 @@ const NAV_ITEMS = [
     { label: 'Lapor Sales', icon: 'add_circle', path: '/setoran' },
     { label: 'Riwayat Laporan', icon: 'history', path: '/riwayat' },
     { label: 'Koreksi Laporan', icon: 'edit_note', path: '/koreksi' },
-    { label: 'Troubleshooting Bank', icon: 'troubleshoot', path: '/user/troubleshooting' },
+    { label: 'Tindak Lanjut Selisih', icon: 'sync_problem', path: '/user/troubleshooting' },
     { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
     { label: 'Petunjuk Penggunaan', icon: 'menu_book', path: '/bantuan' },
 ];
@@ -33,7 +33,7 @@ export default function UserLayout({ children, title, activeRoute }) {
     const items = isAM ? [
         { label: 'Dashboard AM', icon: 'dashboard', path: '/areamanager/dashboard' },
         { label: 'Persetujuan Koreksi', icon: 'task_alt', path: '/areamanager/koreksi-approval' },
-        { label: 'Troubleshooting Bank', icon: 'troubleshoot', path: '/areamanager/troubleshooting' },
+        { label: 'Tindak Lanjut Selisih', icon: 'sync_problem', path: '/areamanager/troubleshooting' },
         { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
         { label: 'Petunjuk Penggunaan', icon: 'menu_book', path: '/bantuan' },
     ] : NAV_ITEMS;
