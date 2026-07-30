@@ -147,9 +147,20 @@ export default function RingkasanPage() {
                 state: {
                     success: true,
                     jenisPelaporan: formData.jenisPelaporan,
+                    tanggalPenjualan: formData.tanggalPenjualan,
+                    tanggalPenjualanTambahan: formData.tanggalPenjualanTambahan,
                     tanggalSetoran: formData.tanggalSetoran,
+                    metodeSetoran: formData.metodeSetoran,
+                    metodeLain: formData.metodeLain,
+                    totalPenjualan: totalPenjualan,
+                    potongan: potongan,
                     nominalSetoran: nominalSetoran,
+                    totalNonTunai: totalNonTunai,
+                    grandTotalSales: grandTotalSales,
+                    selisih: selisih,
+                    buktiCount: formData.buktiFiles?.filter(Boolean).length || 0,
                     username: profile?.username,
+                    kodeToko: profile?.kode_toko || profile?.username,
                 },
             });
         } catch (err) {
