@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AIChatFAB from './AIChatFAB';
 import { useNotification } from '../context/NotificationContext';
@@ -23,6 +23,11 @@ export default function UserLayout({ children, title, activeRoute }) {
     const { unreadKoreksiCount, unreadTroubleshootingCount } = useNotification();
     const { profile, signOut } = useAuth();
     const navigate = useNavigate();
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/login', { replace: true });
+    };
+    const location = useLocation();
 
     const isAM = profile?.role === 'AreaManager';
     const items = isAM ? [
@@ -142,7 +147,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                 {/* Logout */}
                 <div className="p-2 border-t border-gray-100">
                     <button
-                        onClick={signOut}
+                        onClick={handleSignOut}
                         title="Keluar"
                         className={`w-full flex items-center gap-3 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors ${collapsed ? 'justify-center px-0 py-3' : 'px-4 py-2.5'}`}
                     >

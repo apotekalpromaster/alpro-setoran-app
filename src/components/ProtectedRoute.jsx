@@ -4,8 +4,13 @@ import { useAuth } from '../context/AuthContext';
 export default function ProtectedRoute({ children, allowedRoles }) {
     const { user, profile, authReady } = useAuth();
 
-    // Wait until auth is fully resolved before making any routing decision
-    if (!authReady) {
+    // If user is not logged in, redirect immediately without waiting if auth is ready
+    if (!user && authReady) {
+        return <Navigate to="/login" replace />;
+    }
+
+    // Wait until initial auth resolves only if user is unknown
+    if (!authReady && !user) {
         return (
             <div className="flex h-screen items-center justify-center bg-gray-100 font-sans">
                 <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-sm border border-gray-100">

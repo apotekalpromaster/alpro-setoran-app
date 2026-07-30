@@ -22,6 +22,10 @@ export default function AdminLayout({ children, title, activePath }) {
     const { profile, signOut } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/login', { replace: true });
+    };
 
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -123,7 +127,7 @@ export default function AdminLayout({ children, title, activePath }) {
 
                 <div className="p-2 border-t border-gray-100">
                     <button
-                        onClick={signOut}
+                        onClick={handleSignOut}
                         title="Keluar"
                         className={`w-full flex items-center gap-3 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer ${collapsed ? 'justify-center px-0 py-3' : 'px-4 py-2.5'}`}
                     >

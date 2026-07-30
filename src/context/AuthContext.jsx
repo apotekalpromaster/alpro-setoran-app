@@ -20,8 +20,9 @@ export function AuthProvider({ children }) {
 
     const [user, setUser] = useState(initialUser);
     const [profile, setProfile] = useState(initialProfile);
-    const [loading, setLoading] = useState(true);
-    const [authReady, setAuthReady] = useState(false);
+    const [loading, setLoading] = useState(false);
+    // If cached item exists, mark authReady true immediately to prevent loading flicker
+    const [authReady, setAuthReady] = useState(!!initialUser || !!initialProfile);
 
     const isFetchingProfile = useRef(false);
 
@@ -52,6 +53,14 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         let isMounted = true;
 
+        // Safety fallback timeout (3s max) to ensure authReady is ALWAYS true
+        const safetyTimer = setTimeout(() => {
+            if (isMounted) {
+                setLoading(false);
+                setAuthReady(true);
+            }
+        }, 3000);
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!isMounted) return;
 
@@ -61,11 +70,10 @@ export function AuthProvider({ children }) {
                 setUser(currentUser);
                 try { localStorage.setItem(USER_CACHE_KEY, JSON.stringify(currentUser)); } catch (e) {}
 
-                const cachedProfileId = getCachedItem(PROFILE_CACHE_KEY)?.id;
-                if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || cachedProfileId !== currentUser.id) {
+                const cachedProfile = getCachedItem(PROFILE_CACHE_KEY);
+                if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || cachedProfile?.id !== currentUser.id) {
                     await fetchProfile(currentUser.id);
                 } else {
-                    // Profile already in cache for same user - just mark ready
                     setLoading(false);
                     setAuthReady(true);
                 }
@@ -79,17 +87,18 @@ export function AuthProvider({ children }) {
                 setLoading(false);
                 setAuthReady(true);
             }
+            clearTimeout(safetyTimer);
         });
 
         return () => {
             isMounted = false;
+            clearTimeout(safetyTimer);
             subscription.unsubscribe();
         };
     }, []);
 
     const signIn = async (email, password) => {
         setLoading(true);
-        setAuthReady(false);
         const res = await supabase.auth.signInWithPassword({ email, password });
         if (!res.data?.user) {
             setLoading(false);
@@ -99,18 +108,27 @@ export function AuthProvider({ children }) {
     };
 
     const signOut = async () => {
-        setLoading(true);
-        setAuthReady(false);
-        setProfile(null);
+        // Instantly clear local state & cache so UI updates immediately (0ms delay)
         setUser(null);
+        setProfile(null);
+        setLoading(false);
+        setAuthReady(true);
         try {
             localStorage.removeItem(USER_CACHE_KEY);
             localStorage.removeItem(PROFILE_CACHE_KEY);
         } catch (e) {}
-        const res = await supabase.auth.signOut();
-        setLoading(false);
-        setAuthReady(true);
-        return res;
+
+        // Race supabase.auth.signOut() with a 1.5s timeout so logout NEVER hangs
+        try {
+            await Promise.race([
+                supabase.auth.signOut(),
+                new Promise((resolve) => setTimeout(resolve, 1500))
+            ]);
+        } catch (err) {
+            console.warn('SignOut network call completed with fallback:', err.message);
+        }
+
+        return { error: null };
     };
 
     return (
