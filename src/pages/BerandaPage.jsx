@@ -80,7 +80,8 @@ export default function BerandaPage() {
                 });
 
                 setHariBelumLapor(missingDates.length);
-                setTunggakanDates(missingDates);
+                const sortedMissing = [...missingDates].sort((a, b) => a.date.localeCompare(b.date));
+                setTunggakanDates(sortedMissing);
 
                 // Calculate duplicate dates for primary reports
                 const counts = {};
@@ -94,7 +95,8 @@ export default function BerandaPage() {
                     const formatted = new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
                     return { date: d, formatted };
                 });
-                setDuplikatDates(duplicates);
+                const sortedDuplicates = [...duplicates].sort((a, b) => a.date.localeCompare(b.date));
+                setDuplikatDates(sortedDuplicates);
 
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
