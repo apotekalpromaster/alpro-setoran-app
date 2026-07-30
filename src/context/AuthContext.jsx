@@ -97,6 +97,27 @@ export function AuthProvider({ children }) {
         };
     }, []);
 
+    // Background session auto-refresh when tab becomes visible after being idle
+    useEffect(() => {
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === 'visible') {
+                try {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.user) {
+                        setUser(session.user);
+                    }
+                } catch (e) {
+                    console.warn('Background session refresh failed:', e.message);
+                }
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
+
     const signIn = async (email, password) => {
         setLoading(true);
         const res = await supabase.auth.signInWithPassword({ email, password });
