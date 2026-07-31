@@ -40,6 +40,13 @@ export default function AreaManagerKoreksiApprovalPage() {
                     nominal_jual_baru,
                     nominal_setoran_baru,
                     potongan_baru,
+                    bca_debit_baru,
+                    bca_kredit_baru,
+                    bca_qris_baru,
+                    bri_debit_baru,
+                    bri_kredit_baru,
+                    bri_qris_baru,
+                    bank_transfer_baru,
                     penjelasan_koreksi,
                     status,
                     created_at,
@@ -59,7 +66,15 @@ export default function AreaManagerKoreksiApprovalPage() {
                         jenis_pelaporan,
                         nominal_jual,
                         nominal_setoran,
-                        potongan
+                        potongan,
+                        bca_debit,
+                        bca_kredit,
+                        bca_qris,
+                        bri_debit,
+                        bri_kredit,
+                        bri_qris,
+                        bank_transfer,
+                        total_non_tunai
                     )
                 `)
                 .eq('profiles.area_manager', profile.username)
@@ -237,47 +252,82 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                     <span className="font-semibold block">{lap.jenis_pelaporan}</span>
                                                     <span className="text-xs text-gray-400">Sales Date: {new Date(lap.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                                                 </td>
-                                                <td className="py-4 px-6 text-right text-xs font-mono text-gray-500">
-                                                    <div>Jual: {formatRupiah(lap.nominal_jual)}</div>
-                                                    <div>Setor: {formatRupiah(lap.nominal_setoran)}</div>
-                                                    <div>Potong: {formatRupiah(lap.potongan)}</div>
-                                                </td>
-                                                <td className="py-4 px-6 text-right text-xs font-mono text-primary-700">
-                                                    {item.jenis_pelaporan_baru === 'HAPUS_DATA' ? (
-                                                        <div className="flex flex-col items-end">
-                                                            <span className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-700 border border-red-200 inline-flex items-center gap-1">
-                                                                <span className="material-symbols-outlined text-sm">delete_forever</span> Permohonan Hapus
-                                                            </span>
-                                                        </div>
-                                                    ) : (
+                                                {(() => {
+                                                    const totalNonTunaiAsli = Number(lap.total_non_tunai || ((Number(lap.bca_debit || 0) + Number(lap.bca_kredit || 0) + Number(lap.bca_qris || 0) + Number(lap.bri_debit || 0) + Number(lap.bri_kredit || 0) + Number(lap.bri_qris || 0) + Number(lap.bank_transfer || 0))));
+                                                    const totalNonTunaiBaru = (Number(item.bca_debit_baru || 0) + Number(item.bca_kredit_baru || 0) + Number(item.bca_qris_baru || 0) + Number(item.bri_debit_baru || 0) + Number(item.bri_kredit_baru || 0) + Number(item.bri_qris_baru || 0) + Number(item.bank_transfer_baru || 0));
+                                                    const deltaNonTunai = totalNonTunaiBaru - totalNonTunaiAsli;
+
+                                                    const nonTunaiDetailsBaru = [];
+                                                    if (Number(item.bca_debit_baru || 0) > 0) nonTunaiDetailsBaru.push(`BCA Debit: ${formatRupiah(item.bca_debit_baru)}`);
+                                                    if (Number(item.bca_kredit_baru || 0) > 0) nonTunaiDetailsBaru.push(`BCA Kredit: ${formatRupiah(item.bca_kredit_baru)}`);
+                                                    if (Number(item.bca_qris_baru || 0) > 0) nonTunaiDetailsBaru.push(`BCA QRIS: ${formatRupiah(item.bca_qris_baru)}`);
+                                                    if (Number(item.bri_debit_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI Debit: ${formatRupiah(item.bri_debit_baru)}`);
+                                                    if (Number(item.bri_kredit_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI Kredit: ${formatRupiah(item.bri_kredit_baru)}`);
+                                                    if (Number(item.bri_qris_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI QRIS: ${formatRupiah(item.bri_qris_baru)}`);
+                                                    if (Number(item.bank_transfer_baru || 0) > 0) nonTunaiDetailsBaru.push(`Transfer: ${formatRupiah(item.bank_transfer_baru)}`);
+
+                                                    return (
                                                         <>
-                                                            <div>
-                                                                Jual: <strong>{formatRupiah(item.nominal_jual_baru)}</strong>
-                                                                {deltaJual !== 0 && (
-                                                                    <span className={`text-[10px] ml-1 ${deltaJual > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                                        ({deltaJual > 0 ? '+' : ''}{formatRupiah(deltaJual)})
-                                                                    </span>
+                                                            <td className="py-4 px-6 text-right text-xs font-mono text-gray-500">
+                                                                <div>Jual: {formatRupiah(lap.nominal_jual)}</div>
+                                                                <div>Setor: {formatRupiah(lap.nominal_setoran)}</div>
+                                                                <div>Potong: {formatRupiah(lap.potongan)}</div>
+                                                                {totalNonTunaiAsli > 0 && (
+                                                                    <div className="text-gray-500 font-semibold mt-0.5">Non-Tunai: {formatRupiah(totalNonTunaiAsli)}</div>
                                                                 )}
-                                                            </div>
-                                                            <div>
-                                                                Setor: <strong>{formatRupiah(item.nominal_setoran_baru)}</strong>
-                                                                {deltaSetor !== 0 && (
-                                                                    <span className={`text-[10px] ml-1 ${deltaSetor > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                                        ({deltaSetor > 0 ? '+' : ''}{formatRupiah(deltaSetor)})
-                                                                    </span>
+                                                            </td>
+                                                            <td className="py-4 px-6 text-right text-xs font-mono text-primary-700">
+                                                                {item.jenis_pelaporan_baru === 'HAPUS_DATA' ? (
+                                                                    <div className="flex flex-col items-end">
+                                                                        <span className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-700 border border-red-200 inline-flex items-center gap-1">
+                                                                            <span className="material-symbols-outlined text-sm">delete_forever</span> Permohonan Hapus
+                                                                        </span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        <div>
+                                                                            Jual: <strong>{formatRupiah(item.nominal_jual_baru)}</strong>
+                                                                            {deltaJual !== 0 && (
+                                                                                <span className={`text-[10px] ml-1 ${deltaJual > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                                    ({deltaJual > 0 ? '+' : ''}{formatRupiah(deltaJual)})
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div>
+                                                                            Setor: <strong>{formatRupiah(item.nominal_setoran_baru)}</strong>
+                                                                            {deltaSetor !== 0 && (
+                                                                                <span className={`text-[10px] ml-1 ${deltaSetor > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                                    ({deltaSetor > 0 ? '+' : ''}{formatRupiah(deltaSetor)})
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div>
+                                                                            Potong: <strong>{formatRupiah(item.potongan_baru)}</strong>
+                                                                            {deltaPotong !== 0 && (
+                                                                                <span className={`text-[10px] ml-1 ${deltaPotong > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                                    ({deltaPotong > 0 ? '+' : ''}{formatRupiah(deltaPotong)})
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        {(totalNonTunaiBaru > 0 || totalNonTunaiAsli > 0) && (
+                                                                            <div className="mt-1.5 pt-1.5 border-t border-gray-200/60 font-bold text-blue-900">
+                                                                                Non-Tunai: <strong>{formatRupiah(totalNonTunaiBaru)}</strong>
+                                                                                {deltaNonTunai !== 0 && (
+                                                                                    <span className={`text-[10px] ml-1 ${deltaNonTunai > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                                        ({deltaNonTunai > 0 ? '+' : ''}{formatRupiah(deltaNonTunai)})
+                                                                                    </span>
+                                                                                )}
+                                                                                {nonTunaiDetailsBaru.map((det, dIdx) => (
+                                                                                    <div key={dIdx} className="text-[10px] text-blue-600 font-normal">{det}</div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </>
                                                                 )}
-                                                            </div>
-                                                            <div>
-                                                                Potong: <strong>{formatRupiah(item.potongan_baru)}</strong>
-                                                                {deltaPotong !== 0 && (
-                                                                    <span className={`text-[10px] ml-1 ${deltaPotong > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                                        ({deltaPotong > 0 ? '+' : ''}{formatRupiah(deltaPotong)})
-                                                                    </span>
-                                                                )}
-                                                            </div>
+                                                            </td>
                                                         </>
-                                                    )}
-                                                </td>
+                                                    );
+                                                })()}
                                                 <td className="py-4 px-6 max-w-xs break-words" title={item.penjelasan_koreksi}>
                                                     {item.penjelasan_koreksi}
                                                 </td>

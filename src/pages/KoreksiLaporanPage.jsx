@@ -190,6 +190,13 @@ export default function KoreksiLaporanPage() {
                     nominal_jual_baru,
                     nominal_setoran_baru,
                     potongan_baru,
+                    bca_debit_baru,
+                    bca_kredit_baru,
+                    bca_qris_baru,
+                    bri_debit_baru,
+                    bri_kredit_baru,
+                    bri_qris_baru,
+                    bank_transfer_baru,
                     penjelasan_koreksi,
                     status,
                     created_at,
@@ -203,7 +210,15 @@ export default function KoreksiLaporanPage() {
                         jenis_pelaporan,
                         nominal_jual,
                         nominal_setoran,
-                        potongan
+                        potongan,
+                        bca_debit,
+                        bca_kredit,
+                        bca_qris,
+                        bri_debit,
+                        bri_kredit,
+                        bri_qris,
+                        bank_transfer,
+                        total_non_tunai
                     )
                 `)
                 .order('created_at', { ascending: false });
@@ -863,24 +878,52 @@ export default function KoreksiLaporanPage() {
                                                     <span className="font-bold text-gray-800 block text-xs">{lap.jenis_pelaporan}</span>
                                                     <span className="text-[11px] text-gray-400">Sales: {new Date(lap.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                                                 </td>
-                                                <td className="py-3.5 px-4 text-right text-[11px] font-mono">
-                                                    <div>Jual: {formatRupiah(lap.nominal_jual)}</div>
-                                                    <div>Setor: {formatRupiah(lap.nominal_setoran)}</div>
-                                                    <div>Potong: {formatRupiah(lap.potongan)}</div>
-                                                </td>
-                                                <td className="py-3.5 px-4 text-right text-[11px] font-mono font-semibold text-primary-700">
-                                                    {item.jenis_pelaporan_baru === 'HAPUS_DATA' ? (
-                                                        <span className="px-2.5 py-1 text-[10px] font-bold rounded-md bg-red-100 text-red-800 border border-red-200 inline-flex items-center gap-1">
-                                                            <span className="material-symbols-outlined text-xs">delete</span> HAPUS LAPORAN
-                                                        </span>
-                                                    ) : (
-                                                        <div>
-                                                            <div>Jual: {formatRupiah(item.nominal_jual_baru)}</div>
-                                                            <div>Setor: {formatRupiah(item.nominal_setoran_baru)}</div>
-                                                            <div>Potong: {formatRupiah(item.potongan_baru)}</div>
-                                                        </div>
-                                                    )}
-                                                </td>
+                                                {(() => {
+                                                    const totalNonTunaiAsli = Number(lap.total_non_tunai || ((Number(lap.bca_debit || 0) + Number(lap.bca_kredit || 0) + Number(lap.bca_qris || 0) + Number(lap.bri_debit || 0) + Number(lap.bri_kredit || 0) + Number(lap.bri_qris || 0) + Number(lap.bank_transfer || 0))));
+                                                    const totalNonTunaiBaru = (Number(item.bca_debit_baru || 0) + Number(item.bca_kredit_baru || 0) + Number(item.bca_qris_baru || 0) + Number(item.bri_debit_baru || 0) + Number(item.bri_kredit_baru || 0) + Number(item.bri_qris_baru || 0) + Number(item.bank_transfer_baru || 0));
+                                                    const nonTunaiDetailsBaru = [];
+                                                    if (Number(item.bca_debit_baru || 0) > 0) nonTunaiDetailsBaru.push(`BCA Debit: ${formatRupiah(item.bca_debit_baru)}`);
+                                                    if (Number(item.bca_kredit_baru || 0) > 0) nonTunaiDetailsBaru.push(`BCA Kredit: ${formatRupiah(item.bca_kredit_baru)}`);
+                                                    if (Number(item.bca_qris_baru || 0) > 0) nonTunaiDetailsBaru.push(`BCA QRIS: ${formatRupiah(item.bca_qris_baru)}`);
+                                                    if (Number(item.bri_debit_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI Debit: ${formatRupiah(item.bri_debit_baru)}`);
+                                                    if (Number(item.bri_kredit_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI Kredit: ${formatRupiah(item.bri_kredit_baru)}`);
+                                                    if (Number(item.bri_qris_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI QRIS: ${formatRupiah(item.bri_qris_baru)}`);
+                                                    if (Number(item.bank_transfer_baru || 0) > 0) nonTunaiDetailsBaru.push(`Transfer: ${formatRupiah(item.bank_transfer_baru)}`);
+
+                                                    return (
+                                                        <>
+                                                            <td className="py-3.5 px-4 text-right text-[11px] font-mono">
+                                                                <div>Jual: {formatRupiah(lap.nominal_jual)}</div>
+                                                                <div>Setor: {formatRupiah(lap.nominal_setoran)}</div>
+                                                                <div>Potong: {formatRupiah(lap.potongan)}</div>
+                                                                {totalNonTunaiAsli > 0 && (
+                                                                    <div className="text-gray-500 font-semibold mt-0.5">Non-Tunai: {formatRupiah(totalNonTunaiAsli)}</div>
+                                                                )}
+                                                            </td>
+                                                            <td className="py-3.5 px-4 text-right text-[11px] font-mono font-semibold text-primary-700">
+                                                                {item.jenis_pelaporan_baru === 'HAPUS_DATA' ? (
+                                                                    <span className="px-2.5 py-1 text-[10px] font-bold rounded-md bg-red-100 text-red-800 border border-red-200 inline-flex items-center gap-1">
+                                                                        <span className="material-symbols-outlined text-xs">delete</span> HAPUS LAPORAN
+                                                                    </span>
+                                                                ) : (
+                                                                    <div>
+                                                                        <div>Jual: {formatRupiah(item.nominal_jual_baru)}</div>
+                                                                        <div>Setor: {formatRupiah(item.nominal_setoran_baru)}</div>
+                                                                        <div>Potong: {formatRupiah(item.potongan_baru)}</div>
+                                                                        {totalNonTunaiBaru > 0 && (
+                                                                            <div className="mt-1 pt-1 border-t border-gray-100 text-blue-800 font-bold">
+                                                                                <div>Non-Tunai: {formatRupiah(totalNonTunaiBaru)}</div>
+                                                                                {nonTunaiDetailsBaru.map((det, dIdx) => (
+                                                                                    <div key={dIdx} className="text-[10px] text-blue-600 font-normal">{det}</div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                        </>
+                                                    );
+                                                })()}
                                                 <td className="py-3.5 px-4 text-xs italic text-gray-600 max-w-xs truncate" title={item.penjelasan_koreksi}>
                                                     "{item.penjelasan_koreksi}"
                                                 </td>
