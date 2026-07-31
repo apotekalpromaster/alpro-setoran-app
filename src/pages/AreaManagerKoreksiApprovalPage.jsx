@@ -15,6 +15,9 @@ export default function AreaManagerKoreksiApprovalPage() {
     
     // Data states
     const [requests, setRequests] = useState([]);
+    const [rejectModalItem, setRejectModalItem] = useState(null);
+    const [rejectReason, setRejectReason] = useState('');
+    const [rejectSubmitting, setRejectSubmitting] = useState(false);
     const [statusFilter, setStatusFilter] = useState('Pending'); // 'All' | 'Pending' | 'Approved' | 'Rejected'
 
     useEffect(() => {
@@ -55,9 +58,11 @@ export default function AreaManagerKoreksiApprovalPage() {
                     jenis_pelaporan_baru,
                     tanggal_jual_baru,
                     tanggal_setor_baru,
+                    catatan_admin,
                     bukti_urls_baru,
                     profiles!koreksi_requests_requested_by_fkey!inner (
                         username,
+                        role,
                         area_manager
                     ),
                     laporan (
@@ -208,7 +213,7 @@ export default function AreaManagerKoreksiApprovalPage() {
                             <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider">
                                 <tr>
                                     <th className="py-3.5 px-6">Tanggal Pengajuan</th>
-                                    <th className="py-3.5 px-6">Apotek / Cabang</th>
+                                    <th className="py-3.5 px-6">Apotek & PIC Pemohon</th>
                                     <th className="py-3.5 px-6">Laporan Asli</th>
                                     <th className="py-3.5 px-6 text-right">Data Asli</th>
                                     <th className="py-3.5 px-6 text-right">Data Koreksi Baru</th>
@@ -247,7 +252,19 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                 <td className="py-4 px-6 font-mono text-xs text-gray-400">
                                                     {new Date(item.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                 </td>
-                                                <td className="py-4 px-6 font-bold">{branch}</td>
+                                                <td className="py-4 px-6">
+                                                    <div className="font-bold text-gray-900">{branch}</div>
+                                                    <div className="flex items-center gap-1.5 mt-1">
+                                                        <span className="text-[11px] font-semibold text-gray-500">PIC: {item.profiles?.username || '-'}</span>
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase ${
+                                                            item.profiles?.role === 'AreaManager'
+                                                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                                                : 'bg-gray-100 text-gray-700 border border-gray-200'
+                                                        }`}>
+                                                            {item.profiles?.role === 'AreaManager' ? 'Area Manager' : 'Staf Toko'}
+                                                        </span>
+                                                    </div>
+                                                </td>
                                                 <td className="py-4 px-6">
                                                     <span className="font-semibold block">{lap.jenis_pelaporan}</span>
                                                     <span className="text-xs text-gray-400">Sales Date: {new Date(lap.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
@@ -342,7 +359,7 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                                 <span className="material-symbols-outlined text-sm">check</span> Setuju
                                                             </button>
                                                             <button
-                                                                onClick={() => handleReject(item.id)}
+                                                                onClick={() => handleOpenRejectModal(item)}
                                                                 disabled={actionLoadingId !== ''}
                                                                 className="px-2.5 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-0.5"
                                                             >
@@ -374,6 +391,71 @@ export default function AreaManagerKoreksiApprovalPage() {
                     </div>
                 </div>
             </div>
+        
+            {/* REJECTION REASON MODAL */}
+            {rejectModalItem && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-scale-up border border-gray-100">
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                            <h3 className="text-base font-bold text-red-700 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-xl">cancel</span> Tolak Pengajuan Koreksi
+                            </h3>
+                            <button onClick={() => setRejectModalItem(null)} className="h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 cursor-pointer">
+                                <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-3">
+                            <div className="p-3 bg-red-50/60 rounded-xl border border-red-100 text-xs text-red-900">
+                                <p className="font-bold">Apotek: {rejectModalItem.profiles?.username || '-'}</p>
+                                <p className="text-[11px] text-red-700 mt-0.5">Alasan penolakan ini wajib diisi dan akan muncul di Beranda Toko agar cabang dapat membuat pengajuan koreksi baru.</p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">
+                                    Alasan Penolakan <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    rows="3"
+                                    required
+                                    value={rejectReason}
+                                    onChange={(e) => setRejectReason(e.target.value)}
+                                    placeholder="Contoh: Lampiran foto resi bank buram, mohon upload foto baru yang lebih jelas."
+                                    className="w-full p-3 text-xs border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-gray-50/50"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-3">
+                            <button
+                                type="button"
+                                onClick={() => setRejectModalItem(null)}
+                                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmReject}
+                                disabled={!rejectReason.trim() || rejectSubmitting}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                            >
+                                {rejectSubmitting ? (
+                                    <>
+                                        <span className="material-symbols-outlined animate-spin text-sm">sync</span>
+                                        <span>Memproses...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="material-symbols-outlined text-sm">send</span>
+                                        <span>Konfirmasi Penolakan</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </UserLayout>
     );
 }

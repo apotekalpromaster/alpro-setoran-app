@@ -15,6 +15,7 @@ export default function BerandaPage() {
     const [lastReportDate, setLastReportDate] = useState(null);
     const [tunggakanDates, setTunggakanDates] = useState([]);
     const [duplikatDates, setDuplikatDates] = useState([]);
+    const [rejectedKoreksi, setRejectedKoreksi] = useState([]);
 
     const fetchData = async () => {
         if (!profile?.id) {
@@ -85,6 +86,19 @@ export default function BerandaPage() {
                 setHariBelumLapor(missingDates.length);
                 const sortedMissing = [...missingDates].sort((a, b) => a.date.localeCompare(b.date));
                 setTunggakanDates(sortedMissing);
+
+                // Fetch rejected corrections for alert banner
+                const { data: rejData } = await safeSupabaseQuery(
+                    supabase
+                        .from('koreksi_requests')
+                        .select('id, catatan_admin, penjelasan_koreksi, created_at, processed_at, laporan ( tanggal_jual, jenis_pelaporan )')
+                        .eq('requested_by', profile.id)
+                        .eq('status', 'Rejected')
+                        .order('processed_at', { ascending: false })
+                        .limit(3),
+                    5000
+                );
+                setRejectedKoreksi(rejData || []);
 
                 // Calculate duplicate dates for primary reports
                 const counts = {};

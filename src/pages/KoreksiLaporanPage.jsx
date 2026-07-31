@@ -205,6 +205,11 @@ export default function KoreksiLaporanPage() {
                     tanggal_jual_baru,
                     tanggal_setor_baru,
                     bukti_urls_baru,
+                    catatan_admin,
+                    profiles!koreksi_requests_requested_by_fkey (
+                        username,
+                        role
+                    ),
                     laporan (
                         tanggal_jual,
                         jenis_pelaporan,

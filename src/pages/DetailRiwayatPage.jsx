@@ -67,7 +67,7 @@ export default function DetailRiwayatPage() {
 
             const corrPromise = supabase
                 .from('koreksi_requests')
-                .select('id, nominal_jual_baru, nominal_setoran_baru, potongan_baru, penjelasan_koreksi, status, created_at, processed_at, bukti_urls_baru')
+                .select('id, nominal_jual_baru, nominal_setoran_baru, potongan_baru, penjelasan_koreksi, catatan_admin, status, created_at, processed_at, bukti_urls_baru, profiles!koreksi_requests_requested_by_fkey (username, role)')
                 .eq('laporan_id', id)
                 .order('created_at', { ascending: false });
 
@@ -490,9 +490,12 @@ export default function DetailRiwayatPage() {
                                             </div>
                                             <div className="space-y-1">
                                                 <p className="text-gray-400 font-semibold uppercase tracking-wider text-[9px] mb-1">Detail Waktu &amp; Alasan:</p>
-                                                <p className="text-gray-600">Diajukan: {reqDate}</p>
+                                                <p className="text-gray-600">Diajukan: {reqDate} oleh <strong className="text-gray-800">{c.profiles?.username || 'User'}</strong> <span className="text-[10px] px-1 py-0.2 rounded font-mono font-bold bg-gray-100 border text-gray-700">({c.profiles?.role === 'AreaManager' ? 'Area Manager' : 'Staf Toko'})</span></p>
                                                 {procDate && <p className="text-gray-600">Diproses: {procDate}</p>}
-                                                <p className="text-gray-700 font-semibold mt-1">Alasan: <span className="italic font-normal">"{c.penjelasan_koreksi}"</span></p>
+                                                <p className="text-gray-700 font-semibold mt-1">Alasan Koreksi: <span className="italic font-normal">"{c.penjelasan_koreksi}"</span></p>
+{c.status === 'Rejected' && c.catatan_admin && (
+    <p className="text-red-700 font-bold mt-1.5 p-2 bg-red-50 rounded-lg border border-red-100 text-[11px]">Catatan Penolakan AM: <span className="italic font-normal">"{c.catatan_admin}"</span></p>
+)}
                                             </div>
                                         </div>
                                         {c.bukti_urls_baru && c.bukti_urls_baru.length > 0 && (
