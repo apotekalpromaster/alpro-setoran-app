@@ -207,7 +207,7 @@ export default function AreaManagerDashboardPage() {
                     const tTo = tFrom + PAGE_SIZE - 1;
                     const { data: tBatch, error: tErr } = await supabase
                         .from('laporan')
-                        .select('user_id, tanggal_jual, jenis_pelaporan')
+                        .select('user_id, tanggal_jual, jenis_pelaporan, status')
                         .in('user_id', outletIds)
                         .in('jenis_pelaporan', PRIMARY_TYPES)
                         .gte('tanggal_jual', minTanggalAktif)

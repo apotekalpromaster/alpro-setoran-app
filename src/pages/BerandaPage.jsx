@@ -46,6 +46,8 @@ export default function BerandaPage() {
 
                 // 1. Last Report Date (Based on 3 primary report types)
                 const primaryReports = allReports.filter(r => 
+                    r.status !== 'Archived' &&
+                    r.jenis_pelaporan !== 'DIHAPUS / DIBATALKAN' &&
                     ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
                 );
                 if (primaryReports.length > 0) {
@@ -75,6 +77,8 @@ export default function BerandaPage() {
                 targetDates.forEach(date => {
                     const hasReport = allReports.some(r => 
                         r.tanggal_jual === date && 
+                        r.status !== 'Archived' &&
+                        r.jenis_pelaporan !== 'DIHAPUS / DIBATALKAN' &&
                         ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
                     );
                     if (!hasReport) {

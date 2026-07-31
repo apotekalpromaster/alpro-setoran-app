@@ -132,6 +132,38 @@ export default function AreaManagerKoreksiApprovalPage() {
         }
     };
 
+    const handleOpenRejectModal = (item) => {
+        setRejectModalItem(item);
+        setRejectReason('');
+    };
+
+    const handleConfirmReject = async () => {
+        if (!rejectModalItem || !rejectReason.trim()) return;
+        setRejectSubmitting(true);
+        setError('');
+        setSuccessMsg('');
+
+        try {
+            const { data: success, error: rpcErr } = await supabase.rpc('reject_koreksi_request', {
+                p_request_id: rejectModalItem.id,
+                p_admin_id: profile.id,
+                p_catatan: rejectReason.trim()
+            });
+
+            if (rpcErr) throw rpcErr;
+            if (!success) throw new Error('Gagal menolak pengajuan. Pastikan status berstatus Pending.');
+
+            setSuccessMsg('Pengajuan koreksi telah ditolak dan alasan penolakan disampaikan ke beranda toko.');
+            setRejectModalItem(null);
+            setRejectReason('');
+            fetchRequests();
+        } catch (err) {
+            setError('Gagal menolak pengajuan: ' + err.message);
+        } finally {
+            setRejectSubmitting(false);
+        }
+    };
+
 
 
     return (

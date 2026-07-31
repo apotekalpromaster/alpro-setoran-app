@@ -42,6 +42,7 @@ export default function DetailRiwayatPage() {
     const [corrections, setCorrections] = useState([]);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
+    const isArchived = data?.status === 'Archived' || data?.jenis_pelaporan === 'DIHAPUS / DIBATALKAN';
 
     useEffect(() => {
         if (!id) { setNotFound(true); setLoading(false); return; }
@@ -218,7 +219,7 @@ export default function DetailRiwayatPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                             <div className="bg-gray-50/70 p-4 rounded-xl border border-gray-200/80">
                                 <p className="text-xs font-medium text-gray-500 mb-1">Sales Tunai (Kasir)</p>
-                                <p className="text-lg font-extrabold text-gray-900 font-mono">{formatRupiah(totalSalesTunai)}</p>
+                                <p className={`text-lg font-extrabold font-mono ${isArchived ? "line-through text-gray-400 opacity-60" : "text-gray-900"}`}>{formatRupiah(totalSalesTunai)}</p>
                             </div>
                             <div className="bg-red-50/40 p-4 rounded-xl border border-red-100">
                                 <p className="text-xs font-medium text-red-800 mb-1">Potongan Sales (Petty Cash Toko)</p>
@@ -228,7 +229,7 @@ export default function DetailRiwayatPage() {
                             </div>
                             <div className="bg-green-50/40 p-4 rounded-xl border border-green-100">
                                 <p className="text-xs font-medium text-green-900 mb-1">Setoran Tunai ke Bank</p>
-                                <p className="text-lg font-extrabold text-green-700 font-mono">{formatRupiah(nominalDisetor)}</p>
+                                <p className={`text-lg font-extrabold font-mono ${isArchived ? "line-through text-gray-400 opacity-60" : "text-green-700"}`}>{formatRupiah(nominalDisetor)}</p>
                             </div>
                         </div>
 
@@ -240,7 +241,7 @@ export default function DetailRiwayatPage() {
                             </div>
                             <div className="text-right">
                                 <span className="text-[10px] uppercase font-bold text-gray-400 block">Dana Tunai Bersih:</span>
-                                <span className="text-xs font-bold font-mono text-gray-800">{formatRupiah(danaTersediaTunai)}</span>
+                                <span className={`text-xs font-bold font-mono ${isArchived ? "line-through text-gray-400 opacity-60" : "text-gray-800"}`}>{formatRupiah(danaTersediaTunai)}</span>
                             </div>
                         </div>
                     </SectionCard>
