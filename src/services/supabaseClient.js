@@ -21,7 +21,7 @@ export async function safeSupabaseQuery(queryPromise, timeoutMs = 6000) {
     let timer;
     const timeoutPromise = new Promise((_, reject) => {
         timer = setTimeout(() => {
-            reject(new Error('Waktu permintaan data habis (Timeout). Silakan periksa koneksi internet Anda.'));
+            reject(new Error('Waktu permintaan data habis (Timeout). Silakan refresh/reload halaman.'));
         }, timeoutMs);
     });
 

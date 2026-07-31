@@ -103,7 +103,7 @@ export default function BerandaPage() {
 
             } catch (error) {
                 console.error("Error fetching dashboard data:", error);
-                setFetchError("Gagal memuat data penjualan. Silakan periksa koneksi internet Anda.");
+                setFetchError("Gagal memuat data penjualan. Silakan refresh/reload halaman.");
             } finally {
                 setLoading(false);
             }
@@ -188,7 +188,7 @@ export default function BerandaPage() {
                             </div>
                         </div>
                         <button
-                            onClick={fetchData}
+                            onClick={() => window.location.reload()}
                             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
                         >
                             <span className="material-symbols-outlined text-sm">refresh</span> Muat Ulang Data

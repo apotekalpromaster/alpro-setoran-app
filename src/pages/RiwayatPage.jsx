@@ -444,7 +444,7 @@ export default function RiwayatPage() {
                                 <span className="material-symbols-outlined">wifi_off</span>
                                 <p className="text-sm font-bold">{error}</p>
                             </div>
-                            <button onClick={fetchReports} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs flex items-center gap-1">
+                            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer">
                                 <span className="material-symbols-outlined text-sm">refresh</span> Muat Ulang
                             </button>
                         </div>
