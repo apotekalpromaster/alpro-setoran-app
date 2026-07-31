@@ -22,6 +22,7 @@ function parseBuktiUrls(dataUrls) {
 
 export default function KoreksiLaporanPage() {
     const { profile } = useAuth();
+    const isAM = (profile?.role || '').toString().trim().toLowerCase() === 'areamanager';
     const location = useLocation();
     const navigate = useNavigate();
     const prefilledReport = location.state?.prefilledReport;
@@ -137,16 +138,40 @@ export default function KoreksiLaporanPage() {
         setReportsForDate([]);
         setSelectedReportId('');
         try {
-            const { data, error: err } = await supabase
-                .from('laporan')
-                .select('*')
-                .eq('user_id', profile.id)
-                .eq('tanggal_jual', selectedDate);
+            // isAM defined in component scope
+            let query;
 
+            if (isAM) {
+                const { data: outlets } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('area_manager', profile.username);
+
+                const managedIds = (outlets || []).map(o => o.id);
+                if (prefilledReport?.user_id && !managedIds.includes(prefilledReport.user_id)) {
+                    managedIds.push(prefilledReport.user_id);
+                }
+
+                if (managedIds.length > 0) {
+                    query = supabase.from('laporan').select('*').in('user_id', managedIds).eq('tanggal_jual', selectedDate);
+                } else {
+                    query = supabase.from('laporan').select('*').eq('tanggal_jual', selectedDate);
+                }
+            } else {
+                query = supabase.from('laporan').select('*').eq('user_id', profile.id).eq('tanggal_jual', selectedDate);
+            }
+
+            const { data, error: err } = await query;
             if (err) throw err;
-            setReportsForDate(data || []);
-            
-            if (prefilledReport && data && data.some(r => r.id === prefilledReport.id)) {
+
+            let reportList = data || [];
+            if (prefilledReport && !reportList.some(r => r.id === prefilledReport.id)) {
+                reportList = [prefilledReport, ...reportList];
+            }
+
+            setReportsForDate(reportList);
+
+            if (prefilledReport && reportList.some(r => r.id === prefilledReport.id)) {
                 setSelectedReportId(prefilledReport.id);
             }
         } catch (e) {
@@ -157,7 +182,8 @@ export default function KoreksiLaporanPage() {
     const fetchHistory = async () => {
         setHistoryLoading(true);
         try {
-            const { data, error: err } = await supabase
+            const isAM = (profile?.role || '').toLowerCase() === 'areamanager';
+            let query = supabase
                 .from('koreksi_requests')
                 .select(`
                     id,
@@ -180,9 +206,15 @@ export default function KoreksiLaporanPage() {
                         potongan
                     )
                 `)
-                .eq('requested_by', profile.id)
                 .order('created_at', { ascending: false });
 
+            if (isAM) {
+                query = query.or(`requested_by.eq.${profile.id},approved_by.eq.${profile.id}`);
+            } else {
+                query = query.eq('requested_by', profile.id);
+            }
+
+            const { data, error: err } = await query;
             if (err) throw err;
             setKoreksiHistory(data || []);
         } catch (e) {
@@ -294,11 +326,16 @@ export default function KoreksiLaporanPage() {
                 }
             }
 
-            const { error: insertError } = await supabase
+            const isAM = (profile?.role || '').toLowerCase() === 'areamanager';
+            const nowIso = new Date().toISOString();
+
+            const { data: insertedReq, error: insertError } = await supabase
                 .from('koreksi_requests')
                 .insert({
                     laporan_id: selectedReport.id,
                     requested_by: profile.id,
+                    approved_by: isAM ? profile.id : null,
+                    processed_at: isAM ? nowIso : null,
                     nominal_jual_baru: requestType === 'delete' ? 0 : finalJual,
                     nominal_setoran_baru: requestType === 'delete' ? 0 : finalSetoran,
                     potongan_baru: requestType === 'delete' ? 0 : finalPotongan,
@@ -313,16 +350,49 @@ export default function KoreksiLaporanPage() {
                     tanggal_setor_baru: requestType === 'edit' ? finalTglSetor : null,
                     jenis_pelaporan_baru: requestType === 'edit' ? finalJenis : 'HAPUS_DATA',
                     bukti_urls_baru: requestType === 'edit' ? finalBuktiUrls : null,
-                    penjelasan_koreksi: explanation.trim(),
-                    status: 'Pending'
-                });
+                    penjelasan_koreksi: explanation.trim() + (isAM ? ' (Koreksi Langsung oleh Area Manager)' : ''),
+                    status: isAM ? 'Approved' : 'Pending'
+                })
+                .select()
+                .single();
 
             if (insertError) throw insertError;
 
+            if (isAM) {
+                if (requestType === 'delete') {
+                    const { error: delErr } = await supabase.from('laporan').delete().eq('id', selectedReport.id);
+                    if (delErr) throw delErr;
+                } else {
+                    const updatePayload = {
+                        nominal_jual: finalJual,
+                        nominal_setoran: finalSetoran,
+                        potongan: finalPotongan,
+                        bca_debit: finalBcaDb,
+                        bca_kredit: finalBcaKr,
+                        bca_qris: finalBcaQr,
+                        bri_debit: finalBriDb,
+                        bri_kredit: finalBriKr,
+                        bri_qris: finalBriQr,
+                        bank_transfer: finalTrf,
+                        total_non_tunai: (finalBcaDb + finalBcaKr + finalBcaQr + finalBriDb + finalBriKr + finalBriQr + finalTrf),
+                        tanggal_jual: finalTglJual,
+                        tanggal_setor: finalTglSetor,
+                        jenis_pelaporan: finalJenis,
+                        bukti_urls: finalBuktiUrls
+                    };
+                    const { error: upErr } = await supabase.from('laporan').update(updatePayload).eq('id', selectedReport.id);
+                    if (upErr) throw upErr;
+                }
+            }
+
             setSuccessMsg(
-                requestType === 'delete'
-                    ? 'Permohonan hapus laporan berhasil dikirim dan menunggu persetujuan Area Manager.'
-                    : 'Permohonan koreksi laporan berhasil dikirim dan menunggu persetujuan Area Manager.'
+                isAM
+                    ? (requestType === 'delete'
+                        ? 'Laporan berhasil dihapus secara langsung. Data telah terhapus dan tercatat di riwayat.'
+                        : 'Koreksi laporan berhasil dieksekusi secara langsung. Data laporan telah diperbarui dan tercatat di riwayat.')
+                    : (requestType === 'delete'
+                        ? 'Permohonan hapus laporan berhasil dikirim dan menunggu persetujuan Area Manager.'
+                        : 'Permohonan koreksi laporan berhasil dikirim dan menunggu persetujuan Area Manager.')
             );
             setExplanation('');
             setSelectedReportId('');

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah, NON_FINANCIAL_TYPES, formatDriveImageUrl } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
@@ -29,6 +30,14 @@ export default function DetailRiwayatPage() {
     const [lightboxImg, setLightboxImg] = useState(null);
     const { id } = useParams();
     const navigate = useNavigate();
+    const { profile } = useAuth();
+
+    const handleBack = () => {
+        const role = (profile?.role || '').toLowerCase();
+        if (role === 'areamanager') navigate('/areamanager/dashboard');
+        else if (role === 'admin' || role === 'finance') navigate('/admin/laporan');
+        else navigate('/riwayat');
+    };
     const [data, setData] = useState(null);
     const [corrections, setCorrections] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -97,7 +106,7 @@ export default function DetailRiwayatPage() {
                 </div>
                 <h2 className="text-xl font-bold text-gray-900">Data Tidak Ditemukan</h2>
                 <p className="text-gray-500 mt-2 text-sm">Laporan mungkin sudah dihapus atau Anda tidak memiliki akses.</p>
-                <button onClick={() => navigate('/riwayat')} className="mt-6 btn-secondary">
+                <button onClick={handleBack} className="mt-6 btn-secondary">
                     <span className="material-symbols-outlined text-base">arrow_back</span> Kembali ke Riwayat
                 </button>
             </div>
@@ -159,7 +168,7 @@ export default function DetailRiwayatPage() {
                 {/* BREADCRUMB & HEADER (Hide on Print) */}
                 <div className="flex items-center justify-between print:hidden">
                     <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <button onClick={() => navigate('/riwayat')} className="flex items-center hover:text-primary-600 transition-colors font-medium gap-1 cursor-pointer">
+                        <button onClick={handleBack} className="flex items-center hover:text-primary-600 transition-colors font-medium gap-1 cursor-pointer">
                             <span className="material-symbols-outlined text-lg">arrow_back</span> Riwayat Laporan
                         </button>
                         <span>/</span>
@@ -454,10 +463,10 @@ export default function DetailRiwayatPage() {
                                 let statusText = '';
                                 if (c.status === 'Approved') {
                                     statusCls = 'text-green-700 bg-green-50 border-green-200';
-                                    statusText = 'Disetujui oleh Finance';
+                                    statusText = 'Disetujui / Diperbarui';
                                 } else if (c.status === 'Rejected') {
                                     statusCls = 'text-red-700 bg-red-50 border-red-200';
-                                    statusText = 'Ditolak oleh Finance';
+                                    statusText = 'Ditolak';
                                 } else {
                                     statusCls = 'text-yellow-700 bg-yellow-50 border-yellow-200';
                                     statusText = 'Menunggu Persetujuan';
