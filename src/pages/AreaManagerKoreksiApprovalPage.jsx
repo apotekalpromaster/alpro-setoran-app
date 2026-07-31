@@ -102,7 +102,7 @@ export default function AreaManagerKoreksiApprovalPage() {
     const handleApprove = async (req) => {
         const isDelete = req.jenis_pelaporan_baru === 'HAPUS_DATA';
         const confirmMsg = isDelete 
-            ? 'Apakah Anda yakin menyetujui penghapusan laporan ini? Data laporan asli akan dihapus secara permanen dari database.'
+            ? 'Apakah Anda yakin menyetujui pengarsipan/penghapusan laporan ini? Laporan akan diarsipkan dan dikeluarkan dari perhitungan sales.'
             : 'Apakah Anda yakin menyetujui koreksi laporan ini? Data laporan asli akan diperbarui otomatis.';
 
         if (!window.confirm(confirmMsg)) {
@@ -123,7 +123,7 @@ export default function AreaManagerKoreksiApprovalPage() {
             if (rpcErr) throw rpcErr;
             if (!success) throw new Error('Gagal memproses persetujuan. Pastikan data berstatus Pending.');
 
-            setSuccessMsg(isDelete ? 'Laporan berhasil dihapus secara permanen dari database.' : 'Koreksi laporan berhasil disetujui dan data laporan asli telah diperbarui.');
+            setSuccessMsg(isDelete ? 'Laporan berhasil diarsipkan dan dikeluarkan dari perhitungan sales.' : 'Koreksi laporan berhasil disetujui dan data laporan asli telah diperbarui.');
             fetchRequests();
         } catch (err) {
             setError('Gagal memproses persetujuan: ' + err.message);
@@ -132,36 +132,7 @@ export default function AreaManagerKoreksiApprovalPage() {
         }
     };
 
-    const handleReject = async (reqId) => {
-        if (!window.confirm('Apakah Anda yakin menolak pengajuan koreksi ini?')) {
-            return;
-        }
 
-        setActionLoadingId(reqId);
-        setError('');
-        setSuccessMsg('');
-
-        try {
-            const { error: updateErr } = await supabase
-                .from('koreksi_requests')
-                .update({
-                    status: 'Rejected',
-                    approved_by: profile.id,
-                    processed_at: new Date().toISOString()
-                })
-                .eq('id', reqId)
-                .eq('status', 'Pending');
-
-            if (updateErr) throw updateErr;
-
-            setSuccessMsg('Pengajuan koreksi telah ditolak.');
-            fetchRequests();
-        } catch (err) {
-            setError('Gagal menolak pengajuan: ' + err.message);
-        } finally {
-            setActionLoadingId('');
-        }
-    };
 
     return (
         <UserLayout title="Persetujuan Koreksi Laporan" activeRoute="/areamanager/koreksi-approval">
