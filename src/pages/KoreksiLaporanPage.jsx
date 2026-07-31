@@ -334,8 +334,8 @@ export default function KoreksiLaporanPage() {
                 .insert({
                     laporan_id: selectedReport.id,
                     requested_by: profile.id,
-                    approved_by: isAM ? profile.id : null,
-                    processed_at: isAM ? nowIso : null,
+                    approved_by: null,
+                    processed_at: null,
                     nominal_jual_baru: requestType === 'delete' ? 0 : finalJual,
                     nominal_setoran_baru: requestType === 'delete' ? 0 : finalSetoran,
                     potongan_baru: requestType === 'delete' ? 0 : finalPotongan,
@@ -351,7 +351,7 @@ export default function KoreksiLaporanPage() {
                     jenis_pelaporan_baru: requestType === 'edit' ? finalJenis : 'HAPUS_DATA',
                     bukti_urls_baru: requestType === 'edit' ? finalBuktiUrls : null,
                     penjelasan_koreksi: explanation.trim() + (isAM ? ' (Koreksi Langsung oleh Area Manager)' : ''),
-                    status: isAM ? 'Approved' : 'Pending'
+                    status: 'Pending'
                 })
                 .select()
                 .single();
@@ -359,30 +359,12 @@ export default function KoreksiLaporanPage() {
             if (insertError) throw insertError;
 
             if (isAM) {
-                if (requestType === 'delete') {
-                    const { error: delErr } = await supabase.from('laporan').delete().eq('id', selectedReport.id);
-                    if (delErr) throw delErr;
-                } else {
-                    const updatePayload = {
-                        nominal_jual: finalJual,
-                        nominal_setoran: finalSetoran,
-                        potongan: finalPotongan,
-                        bca_debit: finalBcaDb,
-                        bca_kredit: finalBcaKr,
-                        bca_qris: finalBcaQr,
-                        bri_debit: finalBriDb,
-                        bri_kredit: finalBriKr,
-                        bri_qris: finalBriQr,
-                        bank_transfer: finalTrf,
-                        total_non_tunai: (finalBcaDb + finalBcaKr + finalBcaQr + finalBriDb + finalBriKr + finalBriQr + finalTrf),
-                        tanggal_jual: finalTglJual,
-                        tanggal_setor: finalTglSetor,
-                        jenis_pelaporan: finalJenis,
-                        bukti_urls: finalBuktiUrls
-                    };
-                    const { error: upErr } = await supabase.from('laporan').update(updatePayload).eq('id', selectedReport.id);
-                    if (upErr) throw upErr;
-                }
+                // Execute atomic approval via SECURITY DEFINER Stored Procedure (bypasses RLS safely)
+                const { data: rpcSuccess, error: rpcErr } = await supabase.rpc('approve_koreksi_request', {
+                    p_request_id: insertedReq.id,
+                    p_admin_id: profile.id
+                });
+                if (rpcErr) throw rpcErr;
             }
 
             setSuccessMsg(
