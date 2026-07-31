@@ -215,6 +215,46 @@ export default function RekonsiliasiPOSPage() {
         }, { posSales: 0, reportSales: 0, reportSetoran: 0, reportPotongan: 0, setoranPlusPotongan: 0, delta1: 0, delta2: 0 });
     }, [filteredReconData]);
 
+
+// ============================================================
+// HELPERS: Resolve Xilnex Col C + Col D -> Supabase column names
+// ============================================================
+function resolveCardCol(bank, cardType) {
+    const b = (bank || '').toUpperCase().trim();
+    const c = (cardType || '').toUpperCase().trim();
+    const isBca = b.includes('BCA') || b === 'BC';
+    const isBri = b.includes('BRI') || b === 'BR' || b === 'LBRI' || b === '+BRI';
+    if (!isBca && !isBri) return null;
+    const prefix = isBca ? 'card_bca_' : 'card_bri_';
+    const map = {
+        'AMEX': 'amex', 'BCA CARD': 'bca_card',
+        'DEBIT BANK LAIN': 'debit_lain', 'DEBIT BANK SAMA': 'debit_sama',
+        'JCB': 'jcb', 'MASTER': 'master', 'OTHERS': 'others',
+        'QRIS': 'qris', 'UNIONPAY': 'unionpay', 'VISA': 'visa',
+    };
+    return map[c] ? prefix + map[c] : null;
+}
+function resolveOnlineCol(cardType) {
+    const c = (cardType || '').toUpperCase().trim();
+    if (c === 'ONLINE (HALODOC)')   return 'online_halodoc';
+    if (c === 'ONLINE (TIKTOK)')    return 'online_tiktok';
+    if (c === 'ONLINE (TOKOPEDIA)') return 'online_tokopedia';
+    return null;
+}
+function createEmptyParsedRow(kode_cabang, tanggal_jual) {
+    return {
+        kode_cabang, tanggal_jual,
+        sales_pos: 0,
+        card_bca_amex: 0, card_bca_bca_card: 0, card_bca_debit_lain: 0,
+        card_bca_debit_sama: 0, card_bca_jcb: 0, card_bca_master: 0,
+        card_bca_others: 0, card_bca_qris: 0, card_bca_unionpay: 0, card_bca_visa: 0,
+        card_bri_amex: 0, card_bri_bca_card: 0, card_bri_debit_lain: 0,
+        card_bri_debit_sama: 0, card_bri_jcb: 0, card_bri_master: 0,
+        card_bri_others: 0, card_bri_qris: 0, card_bri_unionpay: 0, card_bri_visa: 0,
+        online_halodoc: 0, online_tiktok: 0, online_tokopedia: 0,
+    };
+}
+
 const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -266,7 +306,7 @@ const handleFileChange = (e) => {
                     }
                 }
 
-                const rows = [];
+                const rowMap = {};
 
                 for (let i = startRowIndex; i < rawRows.length; i++) {
                     const row = rawRows[i];
@@ -279,28 +319,26 @@ const handleFileChange = (e) => {
                     if (!rawDateVal || !rawStoreVal) continue;
 
                     if (isNewTemplate) {
-                        // NEW TEMPLATE LOGIC (Cash & Card Automation):
-                        // 1. Filter out if Col A, B, or C contains 'total' (case-insensitive)
+                        // NEW TEMPLATE LOGIC (Xilnex Cash & Card Automation):
+                        // Col C[2]=CardType, Col D[3]=Bank/Merchant
+                        // Col E[4]=Cash Tunai, Col F[5]=Card/EDC, Col G[6]=Online
+                        const rawColCVal2 = (row[2] || '').toString().trim();
+                        const rawColDVal  = (row[3] || '').toString().trim();
                         const lowerA = rawDateVal.toLowerCase();
                         const lowerB = rawStoreVal.toLowerCase();
-                        const lowerC = rawColCVal.toLowerCase();
-                        if (lowerA.includes('total') || lowerB.includes('total') || lowerC.includes('total')) {
-                            continue;
-                        }
+                        const lowerC = rawColCVal2.toLowerCase();
+                        if (lowerA.includes('total') || lowerB.includes('total') || lowerC.includes('total')) continue;
 
-                        // 2. Extract Cash Amount from Col E (Index 4)
-                        const rawCashVal = (row[4] || '').toString().trim();
-                        const cleanSales = parseInt(rawCashVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
+                        const colEVal = parseInt((row[4] || '').toString().replace(/[^0-9-]/g, ''), 10) || 0;
+                        const colFVal = parseInt((row[5] || '').toString().replace(/[^0-9-]/g, ''), 10) || 0;
+                        const colGVal = parseInt((row[6] || '').toString().replace(/[^0-9-]/g, ''), 10) || 0;
 
-                        // 3. Filter out Rp 0 cash amount
-                        if (cleanSales === 0) continue;
+                        if (colEVal <= 0 && colFVal <= 0 && colGVal <= 0) continue;
 
-                        // 4. Store Lookup
                         const cleanStoreKey = rawStoreVal.toLowerCase();
                         const matchedUsername = storeMap[cleanStoreKey];
                         if (!matchedUsername) continue;
 
-                        // 5. Date Parsing
                         let formattedDate = '';
                         if (/^\d+(\.\d+)?$/.test(rawDateVal)) {
                             const excelDateNum = parseFloat(rawDateVal);
@@ -310,16 +348,22 @@ const handleFileChange = (e) => {
                             const d = new Date(rawDateVal);
                             if (!isNaN(d.getTime())) formattedDate = d.toLocaleDateString('sv-SE');
                         }
+                        if (!matchedUsername || !formattedDate) continue;
 
-                        if (matchedUsername && formattedDate) {
-                            rows.push({
-                                kode_cabang: matchedUsername,
-                                tanggal_jual: formattedDate,
-                                sales_pos: cleanSales
-                            });
+                        const aggKey = matchedUsername + '_' + formattedDate;
+                        if (!rowMap[aggKey]) rowMap[aggKey] = createEmptyParsedRow(matchedUsername, formattedDate);
+
+                        if (colEVal > 0) rowMap[aggKey].sales_pos += colEVal;
+                        if (colFVal > 0) {
+                            const col = resolveCardCol(rawColDVal, rawColCVal2);
+                            if (col && col in rowMap[aggKey]) rowMap[aggKey][col] += colFVal;
+                        }
+                        if (colGVal > 0) {
+                            const col = resolveOnlineCol(rawColCVal2);
+                            if (col && col in rowMap[aggKey]) rowMap[aggKey][col] += colGVal;
                         }
                     } else {
-                        // LEGACY TEMPLATE LOGIC:
+                        // LEGACY TEMPLATE LOGIC: cash amount only in Col C or Col E
                         const lowerDate = rawDateVal.toLowerCase();
                         if (lowerDate.includes('total') || lowerDate.includes('grand total')) continue;
 
@@ -339,17 +383,15 @@ const handleFileChange = (e) => {
                         }
 
                         const cleanSales = parseInt(rawSalesVal.toString().replace(/[^0-9-]/g, ''), 10) || 0;
+                        if (!matchedUsername || !formattedDate) continue;
 
-                        if (matchedUsername && formattedDate) {
-                            rows.push({
-                                kode_cabang: matchedUsername,
-                                tanggal_jual: formattedDate,
-                                sales_pos: cleanSales
-                            });
-                        }
+                        const aggKey = matchedUsername + '_' + formattedDate;
+                        if (!rowMap[aggKey]) rowMap[aggKey] = createEmptyParsedRow(matchedUsername, formattedDate);
+                        rowMap[aggKey].sales_pos += cleanSales;
                     }
                 }
 
+                const rows = Object.values(rowMap);
                 if (rows.length === 0) {
                     throw new Error('Tidak ada baris data valid yang berhasil dibaca. Pastikan nama cabang terdaftar di profiles (lookup kode_toko).');
                 }
@@ -422,10 +464,33 @@ const handleFileChange = (e) => {
                 const { error: insertError } = await supabase
                     .from('pos_sales_data')
                     .insert(chunk.map(row => ({
-                        kode_cabang: row.kode_cabang,
-                        tanggal_jual: row.tanggal_jual,
-                        sales_pos: row.sales_pos,
-                        uploaded_by: profile.id
+                        kode_cabang:          row.kode_cabang,
+                        tanggal_jual:         row.tanggal_jual,
+                        sales_pos:            row.sales_pos            ?? 0,
+                        card_bca_amex:        row.card_bca_amex        ?? 0,
+                        card_bca_bca_card:    row.card_bca_bca_card    ?? 0,
+                        card_bca_debit_lain:  row.card_bca_debit_lain  ?? 0,
+                        card_bca_debit_sama:  row.card_bca_debit_sama  ?? 0,
+                        card_bca_jcb:         row.card_bca_jcb         ?? 0,
+                        card_bca_master:      row.card_bca_master      ?? 0,
+                        card_bca_others:      row.card_bca_others      ?? 0,
+                        card_bca_qris:        row.card_bca_qris        ?? 0,
+                        card_bca_unionpay:    row.card_bca_unionpay    ?? 0,
+                        card_bca_visa:        row.card_bca_visa        ?? 0,
+                        card_bri_amex:        row.card_bri_amex        ?? 0,
+                        card_bri_bca_card:    row.card_bri_bca_card    ?? 0,
+                        card_bri_debit_lain:  row.card_bri_debit_lain  ?? 0,
+                        card_bri_debit_sama:  row.card_bri_debit_sama  ?? 0,
+                        card_bri_jcb:         row.card_bri_jcb         ?? 0,
+                        card_bri_master:      row.card_bri_master      ?? 0,
+                        card_bri_others:      row.card_bri_others      ?? 0,
+                        card_bri_qris:        row.card_bri_qris        ?? 0,
+                        card_bri_unionpay:    row.card_bri_unionpay    ?? 0,
+                        card_bri_visa:        row.card_bri_visa        ?? 0,
+                        online_halodoc:       row.online_halodoc       ?? 0,
+                        online_tiktok:        row.online_tiktok        ?? 0,
+                        online_tokopedia:     row.online_tokopedia     ?? 0,
+                        uploaded_by:          profile.id
                     })));
 
                 if (insertError) throw insertError;
@@ -719,7 +784,9 @@ const handleFileChange = (e) => {
                                             <tr>
                                                 <th className="p-2">Cabang</th>
                                                 <th className="p-2">Tanggal</th>
-                                                <th className="p-2 text-right">Sales Xilnex</th>
+                                                <th className="p-2 text-right">Sales Tunai</th>
+                                                <th className="p-2 text-right">Total EDC</th>
+                                                <th className="p-2 text-right">Total Online</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100 text-gray-600">
@@ -728,6 +795,11 @@ const handleFileChange = (e) => {
                                                     <td className="p-2 font-semibold">{row.kode_cabang}</td>
                                                     <td className="p-2">{row.tanggal_jual}</td>
                                                     <td className="p-2 text-right font-mono">{formatRupiah(row.sales_pos)}</td>
+                                                    <td className="p-2 text-right font-mono text-blue-600">{formatRupiah(
+                                                        (row.card_bca_amex||0)+(row.card_bca_bca_card||0)+(row.card_bca_debit_lain||0)+(row.card_bca_debit_sama||0)+(row.card_bca_jcb||0)+(row.card_bca_master||0)+(row.card_bca_others||0)+(row.card_bca_qris||0)+(row.card_bca_unionpay||0)+(row.card_bca_visa||0)+
+                                                        (row.card_bri_amex||0)+(row.card_bri_bca_card||0)+(row.card_bri_debit_lain||0)+(row.card_bri_debit_sama||0)+(row.card_bri_jcb||0)+(row.card_bri_master||0)+(row.card_bri_others||0)+(row.card_bri_qris||0)+(row.card_bri_unionpay||0)+(row.card_bri_visa||0)
+                                                    )}</td>
+                                                    <td className="p-2 text-right font-mono text-purple-600">{formatRupiah((row.online_halodoc||0)+(row.online_tiktok||0)+(row.online_tokopedia||0))}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
