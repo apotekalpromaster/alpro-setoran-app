@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
-import * as XLSX from 'npm:xlsx@0.18.5';
+import * as fflate from 'https://esm.sh/fflate@0.8.2';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -64,10 +64,6 @@ function parseNumberVal(raw: any): number {
   return parseFloat(clean.replace(/,/g, '')) || 0;
 }
 
-/**
- * Resolve (Bank from Col D, Card Type from Col C) -> Supabase column name for Col F (Card/EDC Amount).
- * Handles all known bank name variations: BCA, bca, bCA, BC | BRI, bri, +BRI, LBRI, BR
- */
 function resolveCardColumn(bank: string, cardType: string): string | null {
   const b = (bank || '').toUpperCase().trim();
   const c = (cardType || '').toUpperCase().trim();
@@ -84,10 +80,6 @@ function resolveCardColumn(bank: string, cardType: string): string | null {
   return cardMap[c] ? prefix + cardMap[c] : null;
 }
 
-/**
- * Resolve Card Type from Col C -> Supabase column name for Col G (Online Amount).
- * ONLINE rows always have empty Col D.
- */
 function resolveOnlineColumn(cardType: string): string | null {
   const c = (cardType || '').toUpperCase().trim();
   if (c === 'ONLINE (HALODOC)')   return 'online_halodoc';
@@ -96,12 +88,6 @@ function resolveOnlineColumn(cardType: string): string | null {
   return null;
 }
 
-/**
- * Create an empty aggregated sales row.
- *   1 column  : sales_pos           (Col E: Cash Tunai)
- *  20 columns : card_bca_* / card_bri_*  (Col F: EDC per bank x card type)
- *   3 columns : online_*            (Col G: Online channels)
- */
 function createEmptyAggRow(kode_cabang: string, tanggal_jual: string) {
   return {
     kode_cabang, tanggal_jual,
@@ -114,6 +100,57 @@ function createEmptyAggRow(kode_cabang: string, tanggal_jual: string) {
     card_bri_others: 0, card_bri_qris: 0, card_bri_unionpay: 0, card_bri_visa: 0,
     online_halodoc: 0, online_tiktok: 0, online_tokopedia: 0,
   };
+}
+
+/**
+ * Ultra-fast zero-overhead XLSX XML parser using fflate.
+ * Unzips only sheet1.xml and sharedStrings.xml, skipping heavy pivot tables and charts.
+ */
+function parseXlsxFast(buffer: Uint8Array): { [colLetter: string]: string }[] {
+  const unzipped = fflate.unzipSync(buffer);
+  
+  // 1. Shared Strings
+  const sharedKey = Object.keys(unzipped).find(k => k.toLowerCase().endsWith('sharedstrings.xml'));
+  const sharedStrings: string[] = [];
+  if (sharedKey) {
+    const xmlStr = new TextDecoder().decode(unzipped[sharedKey]);
+    const siMatches = [...xmlStr.matchAll(/<si[\s\S]*?<\/si>/g)];
+    for (const m of siMatches) {
+      const tMatches = [...m[0].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)];
+      sharedStrings.push(tMatches.map(tm => tm[1]).join(''));
+    }
+  }
+
+  // 2. Sheet 1 XML
+  const sheetKey = Object.keys(unzipped).find(k => k.toLowerCase().endsWith('sheet1.xml'));
+  if (!sheetKey) return [];
+  const sheetXml = new TextDecoder().decode(unzipped[sheetKey]);
+  const rowParts = sheetXml.split('</row>');
+
+  const rows: { [colLetter: string]: string }[] = [];
+  for (let r = 0; r < rowParts.length - 1; r++) {
+    const rowXml = rowParts[r];
+    const cMatches = [...rowXml.matchAll(/<c\s+[\s\S]*?(?:<\/c>|\/>)/g)];
+    const rowObj: { [colLetter: string]: string } = {};
+    for (const m of cMatches) {
+      const cXml = m[0];
+      const colMatch = cXml.match(/r="([A-Z]+)\d+"/);
+      if (!colMatch) continue;
+      const col = colMatch[1];
+      const isString = /t="s"/.test(cXml);
+      const vMatch = cXml.match(/<v>([\s\S]*?)<\/v>/);
+      const val = vMatch ? vMatch[1] : '';
+      
+      if (isString) {
+        const idx = parseInt(val, 10);
+        rowObj[col] = sharedStrings[idx] || '';
+      } else {
+        rowObj[col] = val;
+      }
+    }
+    if (Object.keys(rowObj).length > 0) rows.push(rowObj);
+  }
+  return rows;
 }
 
 serve(async (req: Request) => {
@@ -153,9 +190,8 @@ serve(async (req: Request) => {
     const patternDDMMYYYY = `${todayDD}${todayMM}${todayYYYY}`;
     const patternDDMMYY   = `${todayDD}${todayMM}${todayYY}`;
     const patternYYYYMMDD = `${todayYYYY}${todayMM}${todayDD}`;
-    console.log(`[sync-pos-sales-from-drive] Today WIB: ${todayWibStr} | Patterns: ${patternDDMMYYYY}, ${patternDDMMYY}, ${patternYYYYMMDD}`);
 
-    // 3. Drive Search Queries prioritizing Xilnex title "Cash & Card Automation"
+    // 3. Drive Search Queries
     const driveFields = 'files(id,name,modifiedTime,mimeType,parents)';
     const queryCandidates = [
       `name contains 'Cash & Card Automation' and trashed = false`,
@@ -170,9 +206,7 @@ serve(async (req: Request) => {
       const resData = await resp.json();
       if (resp.ok && resData.files?.length > 0) {
         const excelOnly = resData.files.filter(isExcelFile);
-        if (excelOnly.length > 0) { fetchedFiles = excelOnly; matchedQuery = qStr; console.log(`[sync-pos-sales-from-drive] Found ${excelOnly.length} files via: ${qStr}`); break; }
-      } else if (!resp.ok) {
-        console.error(`[sync-pos-sales-from-drive] Search error for '${qStr}':`, resData.error || resData);
+        if (excelOnly.length > 0) { fetchedFiles = excelOnly; matchedQuery = qStr; break; }
       }
     }
 
@@ -180,7 +214,7 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: true, message: 'Tidak ada berkas Excel data POS yang ditemukan di Drive.', processedFiles: 0, totalUpserted: 0, todayWib: todayWibStr, matchedQuery }), { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } });
     }
 
-    // 4. Target File Selection (by filename date > modified today > latest)
+    // 4. Target File Selection
     let targetFiles: any[] = [];
     const byDate = fetchedFiles.filter(f => f.name.includes(patternDDMMYYYY) || f.name.includes(patternDDMMYY) || f.name.includes(patternYYYYMMDD) || f.name.includes(todayWibStr));
     if (byDate.length > 0) { targetFiles = byDate; }
@@ -203,24 +237,21 @@ serve(async (req: Request) => {
     let totalUpserted = 0;
     const processedReport: any[] = [];
 
-    // 6. Process Target Excel Files
+    // 6. Process Target Excel Files using ultra-fast fflate XML parser
     for (const fileItem of targetFiles) {
       console.log(`[sync-pos-sales-from-drive] Downloading: ${fileItem.name} (${fileItem.id})`);
       const dlResp = await fetch(`https://www.googleapis.com/drive/v3/files/${fileItem.id}?alt=media&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!dlResp.ok) { console.error(`Gagal download ${fileItem.name}:`, dlResp.statusText); continue; }
 
-      const fileBuffer = await dlResp.arrayBuffer();
-      const workbook = XLSX.read(new Uint8Array(fileBuffer), { type: 'array', dense: true, cellFormula: false, cellHTML: false, cellStyles: false, cellText: false, cellDates: false });
-      if (workbook.SheetNames.length === 0) continue;
+      const fileBuffer = new Uint8Array(await dlResp.arrayBuffer());
+      const parsedRows = parseXlsxFast(fileBuffer);
+      if (parsedRows.length === 0) continue;
 
-      const rawRows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: '', blankrows: false });
-      if (rawRows.length < 2) continue;
-
-      // Auto-detect template: Xilnex Cash & Card Automation (header has "date"+"store"+"cash/card amount") vs legacy
+      // Auto-detect template: Xilnex Cash & Card Automation (header has "Date" + "Store")
       let isNewTemplate = false;
-      let startRowIndex = 1;
-      for (let r = 0; r < Math.min(rawRows.length, 20); r++) {
-        const rowStr = (rawRows[r] || []).map((c: any) => (c||'').toString().toLowerCase()).join(' ');
+      let startRowIndex = 0;
+      for (let r = 0; r < Math.min(parsedRows.length, 25); r++) {
+        const rowStr = Object.values(parsedRows[r]).join(' ').toLowerCase();
         if (rowStr.includes('date') && rowStr.includes('store') && (rowStr.includes('cash amount') || rowStr.includes('card amount'))) {
           isNewTemplate = true; startRowIndex = r + 1; break;
         }
@@ -229,15 +260,14 @@ serve(async (req: Request) => {
       // Aggregator keyed by `${kode_cabang}_${tanggal_jual}`
       const salesAgg: { [k: string]: ReturnType<typeof createEmptyAggRow> } = {};
 
-      for (let i = startRowIndex; i < rawRows.length; i++) {
-        const row = rawRows[i];
-        if (!row || row.length === 0) continue;
-        const rawDate  = (row[0]||'').toString().trim();
-        const rawStore = (row[1]||'').toString().trim();
-        const rawColC  = (row[2]||'').toString().trim(); // Card Type
-        const rawColD  = (row[3]||'').toString().trim(); // Merchant ID / Bank
+      for (let i = startRowIndex; i < parsedRows.length; i++) {
+        const row = parsedRows[i];
+        const rawDate  = (row['A'] || '').toString().trim();
+        const rawStore = (row['B'] || '').toString().trim();
+        const rawColC  = (row['C'] || '').toString().trim(); // Card Type
+        const rawColD  = (row['D'] || '').toString().trim(); // Merchant ID / Bank
         if (!rawDate || !rawStore) continue;
-        // Skip total/summary rows
+
         const lC = rawColC.toLowerCase();
         if (rawDate.toLowerCase().includes('total') || rawStore.toLowerCase().includes('total') || lC.includes('total') || rawDate.toLowerCase().includes('grand total')) continue;
 
@@ -248,27 +278,25 @@ serve(async (req: Request) => {
         const key = `${username}_${date}`;
 
         if (isNewTemplate) {
-          // Xilnex Cash & Card Automation:
-          // Col C[2]=CardType, Col D[3]=Bank, Col E[4]=Cash, Col F[5]=Card/EDC, Col G[6]=Online
-          const colE = parseNumberVal(row[4]);
-          const colF = parseNumberVal(row[5]);
-          const colG = parseNumberVal(row[6]);
+          // Col A[0]=Date, Col B[1]=Store, Col C[2]=CardType, Col D[3]=Bank, Col E[4]=Cash, Col F[5]=Card/EDC, Col G[6]=Online
+          const colE = parseNumberVal(row['E']);
+          const colF = parseNumberVal(row['F']);
+          const colG = parseNumberVal(row['G']);
           if (colE <= 0 && colF <= 0 && colG <= 0) continue;
           if (!salesAgg[key]) salesAgg[key] = createEmptyAggRow(username, date);
+
           if (colE > 0) salesAgg[key].sales_pos += colE;
           if (colF > 0) {
             const col = resolveCardColumn(rawColD, rawColC);
             if (col && col in salesAgg[key]) (salesAgg[key] as any)[col] += colF;
-            else console.log(`[ColF unmapped] Bank="${rawColD}" CardType="${rawColC}" Amount=${colF}`);
           }
           if (colG > 0) {
             const col = resolveOnlineColumn(rawColC);
             if (col && col in salesAgg[key]) (salesAgg[key] as any)[col] += colG;
-            else console.log(`[ColG unmapped] CardType="${rawColC}" Amount=${colG}`);
           }
         } else {
           // Legacy template: cash amount only in Col C or Col E
-          const cash = parseNumberVal(row[2]) || parseNumberVal(row[4]);
+          const cash = parseNumberVal(row['C']) || parseNumberVal(row['E']);
           if (cash <= 0) continue;
           if (!salesAgg[key]) salesAgg[key] = createEmptyAggRow(username, date);
           salesAgg[key].sales_pos += cash;
@@ -282,19 +310,19 @@ serve(async (req: Request) => {
           if (upsertErr) throw upsertErr;
         }
         totalUpserted += rows.length;
-        processedReport.push({ fileName: fileItem.name, modifiedTime: fileItem.modifiedTime, rowsCount: rows.length });
+        processedReport.push({ fileName: fileItem.name, rowsCount: rows.length });
       } else {
         console.warn(`[sync-pos-sales-from-drive] 0 valid rows extracted from ${fileItem.name}`);
       }
     }
 
     return new Response(
-      JSON.stringify({ success: true, message: `Berhasil memproses ${processedReport.length} berkas dan upsert ${totalUpserted} baris data ke pos_sales_data.`, processedFiles: targetFiles.length, totalUpserted, todayWib: todayWibStr, tokenScope, matchedQuery, sampleFileNames: targetFiles.slice(0,10).map(f => f.name), details: processedReport }),
+      JSON.stringify({ success: true, message: `Berhasil memproses ${processedReport.length} berkas dan upsert ${totalUpserted} baris data ke pos_sales_data.`, processedFiles: targetFiles.length, totalUpserted, todayWib: todayWibStr, matchedQuery, sampleFileNames: targetFiles.slice(0,10).map(f => f.name), details: processedReport }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
     );
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Terjadi kesalahan tidak terduga.';
-    console.error('[sync-pos-sales-from-drive] Global Error:', message);
-    return new Response(JSON.stringify({ error: message }), { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } });
+  } catch (err: any) {
+    const errorDetails = typeof err === 'object' && err !== null ? JSON.stringify(err, Object.getOwnPropertyNames(err)) : String(err);
+    console.error('[sync-pos-sales-from-drive] Global Error:', errorDetails);
+    return new Response(JSON.stringify({ error: errorDetails }), { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } });
   }
 });

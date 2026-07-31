@@ -114,7 +114,11 @@ export default function AreaManagerDashboardPage() {
             if (searchKeys.length > 0 && (Object.keys(cachedPosSalesMap).length === 0 || !silent)) {
                 const { data: posData, error: posErr } = await supabase
                     .from('pos_sales_data')
-                    .select('kode_cabang, tanggal_jual, sales_pos')
+                    .select(`
+                        kode_cabang, tanggal_jual, sales_pos,
+                        card_bca_amex, card_bca_bca_card, card_bca_debit_lain, card_bca_debit_sama, card_bca_jcb, card_bca_master, card_bca_others, card_bca_qris, card_bca_unionpay, card_bca_visa,
+                        card_bri_amex, card_bri_bca_card, card_bri_debit_lain, card_bri_debit_sama, card_bri_jcb, card_bri_master, card_bri_others, card_bri_qris, card_bri_unionpay, card_bri_visa
+                    `)
                     .in('kode_cabang', searchKeys)
                     .gte('tanggal_jual', start)
                     .lte('tanggal_jual', end);
@@ -122,7 +126,12 @@ export default function AreaManagerDashboardPage() {
                 if (!posErr && posData) {
                     const map = {};
                     posData.forEach(item => {
-                        map[`${item.kode_cabang}_${item.tanggal_jual}`] = item.sales_pos;
+                        const edcSum = (Number(item.card_bca_amex || 0) + Number(item.card_bca_bca_card || 0) + Number(item.card_bca_debit_lain || 0) + Number(item.card_bca_debit_sama || 0) + Number(item.card_bca_jcb || 0) + Number(item.card_bca_master || 0) + Number(item.card_bca_others || 0) + Number(item.card_bca_qris || 0) + Number(item.card_bca_unionpay || 0) + Number(item.card_bca_visa || 0)) +
+                                       (Number(item.card_bri_amex || 0) + Number(item.card_bri_bca_card || 0) + Number(item.card_bri_debit_lain || 0) + Number(item.card_bri_debit_sama || 0) + Number(item.card_bri_jcb || 0) + Number(item.card_bri_master || 0) + Number(item.card_bri_others || 0) + Number(item.card_bri_qris || 0) + Number(item.card_bri_unionpay || 0) + Number(item.card_bri_visa || 0));
+                        map[`${item.kode_cabang}_${item.tanggal_jual}`] = {
+                            posSales: Number(item.sales_pos || 0),
+                            posNonTunai: edcSum
+                        };
                     });
                     setPosSalesMap(map);
                     cachedPosSalesMap = map;
@@ -313,7 +322,8 @@ export default function AreaManagerDashboardPage() {
         const totalDiscrepancies = reports.filter(r => {
             const codeKey = `${r.kode_toko}_${r.tanggal_jual}`;
             const nameKey = `${r.username}_${r.tanggal_jual}`;
-            const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+            const posEntry = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+            const posVal = typeof posEntry === 'object' ? posEntry.posSales : posEntry;
             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(r.jenis_pelaporan);
 
             const s1 = isValidTypeForPOS && posVal !== undefined && posVal !== null ? Math.abs((r.nominal_jual || 0) - posVal) : 0;
@@ -369,25 +379,33 @@ export default function AreaManagerDashboardPage() {
         const actualFiltered = reports.map(r => {
             const codeKey = `${r.kode_toko}_${r.tanggal_jual}`;
             const nameKey = `${r.username}_${r.tanggal_jual}`;
-            const posValAll = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+            const posEntry = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+            const posValAll = typeof posEntry === 'object' ? posEntry.posSales : posEntry;
+            const posNonTunaiAll = typeof posEntry === 'object' ? posEntry.posNonTunai : undefined;
+
             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(r.jenis_pelaporan);
             const posVal1 = isValidTypeForPOS ? posValAll : undefined;
+            const posNonTunaiVal = isValidTypeForPOS ? posNonTunaiAll : undefined;
 
             const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
             const hasPOSAll = posValAll !== undefined && posValAll !== null;
+            const hasPOSNonTunai = posNonTunaiVal !== undefined && posNonTunaiVal !== null;
 
             const s1 = hasPOS1 ? (r.nominal_jual || 0) - posVal1 : null;
             const s2 = hasPOSAll ? ((r.potongan || 0) + (r.nominal_setoran || 0)) - posValAll : null;
+            const sNonTunai = hasPOSNonTunai ? (r.total_non_tunai || 0) - posNonTunaiVal : null;
 
             return {
                 ...r,
                 selisih: (r.nominal_jual || 0) - (r.potongan || 0) - (r.nominal_setoran || 0),
                 s1,
-                s2
+                s2,
+                posNonTunaiVal,
+                sNonTunai
             };
         }).filter(r => {
             const matchName = !cleanSearch || r.username.toLowerCase().includes(cleanSearch);
-            const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD || (r.s1 !== null && Math.abs(r.s1) > DISCREPANCY_THRESHOLD) || (r.s2 !== null && Math.abs(r.s2) > DISCREPANCY_THRESHOLD);
+            const matchSelisih = !showHighSelisih || Math.abs(r.selisih) > DISCREPANCY_THRESHOLD || (r.s1 !== null && Math.abs(r.s1) > DISCREPANCY_THRESHOLD) || (r.s2 !== null && Math.abs(r.s2) > DISCREPANCY_THRESHOLD) || (r.sNonTunai !== null && Math.abs(r.sNonTunai) > DISCREPANCY_THRESHOLD);
             const matchJenis = selectedJenis.length === 0 || selectedJenis.includes(r.jenis_pelaporan);
             
             let matchSpecial = true;
@@ -399,6 +417,8 @@ export default function AreaManagerDashboardPage() {
                 matchSpecial = r.s1 !== null && r.s1 !== 0;
             } else if (specialCase === 'selisih_setoran') {
                 matchSpecial = r.s2 !== null && r.s2 !== 0;
+            } else if (specialCase === 'selisih_non_tunai') {
+                matchSpecial = r.sNonTunai !== null && r.sNonTunai !== 0;
             }
 
             return matchName && matchSelisih && matchJenis && matchSpecial;
@@ -438,12 +458,16 @@ export default function AreaManagerDashboardPage() {
                         if (!hasPrimaryReport) {
                             const codeKey = o.kode_toko + '_' + dateStr;
                             const nameKey = o.username + '_' + dateStr;
-                            const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                            const posEntry = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                            const posVal = typeof posEntry === 'object' ? posEntry.posSales : posEntry;
+                            const posNonTunaiVal = typeof posEntry === 'object' ? posEntry.posNonTunai : undefined;
+
                             const mockSelisih = -(posVal || 0);
                             const matchSelisih = !showHighSelisih || Math.abs(mockSelisih) > DISCREPANCY_THRESHOLD;
 
                             const s1 = posVal !== undefined && posVal !== null ? 0 - posVal : null;
                             const s2 = posVal !== undefined && posVal !== null ? 0 - posVal : null;
+                            const sNonTunai = posNonTunaiVal !== undefined && posNonTunaiVal !== null ? 0 - posNonTunaiVal : null;
 
                             let matchSpecial = true;
                             if (specialCase === 'belum_dilaporkan') {
@@ -821,6 +845,7 @@ export default function AreaManagerDashboardPage() {
                                             <option value="telat_lapor">Telat Lapor &gt; 4 Hari (Misal sales tgl 1, baru dilaporkan setelah tanggal 4)</option>
                                             <option value="selisih_sales">Ada Selisih Sales Tunai (Xilnex VS Input Toko)</option>
                                             <option value="selisih_setoran">Ada Selisih Setor Bank ((Setor+Potong) VS Xilnex)</option>
+                                            <option value="selisih_non_tunai">Ada Selisih Sales Non-Tunai (EDC Xilnex VS Input Toko)</option>
                                         </select>
                                     </div>
                                 </div>
@@ -888,16 +913,18 @@ export default function AreaManagerDashboardPage() {
                                     <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
                                         <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1500px] border-collapse">
                                             <colgroup>
-                                                <col style={{ width: '170px' }} />
+                                                <col style={{ width: '160px' }} />
                                                 <col style={{ width: '90px' }} />
-                                                <col style={{ width: '135px' }} />
-                                                <col style={{ width: '110px' }} />
-                                                <col style={{ width: '120px' }} />
-                                                <col style={{ width: '110px' }} />
-                                                <col style={{ width: '120px' }} />
                                                 <col style={{ width: '130px' }} />
+                                                <col style={{ width: '120px' }} />
+                                                <col style={{ width: '110px' }} />
+                                                <col style={{ width: '105px' }} />
+                                                <col style={{ width: '115px' }} />
+                                                <col style={{ width: '125px' }} />
+                                                <col style={{ width: '125px' }} />
                                                 <col style={{ width: '135px' }} />
-                                                <col style={{ width: '135px' }} />
+                                                <col style={{ width: '125px' }} />
+                                                <col style={{ width: '125px' }} />
                                                 <col style={{ width: '60px' }} />
                                             </colgroup>
                                             <thead className="text-xs font-bold text-gray-700 uppercase tracking-wider sticky top-0 z-20 border-b border-gray-200 bg-gray-100">
@@ -909,9 +936,11 @@ export default function AreaManagerDashboardPage() {
                                                     <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Sales Tunai Toko</th>
                                                     <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Potongan Sales</th>
                                                     <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Setoran Tunai Bank</th>
-                                                    <th className="px-3 py-3 text-right bg-blue-50/50 text-blue-900 font-bold sticky top-0 z-20 border-b border-gray-200">Total Non-Tunai Toko</th>
                                                     <th className="px-3 py-3 text-center bg-red-50 text-red-800 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Sales Tunai</th>
                                                     <th className="px-3 py-3 text-center bg-orange-50 text-orange-800 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Setor Bank</th>
+                                                    <th className="px-3 py-3 text-right bg-purple-50 text-purple-900 font-bold sticky top-0 z-20 border-b border-gray-200">Sales Non-Tunai (Xilnex)</th>
+                                                    <th className="px-3 py-3 text-right bg-blue-50/50 text-blue-900 font-bold sticky top-0 z-20 border-b border-gray-200">Total Non-Tunai Toko</th>
+                                                    <th className="px-3 py-3 text-center bg-indigo-50 text-indigo-900 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Non-Tunai</th>
                                                     <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
                                                 </tr>
                                             </thead>
@@ -923,14 +952,20 @@ export default function AreaManagerDashboardPage() {
                                                     const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(row.jenis_pelaporan);
                                                     const codeKey = `${row.kode_toko}_${row.tanggal_jual}`;
                                                     const nameKey = `${row.username}_${row.tanggal_jual}`;
-                                                    const posValAll = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                                                    const posEntry = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                                                    const posValAll = typeof posEntry === 'object' ? posEntry.posSales : posEntry;
+                                                    const posNonTunaiAll = typeof posEntry === 'object' ? posEntry.posNonTunai : undefined;
+
                                                     const posVal1 = isValidTypeForPOS ? posValAll : undefined;
+                                                    const posNonTunaiVal = isValidTypeForPOS ? posNonTunaiAll : undefined;
 
                                                     const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
                                                     const hasPOSAll = posValAll !== undefined && posValAll !== null;
+                                                    const hasPOSNonTunai = posNonTunaiVal !== undefined && posNonTunaiVal !== null;
 
                                                     const s1 = hasPOS1 ? (row.nominal_jual || 0) - posVal1 : null;
                                                     const s2 = hasPOSAll ? ((row.potongan || 0) + (row.nominal_setoran || 0)) - posValAll : null;
+                                                    const sNonTunai = hasPOSNonTunai ? (row.total_non_tunai || 0) - posNonTunaiVal : null;
 
                                                     return (
                                                         <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (row.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}>
@@ -958,12 +993,18 @@ export default function AreaManagerDashboardPage() {
                                                             <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_jual || 0)}</td>
                                                             <td className="px-3 py-3 text-right text-red-600 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.potongan || 0)}</td>
                                                             <td className="px-3 py-3 text-right font-bold text-green-700 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_setoran || 0)}</td>
-                                                            <td className="px-3 py-3 text-right font-bold text-blue-800 font-mono text-xs bg-blue-50/20">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.total_non_tunai || 0)}</td>
                                                             <td className="px-3 py-3 text-center font-mono text-xs bg-red-50/10">
                                                                 {selisihChipNew(s1)}
                                                             </td>
                                                             <td className="px-3 py-3 text-center font-mono text-xs bg-orange-50/10">
                                                                 {selisihChipNew(s2)}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right text-purple-950 font-mono text-xs bg-purple-50/30 font-bold">
+                                                                {posNonTunaiVal !== undefined ? formatRupiah(posNonTunaiVal) : <span className="text-gray-300">-</span>}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right font-bold text-blue-800 font-mono text-xs bg-blue-50/20">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.total_non_tunai || 0)}</td>
+                                                            <td className="px-3 py-3 text-center font-mono text-xs bg-indigo-50/20">
+                                                                {selisihChipNew(sNonTunai)}
                                                             </td>
                                                             <td className="px-3 py-3 text-center">
                                                                 {row.isUnreported ? (
@@ -999,14 +1040,20 @@ export default function AreaManagerDashboardPage() {
                                                     <td className="px-3 py-3 text-right font-extrabold text-green-800 font-mono">
                                                         {formatRupiah(tableTotals.totalSetor)}
                                                     </td>
-                                                    <td className="px-3 py-3 text-right font-extrabold text-blue-900 font-mono bg-blue-200/30">
-                                                        {formatRupiah(tableTotals.totalNonTunai)}
-                                                    </td>
                                                     <td className="px-3 py-3 text-center font-extrabold font-mono bg-red-200/50">
                                                         {tableTotals.hasAnyPosForTotals ? selisihChipNew(tableTotals.totalSelisih1) : <span className="text-gray-300">-</span>}
                                                     </td>
                                                     <td className="px-3 py-3 text-center font-extrabold font-mono bg-orange-200/60">
                                                         {tableTotals.hasAnyPosForTotals ? selisihChipNew(tableTotals.totalSelisih2) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-extrabold text-purple-950 font-mono bg-purple-200/50">
+                                                        {formatRupiah(tableTotals.totalPosNonTunai)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-extrabold text-blue-900 font-mono bg-blue-200/30">
+                                                        {formatRupiah(tableTotals.totalNonTunai)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-center font-extrabold font-mono bg-indigo-200/50">
+                                                        {tableTotals.hasAnyPosForTotals ? selisihChipNew(tableTotals.totalSelisihNonTunai) : <span className="text-gray-300">-</span>}
                                                     </td>
                                                     <td className="px-3 py-3 bg-orange-100"></td>
                                                 </tr>
