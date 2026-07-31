@@ -131,7 +131,7 @@ export default function App() {
           <Route
             path="/koreksi"
             element={
-              <ProtectedRoute allowedRoles={['User']}>
+              <ProtectedRoute allowedRoles={['User', 'AreaManager']}>
                 <KoreksiLaporanPage />
               </ProtectedRoute>
             }
