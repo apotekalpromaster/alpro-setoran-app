@@ -102,7 +102,25 @@ export default function RiwayatPage() {
             if (!isMounted.current) return;
             if (fetchErr) throw fetchErr;
 
-            setReports(data || []);
+            // Fetch approved HAPUS_DATA requests as fallback check
+            const { data: approvedDeletes } = await safeSupabaseQuery(
+                supabase
+                    .from('koreksi_requests')
+                    .select('laporan_id')
+                    .eq('requested_by', profile.id)
+                    .eq('status', 'Approved')
+                    .eq('jenis_pelaporan_baru', 'HAPUS_DATA'),
+                5000
+            );
+
+            const deletedIds = new Set((approvedDeletes || []).map(d => d.laporan_id));
+
+            const processed = (data || []).map(r => ({
+                ...r,
+                isArchived: r.status === 'Archived' || r.jenis_pelaporan === 'DIHAPUS / DIBATALKAN' || deletedIds.has(r.id)
+            }));
+
+            setReports(processed);
         } catch (e) {
             if (isMounted.current) {
                 setError('Gagal memuat riwayat: ' + e.message);
@@ -156,7 +174,7 @@ export default function RiwayatPage() {
             const matchSearch =
                 !term ||
                 (item.jenis_pelaporan || '').toLowerCase().includes(term) ||
-                formatRupiah(item.nominal_setoran || 0).toLowerCase().includes(term) ||
+                item.isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(item.nominal_setoran || 0)}</span> : formatRupiah(item.nominal_setoran || 0).toLowerCase().includes(term) ||
                 formatRupiah(item.grand_total_sales || 0).toLowerCase().includes(term);
 
             const matchMethode =
@@ -210,6 +228,7 @@ export default function RiwayatPage() {
 
                         const hasPrimaryReport = reports.some(r =>
                             r.tanggal_jual === dateStr &&
+                            !r.isArchived &&
                             ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
                         );
 
@@ -514,13 +533,15 @@ export default function RiwayatPage() {
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
                                         {paginatedReports.map((item) => {
-                                            const badge = getBadge(item.jenis_pelaporan);
+                                            const badge = item.isArchived 
+                                                ? { label: 'Terarsip / Dihapus', cls: 'bg-red-100 text-red-800 border border-red-200' }
+                                                : getBadge(item.jenis_pelaporan);
                                             const isAnomali = badge.cls === 'badge-danger';
 
                                             return (
                                                 <tr
                                                     key={item.id}
-                                                    className={'hover:bg-gray-50/80 transition-colors ' + (item.isUnreported ? 'bg-amber-50/20 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}
+                                                    className={'hover:bg-gray-50/80 transition-colors ' + (item.isArchived ? 'bg-red-50/20 opacity-75' : item.isUnreported ? 'bg-amber-50/20 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}
                                                 >
                                                     <td className="px-3 py-3 font-bold text-gray-900 whitespace-nowrap">
                                                         {formatDisplayDate(item.tanggal_jual)}
@@ -537,10 +558,10 @@ export default function RiwayatPage() {
                                                         {item.metode_setoran}
                                                     </td>
                                                     <td className="px-3 py-3 text-right font-mono text-gray-900 font-medium">
-                                                        {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.nominal_jual || 0)}
+                                                        {item.isUnreported ? <span className="text-gray-300">-</span> : item.isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(item.nominal_jual || 0)}</span> : formatRupiah(item.nominal_jual || 0)}
                                                     </td>
                                                     <td className="px-3 py-3 text-right font-mono text-red-600 font-medium bg-red-50/20">
-                                                        {item.isUnreported || !item.potongan ? <span className="text-gray-300">-</span> : `(${formatRupiah(item.potongan)})`}
+                                                        {item.isUnreported || !item.potongan ? <span className="text-gray-300">-</span> : item.isArchived ? <span className="line-through text-gray-400 font-normal">(${formatRupiah(item.potongan)})</span> : `(${formatRupiah(item.potongan)})`}
                                                     </td>
                                                     <td className="px-3 py-3 text-right font-mono text-green-700 font-bold bg-green-50/20">
                                                         {item.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(item.nominal_setoran || 0)}
