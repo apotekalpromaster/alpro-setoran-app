@@ -199,6 +199,14 @@ export default function RiwayatPage() {
 
         const showSales = activeFilters.jenis.length === 0 || activeFilters.jenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(j));
 
+        // Build a Set of reported dates for O(1) lookup (SEDANG-1 optimization)
+        const reportedPrimaryDatesSet = new Set(
+            reports.filter(r =>
+                !r.isArchived &&
+                ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+            ).map(r => r.tanggal_jual)
+        );
+
         let unreportedList = [];
         if (showSales) {
             const yesterday = new Date();
@@ -226,11 +234,7 @@ export default function RiwayatPage() {
                         const dd = String(cur.getDate()).padStart(2, '0');
                         const dateStr = `${yyyy}-${mm}-${dd}`;
 
-                        const hasPrimaryReport = reports.some(r =>
-                            r.tanggal_jual === dateStr &&
-                            !r.isArchived &&
-                            ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
-                        );
+                        const hasPrimaryReport = reportedPrimaryDatesSet.has(dateStr);
 
                         if (!hasPrimaryReport) {
                             const cleanSearch = activeFilters.search.toLowerCase();

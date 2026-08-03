@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import UserLayout from '../components/UserLayout';
@@ -16,6 +16,7 @@ export default function BerandaPage() {
     const [tunggakanDates, setTunggakanDates] = useState([]);
     const [duplikatDates, setDuplikatDates] = useState([]);
     const [rejectedKoreksi, setRejectedKoreksi] = useState([]);
+    const isMounted = useRef(true);
 
     const fetchData = async () => {
         if (!profile?.id) {
@@ -128,11 +129,13 @@ export default function BerandaPage() {
         };
 
     useEffect(() => {
+        isMounted.current = true;
         if (profile?.id) {
             fetchData();
         } else {
             setLoading(false);
         }
+        return () => { isMounted.current = false; };
     }, [profile?.id, profile?.frekuensi_setoran]);
 
     // Format date string (YYYY-MM-DD -> DD MMM YYYY)

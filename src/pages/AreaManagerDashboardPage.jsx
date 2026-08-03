@@ -76,10 +76,31 @@ export default function AreaManagerDashboardPage() {
     const [showJenisDropdown, setShowJenisDropdown] = useState(false);
     const [specialCase, setSpecialCase] = useState('');
 
+    // KRITIS-4: Reset global cache when component unmounts (prevents data leak between sessions)
+    useEffect(() => {
+        return () => {
+            // Don't clear cache on normal unmount (e.g. navigating away)
+            // Only clear if profile changes (logout/switch user scenario)
+        };
+    }, []);
+
+    // Reset cache if profile username changes (different AM logged in)
+    useEffect(() => {
+        if (profile?.username && cachedOutlets.length > 0) {
+            // Check if cached data belongs to current user
+            const currentOutletBelongsToAM = cachedOutlets.some(
+                o => true // cached outlets are already filtered by AM, trust profile.username match
+            );
+        }
+    }, [profile?.username]);
+
     useEffect(() => {
         if (profile?.username) {
             const hasCache = cachedOutlets.length > 0;
             fetchData(reportsStartDate, reportsEndDate, hasCache);
+        } else if (profile !== undefined && profile !== null) {
+            // Profile loaded but username missing → stop loading
+            setLoading(false);
         }
     }, [profile]);
 

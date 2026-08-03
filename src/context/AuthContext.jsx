@@ -21,8 +21,8 @@ export function AuthProvider({ children }) {
     const [user, setUser] = useState(initialUser);
     const [profile, setProfile] = useState(initialProfile);
     const [loading, setLoading] = useState(false);
-    // If cached item exists, mark authReady true immediately to prevent loading flicker
-    const [authReady, setAuthReady] = useState(!!initialUser || !!initialProfile);
+    // If BOTH cached items exist, mark authReady true immediately to prevent loading flicker
+    const [authReady, setAuthReady] = useState(!!initialUser && !!initialProfile);
 
     const isFetchingProfile = useRef(false);
 
@@ -105,6 +105,21 @@ export function AuthProvider({ children }) {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session?.user) {
                         setUser(session.user);
+                        // Refresh profile if stale or missing
+                        const cachedProfile = getCachedItem(PROFILE_CACHE_KEY);
+                        if (!cachedProfile || cachedProfile.id !== session.user.id) {
+                            await fetchProfile(session.user.id);
+                        }
+                    } else {
+                        // Session expired after idle → force clean logout
+                        console.warn('Session expired during idle. Forcing logout.');
+                        setUser(null);
+                        setProfile(null);
+                        try {
+                            localStorage.removeItem(USER_CACHE_KEY);
+                            localStorage.removeItem(PROFILE_CACHE_KEY);
+                        } catch (e) {}
+                        setAuthReady(true);
                     }
                 } catch (e) {
                     console.warn('Background session refresh failed:', e.message);

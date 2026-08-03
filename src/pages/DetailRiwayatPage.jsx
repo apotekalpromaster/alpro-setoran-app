@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
@@ -42,11 +42,14 @@ export default function DetailRiwayatPage() {
     const [corrections, setCorrections] = useState([]);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
+    const isMounted = useRef(true);
     const isArchived = data?.status === 'Archived' || data?.jenis_pelaporan === 'DIHAPUS / DIBATALKAN';
 
     useEffect(() => {
+        isMounted.current = true;
         if (!id) { setNotFound(true); setLoading(false); return; }
         fetchDetail();
+        return () => { isMounted.current = false; };
     }, [id]);
 
     const fetchDetail = async () => {

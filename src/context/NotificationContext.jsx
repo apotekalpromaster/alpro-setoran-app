@@ -94,8 +94,7 @@ export function NotificationProvider({ children }) {
                 .from('user_notifications')
                 .update({ is_read: true })
                 .eq('id', notifId);
-
-            fetchNotifications();
+            // Removed redundant fetchNotifications() - optimistic update is sufficient
         } catch (err) {
             console.error('Gagal memperbarui status notifikasi:', err);
         }
@@ -118,7 +117,7 @@ export function NotificationProvider({ children }) {
             }
 
             await query;
-            fetchNotifications();
+            // Removed redundant fetchNotifications() - optimistic update is sufficient
         } catch (err) {
             console.error('Gagal memperbarui semua notifikasi:', err);
         }

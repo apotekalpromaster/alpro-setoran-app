@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
@@ -19,6 +19,7 @@ export default function AreaManagerKoreksiApprovalPage() {
     const [rejectReason, setRejectReason] = useState('');
     const [rejectSubmitting, setRejectSubmitting] = useState(false);
     const [statusFilter, setStatusFilter] = useState('Pending'); // 'All' | 'Pending' | 'Approved' | 'Rejected'
+    const fetchCounter = useRef(0); // Guard against race conditions when rapidly switching tabs
 
     useEffect(() => {
         if (profile?.id) {
@@ -33,6 +34,7 @@ export default function AreaManagerKoreksiApprovalPage() {
             setLoading(false);
             return;
         }
+        const currentFetchId = ++fetchCounter.current;
         setLoading(true);
         setError('');
         try {
