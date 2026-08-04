@@ -183,7 +183,7 @@ serve(async (req: Request) => {
       while (hasMore) {
         const { data, error } = await supabase
           .from('laporan')
-          .select('user_id, tanggal_setor, tanggal_jual, jenis_pelaporan')
+          .select('user_id, tanggal_setor, tanggal_jual, jenis_pelaporan, status')
           .range(lFrom, lFrom + limit - 1);
         if (error) throw error;
         laporanRaw = [...laporanRaw, ...data];
@@ -191,11 +191,18 @@ serve(async (req: Request) => {
         else lFrom += limit;
       }
 
+      // Filter active primary reports (ignoring Archived / DIHAPUS)
+      const primaryTypes = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'];
+      const activePrimaryReports = laporanRaw.filter((r: any) =>
+        r.status !== 'Archived' &&
+        r.jenis_pelaporan !== 'DIHAPUS / DIBATALKAN' &&
+        primaryTypes.includes(r.jenis_pelaporan)
+      );
+
       // Compute duplicated dates
       const countMap: { [key: string]: number } = {};
-      const primaryTypes = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'];
-      laporanRaw.forEach((r: any) => {
-        if (r.tanggal_jual && primaryTypes.includes(r.jenis_pelaporan)) {
+      activePrimaryReports.forEach((r: any) => {
+        if (r.tanggal_jual) {
           const key = `${r.user_id}_${r.tanggal_jual}`;
           countMap[key] = (countMap[key] || 0) + 1;
         }
@@ -212,46 +219,34 @@ serve(async (req: Request) => {
         }
       });
 
-      // Compute missing dates
+      // Compute missing dates (Audit threshold: > 4 days old limit)
       const limitDate = new Date();
       limitDate.setDate(limitDate.getDate() - 4);
       limitDate.setHours(23, 59, 59, 999);
       const limitDateStr = limitDate.toISOString().split('T')[0];
 
-      const submittedSet = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_jual}`));
+      // Submitted set contains active primary report dates ONLY
+      const submittedSet = new Set(activePrimaryReports.map((r: any) => `${r.user_id}_${r.tanggal_jual}`));
 
-      const getBizDays = (startStr: string, endStr: string) => {
+      // Generates ALL calendar days (Monday through Sunday - 7 days/week)
+      const getAllCalendarDays = (startStr: string, endStr: string) => {
         const days: string[] = [];
         const cur = new Date(startStr);
         const last = new Date(endStr);
         while (cur <= last) {
-          const dow = cur.getDay();
-          if (dow !== 0 && dow !== 6) {
-            days.push(cur.toLocaleDateString('sv-SE'));
-          }
+          days.push(cur.toLocaleDateString('sv-SE'));
           cur.setDate(cur.getDate() + 1);
         }
         return days;
       };
 
-      const isScheduledDay = (dateStr: string, frekuensi: string) => {
-        const d = new Date(dateStr);
-        const dow = d.getDay();
-        const freq = (frekuensi || '').toUpperCase();
-        if (freq.includes('3X SEMINGGU')) return [1, 3, 5].includes(dow);
-        if (freq.includes('2X SEMINGGU')) return [2, 5].includes(dow);
-        if (freq.includes('1X SEMINGGU') || freq.includes('SEMINGGU SEKALI')) return dow === 5;
-        return true;
-      };
-
       const pendingUsers: any[] = [];
       users.forEach((user: any) => {
         const startDateStr = user.tanggal_aktif || '2026-04-01';
-        const bizDays = getBizDays(startDateStr, limitDateStr);
-        const missing = bizDays.filter((day) => {
-          const shouldReport = isScheduledDay(day, user.frekuensi_setoran);
+        const allDays = getAllCalendarDays(startDateStr, limitDateStr);
+        const missing = allDays.filter((day) => {
           const didReport = submittedSet.has(`${user.id}_${day}`);
-          return shouldReport && !didReport;
+          return !didReport;
         });
 
         const duplicates = duplicateDatesMap[user.id] || [];
