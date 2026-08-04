@@ -9,6 +9,21 @@ const DISCREPANCY_THRESHOLD = 50000;
 const PAGE_SIZE = 500;
 const MAX_ROWS = 100000;
 
+const BADGE_CONFIG = {
+    'Setoran Harian': { label: 'Setoran Harian', cls: 'bg-green-100 text-green-800 border border-green-200' },
+    'Setoran 3x Seminggu': { label: 'Setoran 3x Seminggu', cls: 'bg-green-100 text-green-800 border border-green-200' },
+    'Setoran Sales Dengan Potongan Penjualan': { label: 'Setoran Potongan', cls: 'bg-green-100 text-green-800 border border-green-200' },
+    'Setoran Uang Pecahan Kecil': { label: 'Uang Pecahan Kecil', cls: 'bg-orange-100 text-orange-800 border border-orange-200' },
+    'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'bg-amber-100 text-amber-800 border border-amber-200' },
+    'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'bg-red-100 text-red-800 border border-red-200' },
+    'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'bg-red-100 text-red-800 border border-red-200' },
+    'Belum Dilaporkan': { label: 'Belum Lapor', cls: 'bg-amber-100 text-amber-800 border border-amber-200' }
+};
+
+function getBadge(jenis) {
+    return BADGE_CONFIG[jenis] || { label: jenis, cls: 'bg-gray-100 text-gray-800 border border-gray-200' };
+}
+
 export default function ManajemenLaporanPage() {
     const navigate = useNavigate();
     const today = new Date().toLocaleDateString('sv-SE');
@@ -60,6 +75,10 @@ export default function ManajemenLaporanPage() {
                         nominal_jual,
                         nominal_setoran,
                         potongan,
+                        total_non_tunai,
+                        bca_debit, bca_kredit, bca_qris,
+                        bri_debit, bri_kredit, bri_qris,
+                        bank_transfer,
                         nomor_deposit_card,
                         kcp_terdekat,
                         user_id,
@@ -148,7 +167,11 @@ export default function ManajemenLaporanPage() {
                     const posTo = posFrom + POS_PAGE_SIZE - 1;
                     const { data: posData, error: posErr } = await supabase
                         .from('pos_sales_data')
-                        .select('kode_cabang, tanggal_jual, sales_pos')
+                        .select(`
+                        kode_cabang, tanggal_jual, sales_pos,
+                        card_bca_amex, card_bca_bca_card, card_bca_debit_lain, card_bca_debit_sama, card_bca_jcb, card_bca_master, card_bca_others, card_bca_qris, card_bca_unionpay, card_bca_visa,
+                        card_bri_amex, card_bri_bca_card, card_bri_debit_lain, card_bri_debit_sama, card_bri_jcb, card_bri_master, card_bri_others, card_bri_qris, card_bri_unionpay, card_bri_visa
+                    `)
                         .in('kode_cabang', searchKeys)
                         .in('tanggal_jual', allDates)
                         .range(posFrom, posTo);
@@ -156,7 +179,12 @@ export default function ManajemenLaporanPage() {
                     if (posErr) throw posErr;
                     const posRows = posData || [];
                     posRows.forEach(item => {
-                        posSalesMap[item.kode_cabang + '_' + item.tanggal_jual] = item.sales_pos;
+                        const edcSum = (Number(item.card_bca_amex || 0) + Number(item.card_bca_bca_card || 0) + Number(item.card_bca_debit_lain || 0) + Number(item.card_bca_debit_sama || 0) + Number(item.card_bca_jcb || 0) + Number(item.card_bca_master || 0) + Number(item.card_bca_others || 0) + Number(item.card_bca_qris || 0) + Number(item.card_bca_unionpay || 0) + Number(item.card_bca_visa || 0)) +
+                                       (Number(item.card_bri_amex || 0) + Number(item.card_bri_bca_card || 0) + Number(item.card_bri_debit_lain || 0) + Number(item.card_bri_debit_sama || 0) + Number(item.card_bri_jcb || 0) + Number(item.card_bri_master || 0) + Number(item.card_bri_others || 0) + Number(item.card_bri_qris || 0) + Number(item.card_bri_unionpay || 0) + Number(item.card_bri_visa || 0));
+                        posSalesMap[item.kode_cabang + '_' + item.tanggal_jual] = {
+                            posSales: Number(item.sales_pos || 0),
+                            posNonTunai: edcSum
+                        };
                     });
 
                     if (posRows.length < POS_PAGE_SIZE) {
@@ -173,13 +201,22 @@ export default function ManajemenLaporanPage() {
                 const kToko = row.profiles?.kode_toko || '-';
                 const codeKey = kToko + '_' + row.tanggal_jual;
                 const nameKey = uName + '_' + row.tanggal_jual;
-                const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                const posEntry = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                const posVal = typeof posEntry === 'object' ? posEntry.posSales : posEntry;
+                const posNonTunai = typeof posEntry === 'object' ? posEntry.posNonTunai : undefined;
+
+                const totalNonTunai = Number(row.bca_debit || 0) + Number(row.bca_kredit || 0) + Number(row.bca_qris || 0) +
+                                      Number(row.bri_debit || 0) + Number(row.bri_kredit || 0) + Number(row.bri_qris || 0) +
+                                      Number(row.bank_transfer || 0) || Number(row.total_non_tunai || 0);
+
                 return {
                     ...row,
+                    total_non_tunai: totalNonTunai,
                     username: uName,
                     kode_toko: kToko,
                     email: row.profiles?.email || '',
                     posVal,
+                    posNonTunai,
                 };
             });
 
@@ -203,7 +240,9 @@ export default function ManajemenLaporanPage() {
                         if (!hasPrimaryReport) {
                             const codeKey = p.kode_toko + '_' + dateStr;
                             const nameKey = p.username + '_' + dateStr;
-                            const posVal = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                            const posEntry = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
+                            const posVal = typeof posEntry === 'object' ? posEntry.posSales : posEntry;
+                            const posNonTunai = typeof posEntry === 'object' ? posEntry.posNonTunai : undefined;
 
                             unreportedList.push({
                                 id: 'unreported_' + p.id + '_' + dateStr,
@@ -607,62 +646,68 @@ export default function ManajemenLaporanPage() {
                         ) : (
                             <>
                                 <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1850px] border-collapse">
+                                <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1650px] border-collapse">
                                     <colgroup>
-                                        <col style={{ width: '180px' }} />
-                                        <col style={{ width: '95px' }} />
-                                        <col style={{ width: '95px' }} />
-                                        <col style={{ width: '110px' }} />
-                                        <col style={{ width: '135px' }} />
-                                        <col style={{ width: '135px' }} />
-                                        <col style={{ width: '100px' }} />
-                                        <col style={{ width: '80px' }} />
-                                        <col style={{ width: '110px' }} />
-                                        <col style={{ width: '110px' }} />
-                                        <col style={{ width: '140px' }} />
-                                        <col style={{ width: '110px' }} />
                                         <col style={{ width: '160px' }} />
-                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '90px' }} />
+                                        <col style={{ width: '110px' }} />
+                                        <col style={{ width: '130px' }} />
+                                        <col style={{ width: '120px' }} />
+                                        <col style={{ width: '110px' }} />
+                                        <col style={{ width: '105px' }} />
+                                        <col style={{ width: '115px' }} />
+                                        <col style={{ width: '125px' }} />
+                                        <col style={{ width: '125px' }} />
+                                        <col style={{ width: '135px' }} />
+                                        <col style={{ width: '125px' }} />
+                                        <col style={{ width: '125px' }} />
                                         <col style={{ width: '60px' }} />
                                     </colgroup>
-                                    <thead className="text-xs font-bold text-gray-500 uppercase tracking-wider sticky top-0 z-20 border-b border-gray-200">
+                                    <thead className="text-xs font-bold text-gray-700 uppercase tracking-wider sticky top-0 z-20 border-b border-gray-200 bg-gray-100">
                                         <tr>
-                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nama Apotek</th>
-                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Tgl Setor</th>
-                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Tgl Sales</th>
-                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Waktu Kirim</th>
-                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Jenis Laporan</th>
-                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Metode</th>
-                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Deposit Card</th>
-                                            <th className="px-3 py-3 bg-gray-50 sticky top-0 z-20 border-b border-gray-200">KCP</th>
-                                            <th className="px-3 py-3 text-right bg-blue-50 text-blue-700 font-bold sticky top-0 z-20 border-b border-gray-200">Data Sales (Xilnex)</th>
-                                            <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nominal Sales</th>
-                                            <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Potongan Penjualan (Petty Cash)</th>
-                                            <th className="px-3 py-3 text-right bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Nominal Setor</th>
-                                            <th className="px-3 py-3 text-center bg-red-50 text-red-700 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Data Sales (Xilnex) VS Nominal Sales</th>
-                                            <th className="px-3 py-3 text-center bg-orange-50 text-orange-700 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Data Sales (Xilnex) VS Potongan + Nominal Setor</th>
-                                            <th className="px-3 py-3 text-center bg-gray-50 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
+                                            <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Nama Apotek</th>
+                                            <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Tgl Sales</th>
+                                            <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Waktu Kirim</th>
+                                            <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Jenis &amp; Metode</th>
+                                            <th className="px-3 py-3 text-right bg-blue-50 text-blue-900 font-bold sticky top-0 z-20 border-b border-gray-200">Sales Tunai (Xilnex)</th>
+                                            <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Sales Tunai Toko</th>
+                                            <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Potongan Sales</th>
+                                            <th className="px-3 py-3 text-right bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Setoran Tunai Bank</th>
+                                            <th className="px-3 py-3 text-center bg-red-50 text-red-800 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Sales Tunai</th>
+                                            <th className="px-3 py-3 text-center bg-orange-50 text-orange-800 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Setor Bank</th>
+                                            <th className="px-3 py-3 text-right bg-purple-50 text-purple-900 font-bold sticky top-0 z-20 border-b border-gray-200">Sales Non-Tunai (Xilnex)</th>
+                                            <th className="px-3 py-3 text-right bg-blue-50/50 text-blue-900 font-bold sticky top-0 z-20 border-b border-gray-200">Total Non-Tunai Toko</th>
+                                            <th className="px-3 py-3 text-center bg-indigo-50 text-indigo-900 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Non-Tunai</th>
+                                            <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
                                         {paginatedRows.map((row) => {
-                                            const posValAll = row.posVal;
+                                            const badge = getBadge(row.jenis_pelaporan);
+                                            const isAnomali = badge.cls.includes('bg-red-100');
+
                                             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(row.jenis_pelaporan);
+                                            const posValAll = row.posVal;
+                                            const posNonTunaiAll = row.posNonTunai;
+
                                             const posVal1 = isValidTypeForPOS ? posValAll : undefined;
+                                            const posNonTunaiVal = isValidTypeForPOS ? posNonTunaiAll : undefined;
 
                                             const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
                                             const hasPOSAll = posValAll !== undefined && posValAll !== null;
+                                            const hasPOSNonTunai = posNonTunaiVal !== undefined && posNonTunaiVal !== null;
 
                                             const s1 = hasPOS1 ? (row.nominal_jual || 0) - posVal1 : null;
                                             const s2 = hasPOSAll ? ((row.potongan || 0) + (row.nominal_setoran || 0)) - posValAll : null;
+                                            const sNonTunai = hasPOSNonTunai ? (row.total_non_tunai || 0) - posNonTunaiVal : null;
 
                                             return (
-                                                <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (row.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : '')}>
-                                                    <td className="px-3 py-3 font-bold text-gray-900 text-xs break-words" title={row.username}>{row.username}</td>
-                                                    <td className="px-3 py-3 text-gray-600 text-xs">
-                                                        {row.isUnreported ? '-' : new Date(row.tanggal_setor).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (row.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}>
+                                                    <td className="px-3 py-3 font-bold text-gray-900 text-xs break-words" title={row.username}>
+                                                        <div>{row.username}</div>
+                                                        <div className="text-[10px] text-gray-400 font-mono font-normal">({row.kode_toko})</div>
                                                     </td>
-                                                    <td className="px-3 py-3 text-gray-600 text-xs">
+                                                    <td className="px-3 py-3 font-bold text-gray-900 text-xs">
                                                         {row.tanggal_jual ? new Date(row.tanggal_jual).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                                                     </td>
                                                     <td className="px-3 py-3 text-gray-500 text-xs font-mono">
@@ -670,23 +715,33 @@ export default function ManajemenLaporanPage() {
                                                     </td>
                                                     <td className="px-3 py-3 text-xs">
                                                         <div>
-                                                            {renderJenisBadge(row.jenis_pelaporan)}
+                                                            <p className="font-semibold text-gray-800 text-[11px] break-words" title={row.jenis_pelaporan}>{row.jenis_pelaporan}</p>
+                                                            <span className={'inline-block text-[9px] font-bold px-2 py-0.25 rounded-full mt-0.5 ' + badge.cls}>
+                                                                {badge.label}
+                                                            </span>
+                                                            {row.metode_setoran && row.metode_setoran !== '-' && (
+                                                                <span className="block text-[10px] text-gray-400 mt-0.5">{row.metode_setoran}</span>
+                                                            )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-3 py-3 text-xs text-gray-500 break-words" title={row.metode_setoran}>{row.metode_setoran}</td>
-                                                    <td className="px-3 py-3 text-gray-500 text-xs font-mono">{row.nomor_deposit_card || '-'}</td>
-                                                    <td className="px-3 py-3 text-gray-500 text-xs break-words">{row.kcp_terdekat || '-'}</td>
                                                     <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
                                                         {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
                                                     </td>
                                                     <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_jual || 0)}</td>
-                                                    <td className="px-3 py-3 text-right text-gray-500 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.potongan || 0)}</td>
-                                                    <td className="px-3 py-3 text-right font-bold text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_setoran || 0)}</td>
+                                                    <td className="px-3 py-3 text-right text-red-600 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.potongan || 0)}</td>
+                                                    <td className="px-3 py-3 text-right font-bold text-green-700 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_setoran || 0)}</td>
                                                     <td className="px-3 py-3 text-center font-mono text-xs bg-red-50/10">
                                                         {selisihChipNew(s1)}
                                                     </td>
                                                     <td className="px-3 py-3 text-center font-mono text-xs bg-orange-50/10">
                                                         {selisihChipNew(s2)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right text-purple-950 font-mono text-xs bg-purple-50/30 font-bold">
+                                                        {posNonTunaiVal !== undefined ? formatRupiah(posNonTunaiVal) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-bold text-blue-800 font-mono text-xs bg-blue-50/20">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.total_non_tunai || 0)}</td>
+                                                    <td className="px-3 py-3 text-center font-mono text-xs bg-indigo-50/20">
+                                                        {selisihChipNew(sNonTunai)}
                                                     </td>
                                                     <td className="px-3 py-3 text-center">
                                                         {row.isUnreported ? (
@@ -695,7 +750,7 @@ export default function ManajemenLaporanPage() {
                                                             <button
                                                                 title="Lihat Detail"
                                                                 onClick={() => navigate(`/riwayat/${row.id}`)}
-                                                                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white"
+                                                                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-primary-600 hover:bg-orange-50 transition-colors border border-gray-200 bg-white cursor-pointer"
                                                             >
                                                                 <span className="material-symbols-outlined text-base">visibility</span>
                                                             </button>
@@ -705,30 +760,39 @@ export default function ManajemenLaporanPage() {
                                             );
                                         })}
                                     </tbody>
-                                    <tfoot className="bg-gray-100 font-bold border-t-2 border-gray-300 text-gray-900 text-xs sticky bottom-0 z-20">
+                                    <tfoot className="bg-orange-100 font-bold border-t-2 border-orange-300 text-gray-900 text-xs sticky bottom-0 z-20 shadow-md">
                                         <tr>
-                                            <td colSpan="8" className="px-3 py-3 text-left font-bold text-gray-800 uppercase tracking-wider text-[11px]">
-                                                Grand Total
+                                            <td colSpan="4" className="px-3 py-3 text-left font-extrabold text-gray-900 uppercase tracking-wider text-[11px]">
+                                                GRAND TOTAL
                                             </td>
-                                            <td className="px-3 py-3 text-right font-extrabold text-blue-800 font-mono bg-blue-100">
+                                            <td className="px-3 py-3 text-right font-extrabold text-blue-900 font-mono bg-blue-200/60">
                                                 {formatRupiah(totals.totalPosSales)}
                                             </td>
-                                            <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
+                                            <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono">
                                                 {formatRupiah(totals.totalSales)}
                                             </td>
-                                            <td className="px-3 py-3 text-right font-extrabold text-gray-600 font-mono bg-gray-100">
+                                            <td className="px-3 py-3 text-right font-extrabold text-red-700 font-mono">
                                                 {formatRupiah(totals.totalPotongan)}
                                             </td>
-                                            <td className="px-3 py-3 text-right font-extrabold text-gray-900 font-mono bg-gray-100">
+                                            <td className="px-3 py-3 text-right font-extrabold text-green-800 font-mono">
                                                 {formatRupiah(totals.totalSetor)}
                                             </td>
-                                            <td className="px-3 py-3 text-center font-extrabold font-mono bg-red-100">
+                                            <td className="px-3 py-3 text-center font-extrabold font-mono bg-red-200/50">
                                                 {totals.hasAnyPosForTotals ? selisihChipNew(totals.totalSelisih1) : <span className="text-gray-300">-</span>}
                                             </td>
-                                            <td className="px-3 py-3 text-center font-extrabold font-mono bg-orange-100">
-                                                {totals.hasAnyPosForTotals2 ? selisihChipNew(totals.totalSelisih2) : <span className="text-gray-300">-</span>}
+                                            <td className="px-3 py-3 text-center font-extrabold font-mono bg-orange-200/50">
+                                                {totals.hasAnyPosForTotals ? selisihChipNew(totals.totalSelisih2) : <span className="text-gray-300">-</span>}
                                             </td>
-                                            <td className="px-3 py-3 bg-gray-100"></td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-purple-950 font-mono bg-purple-200/60">
+                                                {formatRupiah(totals.totalPosNonTunai)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-blue-900 font-mono bg-blue-200/40">
+                                                {formatRupiah(totals.totalNonTunai)}
+                                            </td>
+                                            <td className="px-3 py-3 text-center font-extrabold font-mono bg-indigo-200/50">
+                                                {totals.hasAnyPosForTotals ? selisihChipNew(totals.totalSelisihNonTunai) : <span className="text-gray-300">-</span>}
+                                            </td>
+                                            <td className="px-3 py-3 bg-orange-100"></td>
                                         </tr>
                                     </tfoot>
                                 </table>
