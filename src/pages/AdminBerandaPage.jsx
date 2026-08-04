@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import AdminLayout from '../components/AdminLayout';
-import { supabase } from '../services/supabaseClient';
+import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import {
     Chart as ChartJS,
@@ -33,6 +33,7 @@ export default function AdminBerandaPage() {
     const { profile } = useAuth();
 
     const [loading, setLoading] = useState(true);
+    const [loadingProgress, setLoadingProgress] = useState(0);
     const [error, setError] = useState(null);
     const [filterPeriod, setFilterPeriod] = useState('last_30');
 
@@ -42,7 +43,8 @@ export default function AdminBerandaPage() {
         potonganPenjualan: 0,
         selisihPerluDiperiksa: 0,
         belumLapor: 0,
-        totalApotek: 0
+        totalApotek: 0,
+        belumLaporLabel: 'Apotek Belum Lapor'
     });
 
     const [chartData, setChartData] = useState(null);
@@ -63,15 +65,21 @@ export default function AdminBerandaPage() {
 
     const fetchDashboardData = async () => {
         setLoading(true);
+        setLoadingProgress(10);
         setError(null);
         try {
-            // 1. Fetch Total Active Users (Role 'User')
-            const { count: totalApotek, error: profileErr } = await supabase
-                .from('profiles')
-                .select('*', { count: 'exact', head: true })
-                .eq('role', 'User');
+            // 1. Fetch Total Active Users & Profiles (Role 'User')
+            const { data: userProfiles, count: totalApotekCount, error: profileErr } = await safeSupabaseQuery(
+                supabase
+                    .from('profiles')
+                    .select('id, username, kode_toko, tanggal_aktif', { count: 'exact' })
+                    .eq('role', 'User'),
+                6000
+            );
 
             if (profileErr) throw profileErr;
+            const totalApotek = totalApotekCount || (userProfiles ? userProfiles.length : 0);
+            setLoadingProgress(25);
 
             // 2. Determine Date Range
             let todayDate = new Date();
@@ -96,58 +104,61 @@ export default function AdminBerandaPage() {
             const startStr = startDate.toLocaleDateString('sv-SE');
             const endStr = todayDate.toLocaleDateString('sv-SE');
 
-            // 3. Sequential Fetch reports - using YYYY-MM-DD local timezone on sales date (tanggal_jual)
+            // Helper for paginated fetch wrapped in safeSupabaseQuery
             const PAGE_SIZE = 1000;
-            const MAX_ROWS = 100000;
-            let allLaporan = [];
-            let from = 0;
-            let done = false;
-
-            while (!done) {
-                const to = from + PAGE_SIZE - 1;
-                const { data: batch, error: laporanErr } = await supabase
-                    .from('laporan')
-                    .select('id, user_id, tanggal_jual, tanggal_setor, nominal_jual, nominal_setoran, potongan')
-                    .gte('tanggal_jual', startStr)
-                    .lte('tanggal_jual', endStr)
-                    .range(from, to);
-
-                if (laporanErr) throw laporanErr;
-
-                const rows = batch || [];
-                allLaporan = allLaporan.concat(rows);
-
-                if (allLaporan.length >= MAX_ROWS || rows.length < PAGE_SIZE) {
-                    done = true;
-                } else {
-                    from += PAGE_SIZE;
+            const fetchLaporanAll = async () => {
+                let all = [];
+                let from = 0;
+                let done = false;
+                while (!done) {
+                    const { data: batch, error: err } = await safeSupabaseQuery(
+                        supabase
+                            .from('laporan')
+                            .select('id, user_id, tanggal_jual, tanggal_setor, nominal_jual, nominal_setoran, potongan, jenis_pelaporan, status')
+                            .gte('tanggal_jual', startStr)
+                            .lte('tanggal_jual', endStr)
+                            .range(from, from + PAGE_SIZE - 1),
+                        8000
+                    );
+                    if (err) throw err;
+                    const rows = batch || [];
+                    all = all.concat(rows);
+                    if (rows.length < PAGE_SIZE) done = true;
+                    else from += PAGE_SIZE;
                 }
-            }
+                return all;
+            };
 
-            // 3.5 Fetch POS Sales Data for the selected period
-            let allPosSales = [];
-            let posFrom = 0;
-            let posDone = false;
-
-            while (!posDone) {
-                const posTo = posFrom + PAGE_SIZE - 1;
-                const { data: posBatch, error: posErr } = await supabase
-                    .from('pos_sales_data')
-                    .select('sales_pos, tanggal_jual')
-                    .gte('tanggal_jual', startStr)
-                    .lte('tanggal_jual', endStr)
-                    .range(posFrom, posTo);
-
-                if (posErr) throw posErr;
-                const posRows = posBatch || [];
-                allPosSales = allPosSales.concat(posRows);
-
-                if (posRows.length < PAGE_SIZE) {
-                    posDone = true;
-                } else {
-                    posFrom += PAGE_SIZE;
+            const fetchPosSalesAll = async () => {
+                let all = [];
+                let from = 0;
+                let done = false;
+                while (!done) {
+                    const { data: batch, error: err } = await safeSupabaseQuery(
+                        supabase
+                            .from('pos_sales_data')
+                            .select('sales_pos, tanggal_jual, kode_cabang')
+                            .gte('tanggal_jual', startStr)
+                            .lte('tanggal_jual', endStr)
+                            .range(from, from + PAGE_SIZE - 1),
+                        8000
+                    );
+                    if (err) throw err;
+                    const rows = batch || [];
+                    all = all.concat(rows);
+                    if (rows.length < PAGE_SIZE) done = true;
+                    else from += PAGE_SIZE;
                 }
-            }
+                return all;
+            };
+
+            // 3. PARALLEL FETCH (laporan + pos_sales_data) -> Cut loading time in half!
+            setLoadingProgress(45);
+            const [allLaporan, allPosSales] = await Promise.all([
+                fetchLaporanAll(),
+                fetchPosSalesAll()
+            ]);
+            setLoadingProgress(75);
 
             // 4. Calculate Metrics & Chart Data
             let sumPosSales = 0;
@@ -156,7 +167,6 @@ export default function AdminBerandaPage() {
             const uniqueReporters = new Set();
             const dailyData = {};
 
-            // Initialize daily data from POS sales
             allPosSales.forEach(item => {
                 const dateKey = item.tanggal_jual;
                 const val = Number(item.sales_pos) || 0;
@@ -167,16 +177,27 @@ export default function AdminBerandaPage() {
                 dailyData[dateKey].sales += val;
             });
 
-            // Process Laporan deposits
+            const primaryTypes = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'];
+            const reportedPrimaryMap = new Map();
+
             allLaporan.forEach(item => {
+                if (item.status === 'Archived' || item.jenis_pelaporan === 'DIHAPUS / DIBATALKAN') return;
+
                 const setoran = Number(item.nominal_setoran) || 0;
                 const potongan = Number(item.potongan) || 0;
 
                 sumSetoran += setoran;
                 sumPotongan += potongan;
-                uniqueReporters.add(item.user_id);
 
-                const dateKey = item.tanggal_jual; // Align on sales date
+                if (primaryTypes.includes(item.jenis_pelaporan)) {
+                    uniqueReporters.add(item.user_id);
+                    if (!reportedPrimaryMap.has(item.user_id)) {
+                        reportedPrimaryMap.set(item.user_id, new Set());
+                    }
+                    reportedPrimaryMap.get(item.user_id).add(item.tanggal_jual);
+                }
+
+                const dateKey = item.tanggal_jual;
                 if (!dailyData[dateKey]) {
                     dailyData[dateKey] = { sales: 0, setoran: 0 };
                 }
@@ -184,23 +205,50 @@ export default function AdminBerandaPage() {
             });
 
             const selisihPerluDiperiksa = sumPosSales - sumSetoran - sumPotongan;
-            const belumLapor = (totalApotek || 0) - uniqueReporters.size;
+
+            // Determine Unreported Outlets Count based on Period context
+            let belumLaporVal = 0;
+            let belumLaporLabel = 'Apotek Belum Lapor';
+
+            if (filterPeriod === 'today' || filterPeriod === 'yesterday') {
+                belumLaporVal = Math.max(0, totalApotek - uniqueReporters.size);
+                belumLaporLabel = `Apotek Belum Lapor (${filterPeriod === 'today' ? 'Hari Ini' : 'Kemarin'})`;
+            } else {
+                // Multi-day range: count unique outlets with missing sales reports in range
+                let storesWithTunggakan = 0;
+                const activeUsers = userProfiles || [];
+                activeUsers.forEach(u => {
+                    const uReportedSet = reportedPrimaryMap.get(u.id);
+                    if (!uReportedSet || uReportedSet.size === 0) {
+                        storesWithTunggakan++;
+                    }
+                });
+                belumLaporVal = storesWithTunggakan;
+                belumLaporLabel = 'Toko Tunggakan Laporan';
+            }
 
             setMetrics({
                 totalSales: sumPosSales,
                 totalSetoran: sumSetoran,
                 potonganPenjualan: sumPotongan,
                 selisihPerluDiperiksa,
-                belumLapor: Math.max(0, belumLapor),
-                totalApotek: totalApotek || 0
+                belumLapor: belumLaporVal,
+                totalApotek: totalApotek || 0,
+                belumLaporLabel
             });
 
+            setLoadingProgress(85);
+
             // Fetch fraud anomalies
-            const { data: anomalies, error: aErr } = await supabase
-                .rpc('detect_missing_primary_sales');
+            const { data: anomalies, error: aErr } = await safeSupabaseQuery(
+                supabase.rpc('detect_missing_primary_sales'),
+                5000
+            );
             if (!aErr) {
                 setFraudAnomalies(anomalies || []);
             }
+
+            setLoadingProgress(95);
 
             // 5. Build Chart Data
             const sortedDates = Object.keys(dailyData).sort();
@@ -232,6 +280,8 @@ export default function AdminBerandaPage() {
                     }
                 ]
             });
+
+            setLoadingProgress(100);
 
         } catch (err) {
             setError(err.message || 'Gagal memuat data dashboard. Coba refresh halaman.');
@@ -404,6 +454,25 @@ export default function AdminBerandaPage() {
                 </div>
             </div>
 
+            {/* Progress Indicator Bar when loading */}
+            {loading && (
+                <div className="bg-white rounded-xl shadow-xs border border-primary-100 p-4 mb-6 animate-pulse">
+                    <div className="flex justify-between items-center text-xs font-bold text-primary-700 mb-2">
+                        <span className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-base animate-spin">sync</span>
+                            Memuat data dashboard...
+                        </span>
+                        <span className="font-mono">{loadingProgress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                        <div 
+                            className="bg-primary-500 h-full transition-all duration-300 rounded-full" 
+                            style={{ width: `${loadingProgress}%` }}
+                        />
+                    </div>
+                </div>
+            )}
+
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
                 {/* Sales */}
@@ -412,7 +481,7 @@ export default function AdminBerandaPage() {
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
-                                Total Sales Tunai (Data Xilnex)
+                                Total Sales Tunai (Xilnex)
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
                             <h3 className="text-xl font-bold text-gray-800 mt-1">
@@ -429,7 +498,7 @@ export default function AdminBerandaPage() {
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
-                                Total Setoran
+                                Total Setoran Bank
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
                             <h3 className="text-xl font-bold text-gray-800 mt-1">
@@ -446,7 +515,7 @@ export default function AdminBerandaPage() {
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
-                                Potongan Penjualan
+                                Potongan Sales (Petty Cash)
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
                             <h3 className="text-xl font-bold text-red-600 mt-1">
@@ -462,8 +531,8 @@ export default function AdminBerandaPage() {
                     <div className={`absolute right-0 top-0 h-full w-1 ${metrics.selisihPerluDiperiksa > 0 ? 'bg-amber-500' : 'bg-green-500'}`}></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
-                                Selisih Perlu Diperiksa
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8" title="Sales Xilnex dikurangi (Total Setoran Bank + Potongan Sales)">
+                                Selisih Sales vs Setoran
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
                             <h3 className={`text-xl font-bold mt-1 ${metrics.selisihPerluDiperiksa > 0 ? 'text-amber-600' : 'text-green-600'}`}>
@@ -478,13 +547,13 @@ export default function AdminBerandaPage() {
                     </div>
                 </div>
 
-                {/* Pending Reporters */}
+                {/* Pending Reporters / Toko Tunggakan */}
                 <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                     <div className="absolute right-0 top-0 h-full w-1 bg-orange-500"></div>
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-start gap-1 h-8">
-                                Apotek Belum Lapor
+                                {metrics.belumLaporLabel || 'Apotek Belum Lapor'}
                                 {loading && <span className="material-symbols-outlined animate-spin text-[10px] text-gray-300">sync</span>}
                             </p>
                             <h3 className="text-xl font-bold text-gray-800 mt-1">
@@ -504,7 +573,7 @@ export default function AdminBerandaPage() {
                             Tren Setoran vs Penjualan
                             {loading && <span className="material-symbols-outlined animate-spin text-lg text-gray-400">sync</span>}
                         </h3>
-                        <p className="text-sm text-gray-500">Perbandingan total penjualan dan uang yang disetor per hari.</p>
+                        <p className="text-sm text-gray-500">Perbandingan Omzet Sales Tunai Xilnex (Garis Orange) vs Realisasi Setoran Bank (Batang Hijau) Per Hari.</p>
                     </div>
                 </div>
                 <div className="relative h-80 w-full flex items-center justify-center">
