@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../services/supabaseClient';
+import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import AutocompleteInput from '../components/AutocompleteInput';
 
 export default function LoginPage() {
@@ -123,6 +123,24 @@ export default function LoginPage() {
         }
     };
 
+    // Stabilized queryFn reference to prevent infinite callback invalidation & race conditions
+    const handleSearchUsernames = useCallback(async (term) => {
+        try {
+            const { data, error } = await safeSupabaseQuery(
+                supabase.rpc('search_usernames', { search_term: term }),
+                5000
+            );
+            if (error) {
+                console.error('[LoginPage] search_usernames error:', error);
+                return [];
+            }
+            return (data || []).map((row) => ({ username: row.username }));
+        } catch (err) {
+            console.warn('[LoginPage] search_usernames timeout/error:', err.message);
+            return [];
+        }
+    }, []);
+
     return (
         <div className="bg-gray-100 flex items-center justify-center min-h-screen font-sans p-4">
             <div className="w-full max-w-sm p-8 space-y-6 bg-white shadow-2xl rounded-2xl">
@@ -142,14 +160,7 @@ export default function LoginPage() {
                         onChange={setUsername}
                         onSelect={(item) => item && setUsername(item.username)}
                         column="username"
-                        queryFn={async (term) => {
-                            const { data, error } = await supabase.rpc('search_usernames', { search_term: term });
-                            if (error) {
-                                console.error('[LoginPage] search_usernames error:', error);
-                                return [];
-                            }
-                            return (data || []).map((row) => ({ username: row.username }));
-                        }}
+                        queryFn={handleSearchUsernames}
                         placeholder="USERNAME"
                         icon="person"
                         minChars={2}

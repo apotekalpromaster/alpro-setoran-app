@@ -51,6 +51,15 @@ export default function AutocompleteInput({
     const [activeIdx, setActiveIdx] = useState(-1);
     const wrapperRef = useRef(null);
     const debounceRef = useRef(null);
+    const searchCounterRef = useRef(0);
+    const isMountedRef = useRef(true);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -67,9 +76,11 @@ export default function AutocompleteInput({
     const search = useCallback(async (term) => {
         if (!term || term.length < minChars) {
             setSuggestions([]);
+            setIsLoading(false);
             return;
         }
 
+        const currentSearchId = ++searchCounterRef.current;
         setIsLoading(true);
         try {
             let results;
@@ -94,12 +105,18 @@ export default function AutocompleteInput({
                 results = data || [];
             }
 
-            setSuggestions(results);
+            if (isMountedRef.current && currentSearchId === searchCounterRef.current) {
+                setSuggestions(results || []);
+            }
         } catch (err) {
             console.error('[AutocompleteInput] Search error:', err.message);
-            setSuggestions([]);
+            if (isMountedRef.current && currentSearchId === searchCounterRef.current) {
+                setSuggestions([]);
+            }
         } finally {
-            setIsLoading(false);
+            if (isMountedRef.current && currentSearchId === searchCounterRef.current) {
+                setIsLoading(false);
+            }
         }
     }, [table, column, selectColumns, extraFilters, minChars, maxResults, queryFn]);
 
