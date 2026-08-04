@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabaseClient';
+import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { formatRupiah } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
@@ -531,13 +531,14 @@ export default function AreaManagerDashboardPage() {
         });
     }, [reports, outlets, posSalesMap, searchTerm, showHighSelisih, selectedJenis, reportsStartDate, reportsEndDate, specialCase]);
 
-    // Grand Totals for report table
+    // Grand Totals for report table (FIXED: extract posSales and posNonTunai from object)
     const tableTotals = useMemo(() => {
         let totalSales = 0;
         let totalPotongan = 0;
         let totalSetor = 0;
         let totalNonTunai = 0;
         let totalPosSales = 0;
+        let totalPosNonTunai = 0;
         const seenOutletDates = new Set();
 
         filteredReports.forEach((r) => {
@@ -555,16 +556,31 @@ export default function AreaManagerDashboardPage() {
 
             const uniqKey = (r.kode_toko || r.username) + '_' + r.tanggal_jual;
             if (posVal !== undefined && posVal !== null && !seenOutletDates.has(uniqKey)) {
-                totalPosSales += Number(posVal);
+                const posSalesNum = typeof posVal === 'object' ? Number(posVal.posSales || 0) : Number(posVal || 0);
+                const posNonTunaiNum = typeof posVal === 'object' ? Number(posVal.posNonTunai || 0) : 0;
+                totalPosSales += posSalesNum;
+                totalPosNonTunai += posNonTunaiNum;
                 seenOutletDates.add(uniqKey);
             }
         });
 
         const totalSelisih1 = totalSales - totalPosSales;
         const totalSelisih2 = (totalPotongan + totalSetor) - totalPosSales;
-        const hasAnyPosForTotals = totalPosSales > 0;
+        const totalSelisihNonTunai = totalNonTunai - totalPosNonTunai;
+        const hasAnyPosForTotals = totalPosSales > 0 || totalPosNonTunai > 0;
 
-        return { totalSales, totalPotongan, totalSetor, totalNonTunai, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals };
+        return { 
+            totalSales, 
+            totalPotongan, 
+            totalSetor, 
+            totalNonTunai, 
+            totalPosSales, 
+            totalPosNonTunai, 
+            totalSelisih1, 
+            totalSelisih2, 
+            totalSelisihNonTunai, 
+            hasAnyPosForTotals 
+        };
     }, [filteredReports, posSalesMap]);
 
     const handleCopyReminder = (outletName, missingDates, id) => {
@@ -747,7 +763,7 @@ export default function AreaManagerDashboardPage() {
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                 <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
                                     <span className="material-symbols-outlined text-indigo-500">table_view</span>
-                                    Pemantauan & Audit Sales Masuk (Berdasarkan Tanggal Penjualan)
+                                    Pemantauan & Audit Sales Harian (Berdasarkan Tanggal Sales)
                                 </h3>
                             </div>
 
