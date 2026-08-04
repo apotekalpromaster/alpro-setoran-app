@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../services/supabaseClient';
+import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
 import {
@@ -72,7 +72,10 @@ export default function RekonsiliasiBankPage() {
 
     const loadStoreProfiles = async () => {
         try {
-            const { data, error } = await supabase.from('profiles').select('username, kode_toko');
+            const { data, error } = await safeSupabaseQuery(
+                supabase.from('profiles').select('username, kode_toko'),
+                6000
+            );
             if (!error && data) setStoreProfiles(data);
         } catch (e) {
             console.error('Error fetching profiles:', e);

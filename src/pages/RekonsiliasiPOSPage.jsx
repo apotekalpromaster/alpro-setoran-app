@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../services/supabaseClient';
+import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
 import * as XLSX from 'xlsx';
@@ -61,7 +61,10 @@ export default function RekonsiliasiPOSPage() {
         let allData = [];
         let page = 0;
         while (true) {
-            const { data, error } = await queryBuilder.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+            const { data, error } = await safeSupabaseQuery(
+                queryBuilder.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1),
+                8000
+            );
             if (error) throw error;
             if (!data || data.length === 0) break;
             allData = [...allData, ...data];
@@ -171,7 +174,7 @@ export default function RekonsiliasiPOSPage() {
 
             setReconData(merged);
         } catch (e) {
-            setError('Gagal memuat data rekonsiliasi: ' + e.message);
+            setError('Gagal memuat data rekonsiliasi: ' + (e.message || 'Koneksi terputus / timeout setelah masa idle. Silakan klik Coba Lagi.'));
         } finally {
             setLoading(false);
         }
@@ -617,6 +620,23 @@ const handleFileChange = (e) => {
                             <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-gray-200 shadow-sm">
                                 <span className="material-symbols-outlined animate-spin text-4xl text-primary-500 mb-2">sync</span>
                                 <p className="text-sm font-semibold text-gray-600">Memuat data rekonsiliasi Xilnex...</p>
+                            </div>
+                        ) : error && reconData.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 px-6 bg-red-50/50 rounded-xl border border-red-200 text-center space-y-4">
+                                <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+                                    <span className="material-symbols-outlined text-2xl">wifi_off</span>
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-red-900 text-sm">Gagal Memuat Data Rekonsiliasi</h4>
+                                    <p className="text-xs text-red-600 mt-1 max-w-md">{error}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={fetchReconciliationData}
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-sm"
+                                >
+                                    <span className="material-symbols-outlined text-base">refresh</span> Coba Lagi
+                                </button>
                             </div>
                         ) : (
                             <>

@@ -102,24 +102,29 @@ export function AuthProvider({ children }) {
         const handleVisibilityChange = async () => {
             if (document.visibilityState === 'visible') {
                 try {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session?.user) {
+                    // Proactively attempt session refresh to clear dormant sockets / expired tokens
+                    const { data: { session }, error: refreshErr } = await supabase.auth.refreshSession();
+                    if (session?.user && !refreshErr) {
                         setUser(session.user);
-                        // Refresh profile if stale or missing
                         const cachedProfile = getCachedItem(PROFILE_CACHE_KEY);
                         if (!cachedProfile || cachedProfile.id !== session.user.id) {
                             await fetchProfile(session.user.id);
                         }
                     } else {
-                        // Session expired after idle → force clean logout
-                        console.warn('Session expired during idle. Forcing logout.');
-                        setUser(null);
-                        setProfile(null);
-                        try {
-                            localStorage.removeItem(USER_CACHE_KEY);
-                            localStorage.removeItem(PROFILE_CACHE_KEY);
-                        } catch (e) {}
-                        setAuthReady(true);
+                        // Fallback check existing session
+                        const { data: { session: existingSession } } = await supabase.auth.getSession();
+                        if (existingSession?.user) {
+                            setUser(existingSession.user);
+                        } else {
+                            console.warn('Session expired during idle. Forcing logout.');
+                            setUser(null);
+                            setProfile(null);
+                            try {
+                                localStorage.removeItem(USER_CACHE_KEY);
+                                localStorage.removeItem(PROFILE_CACHE_KEY);
+                            } catch (e) {}
+                            setAuthReady(true);
+                        }
                     }
                 } catch (e) {
                     console.warn('Background session refresh failed:', e.message);
