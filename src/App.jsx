@@ -1,12 +1,14 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+﻿import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FormWizardProvider } from './context/FormWizardContext';
+import { NotificationProvider } from './context/NotificationContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import LoginPage from './pages/LoginPage';
 import BerandaPage from './pages/BerandaPage';
 import AdminBerandaPage from './pages/AdminBerandaPage';
+import AreaManagerDashboardPage from './pages/AreaManagerDashboardPage';
 
 // Wizard
 import SetoranPage from './pages/SetoranPage';
@@ -22,119 +24,250 @@ import DetailRiwayatPage from './pages/DetailRiwayatPage';
 import ManajemenLaporanPage from './pages/ManajemenLaporanPage';
 import LaporanAnalitikPage from './pages/LaporanAnalitikPage';
 import LaporanPendingPage from './pages/LaporanPendingPage';
+import LaporanBackdatePage from './pages/LaporanBackdatePage';
+
+// Phase 9 (Improvement V2)
+import RekonsiliasiPOSPage from './pages/RekonsiliasiPOSPage';
+import RekonsiliasiBankPage from './pages/RekonsiliasiBankPage';
+import KoreksiLaporanPage from './pages/KoreksiLaporanPage';
+import AreaManagerKoreksiApprovalPage from './pages/AreaManagerKoreksiApprovalPage';
+import AreaManagerTroubleshootingPage from './pages/AreaManagerTroubleshootingPage';
+import TroubleshootingTokoPage from './pages/TroubleshootingTokoPage';
+import TroubleshootingFinancePage from './pages/TroubleshootingFinancePage';
 
 // Phase 8
 import PengaturanPage from './pages/PengaturanPage';
 import BantuanPage from './pages/BantuanPage';
-import BantuanAdminPage from './pages/BantuanAdminPage';
 
-function AppRoutes() {
-  const { user, profile } = useAuth();
+function RootRedirect() {
+  const { user, profile, authReady } = useAuth();
 
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Finance';
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 font-sans">
+        <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
+          <span className="material-symbols-outlined animate-spin text-4xl text-amber-500">sync</span>
+          <span className="text-sm font-semibold text-gray-700">Mengalihkan...</span>
+        </div>
+      </div>
+    );
+  }
 
-  return (
-    <Routes>
-      {/* Login / Root */}
-      <Route
-        path="/"
-        element={
-          user
-            ? <Navigate to={isAdmin ? '/admin' : '/beranda'} replace />
-            : <LoginPage />
-        }
-      />
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-      {/* ===== USER ROUTES ===== */}
-      <Route
-        path="/beranda"
-        element={
-          <ProtectedRoute allowedRoles={['User']}>
-            <BerandaPage />
-          </ProtectedRoute>
-        }
-      />
+  const userRole = (profile?.role || '').toString().trim().toLowerCase();
 
-      {/* Wizard Form — wrap the three steps in a single FormWizardProvider
-          so state (FormWizardContext) is shared and persists across navigation */}
-      <Route
-        path="/setoran/*"
-        element={
-          <ProtectedRoute allowedRoles={['User']}>
-            <FormWizardProvider>
-              <Routes>
-                <Route index element={<SetoranPage />} />
-                <Route path="detail" element={<DetailSetoranPage />} />
-                <Route path="ringkasan" element={<RingkasanPage />} />
-                <Route path="konfirmasi" element={<KonfirmasiPage />} />
-              </Routes>
-            </FormWizardProvider>
-          </ProtectedRoute>
-        }
-      />
+  if (userRole === 'admin' || userRole === 'finance') {
+    return <Navigate to="/admin/beranda" replace />;
+  }
 
-      {/* ===== RIWAYAT ROUTES ===== */}
-      <Route
-        path="/riwayat"
-        element={
-          <ProtectedRoute allowedRoles={['User']}>
-            <RiwayatPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/riwayat/:id"
-        element={
-          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance']}>
-            <DetailRiwayatPage />
-          </ProtectedRoute>
-        }
-      />
+  if (userRole === 'areamanager') {
+    return <Navigate to="/areamanager/dashboard" replace />;
+  }
 
-      {/* ===== ADMIN / FINANCE ROUTES ===== */}
-      <Route
-        path="/admin"
-        element={
-          <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
-            <AdminBerandaPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/admin/laporan" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><ManajemenLaporanPage /></ProtectedRoute>} />
-      <Route path="/admin/analitik" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanAnalitikPage /></ProtectedRoute>} />
-      <Route path="/admin/pending" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><LaporanPendingPage /></ProtectedRoute>} />
-      <Route path="/admin/bantuan" element={<ProtectedRoute allowedRoles={['Admin', 'Finance']}><BantuanAdminPage /></ProtectedRoute>} />
-
-      {/* ===== SHARED ROUTES (User + Admin) ===== */}
-      <Route
-        path="/pengaturan"
-        element={
-          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance']}>
-            <PengaturanPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/bantuan"
-        element={
-          <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance']}>
-            <BantuanPage />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
+  return <Navigate to="/beranda" replace />;
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
-        <AppRoutes />
-      </div>
-    </AuthProvider>
-  );
+      <NotificationProvider>
+        <FormWizardProvider>
+        <Routes>
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* ===== USER / CABANG ROUTES ===== */}
+          <Route
+            path="/beranda"
+            element={
+              <ProtectedRoute allowedRoles={['User']}>
+                <BerandaPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/setoran"
+            element={
+              <ProtectedRoute allowedRoles={['User']}>
+                <SetoranPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/setoran/detail"
+            element={
+              <ProtectedRoute allowedRoles={['User']}>
+                <DetailSetoranPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/setoran/ringkasan"
+            element={
+              <ProtectedRoute allowedRoles={['User']}>
+                <RingkasanPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/setoran/konfirmasi"
+            element={
+              <ProtectedRoute allowedRoles={['User']}>
+                <KonfirmasiPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/riwayat"
+            element={
+              <ProtectedRoute allowedRoles={['User']}>
+                <RiwayatPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/koreksi"
+            element={
+              <ProtectedRoute allowedRoles={['User', 'AreaManager']}>
+                <KoreksiLaporanPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/user/troubleshooting"
+            element={
+              <ProtectedRoute allowedRoles={['User']}>
+                <TroubleshootingTokoPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/riwayat/:id"
+            element={
+              <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance', 'AreaManager']}>
+                <DetailRiwayatPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ===== AREA MANAGER ROUTES ===== */}
+          <Route
+            path="/areamanager/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['AreaManager']}>
+                <AreaManagerDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/areamanager/koreksi-approval"
+            element={
+              <ProtectedRoute allowedRoles={['AreaManager']}>
+                <AreaManagerKoreksiApprovalPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/areamanager/troubleshooting"
+            element={
+              <ProtectedRoute allowedRoles={['AreaManager']}>
+                <AreaManagerTroubleshootingPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ===== ADMIN / FINANCE ROUTES ===== */}
+          <Route
+            path="/admin/beranda"
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
+                <AdminBerandaPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/laporan"
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
+                <ManajemenLaporanPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/analitik"
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
+                <LaporanAnalitikPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/pending"
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
+                <LaporanPendingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/backdate"
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
+                <LaporanBackdatePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/rekonsiliasi"
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
+                <RekonsiliasiPOSPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/rekonsiliasi-bank"
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
+                <RekonsiliasiBankPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/troubleshooting"
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Finance']}>
+                <TroubleshootingFinancePage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ===== SHARED / GLOBAL ROUTES ===== */}
+          <Route
+            path="/pengaturan"
+            element={
+              <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance', 'AreaManager']}>
+                <PengaturanPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/bantuan"
+            element={
+              <ProtectedRoute allowedRoles={['User', 'Admin', 'Finance', 'AreaManager']}>
+                <BantuanPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </FormWizardProvider>
+    </NotificationProvider>
+  </AuthProvider>
+);
 }

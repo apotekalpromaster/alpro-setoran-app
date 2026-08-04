@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AIChatFAB from './AIChatFAB';
+import { useNotification } from '../context/NotificationContext';
+import NotificationDrawer from './NotificationDrawer';
 
 /* ─── Navigation items ──────────────────────────────────────────────────────── */
 const NAV_ITEMS = [
     { label: 'Beranda', icon: 'home', path: '/beranda' },
-    { label: 'Lapor Setoran', icon: 'add_circle', path: '/setoran' },
+    { label: 'Lapor Sales', icon: 'add_circle', path: '/setoran' },
     { label: 'Riwayat Laporan', icon: 'history', path: '/riwayat' },
+    { label: 'Koreksi Laporan', icon: 'edit_note', path: '/koreksi' },
+    { label: 'Tindak Lanjut Selisih', icon: 'sync_problem', path: '/user/troubleshooting' },
     { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
     { label: 'Petunjuk Penggunaan', icon: 'menu_book', path: '/bantuan' },
 ];
@@ -16,8 +20,23 @@ const NAV_ITEMS = [
 
 /* ─── Main UserLayout ───────────────────────────────────────────────────────── */
 export default function UserLayout({ children, title, activeRoute }) {
+    const { unreadKoreksiCount, unreadTroubleshootingCount } = useNotification();
     const { profile, signOut } = useAuth();
     const navigate = useNavigate();
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/login', { replace: true });
+    };
+    const location = useLocation();
+
+    const isAM = profile?.role === 'AreaManager';
+    const items = isAM ? [
+        { label: 'Dashboard AM', icon: 'dashboard', path: '/areamanager/dashboard' },
+        { label: 'Persetujuan Koreksi', icon: 'task_alt', path: '/areamanager/koreksi-approval' },
+        { label: 'Tindak Lanjut Selisih', icon: 'sync_problem', path: '/areamanager/troubleshooting' },
+        { label: 'Pengaturan', icon: 'settings', path: '/pengaturan' },
+        { label: 'Petunjuk Penggunaan', icon: 'menu_book', path: '/bantuan' },
+    ] : NAV_ITEMS;
 
     // sidebarOpen: null = desktop collapsed, false = mobile closed, true = either open
     const [collapsed, setCollapsed] = useState(false); // desktop collapse
@@ -66,7 +85,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                         </div>
                         <div className="min-w-0">
                             <p className="text-xs font-bold text-gray-800 truncate">{profile?.username || 'User'}</p>
-                            <p className="text-xs text-gray-500">{profile?.frekuensi_setoran || 'SETIAP HARI'}</p>
+                            <p className="text-xs text-gray-500">{profile?.role === 'AreaManager' ? 'Area Manager' : (profile?.frekuensi_setoran || 'SETIAP HARI')}</p>
                         </div>
                     </div>
                 )}
@@ -80,15 +99,20 @@ export default function UserLayout({ children, title, activeRoute }) {
 
                 {/* Nav items */}
                 <nav className="flex-1 overflow-y-auto p-2 space-y-1 mt-3">
-                    {NAV_ITEMS.map((item) => {
+                    {items.map((item) => {
                         const isActive = activeRoute === item.path;
                         return (
                             <button
                                 key={item.path}
-                                onClick={() => { navigate(item.path); setMobileOpen(false); }}
+                                onClick={() => {
+    setMobileOpen(false);
+    if (location.pathname !== item.path) {
+        navigate(item.path);
+    }
+}}
                                 title={item.label}
                                 className={`
-                                    w-full flex items-center gap-3 rounded-lg text-sm font-medium transition-colors
+                                    relative w-full flex items-center gap-3 rounded-lg text-sm font-medium text-left transition-colors
                                     ${collapsed ? 'justify-center px-0 py-3' : 'px-4 py-3'}
                                     ${isActive
                                         ? 'bg-orange-50 text-primary-600 font-bold'
@@ -98,7 +122,23 @@ export default function UserLayout({ children, title, activeRoute }) {
                                 <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isActive ? 'text-primary-500' : 'text-gray-400'}`}>
                                     {item.icon}
                                 </span>
-                                {!collapsed && <span className="truncate">{item.label}</span>}
+                                {!collapsed && <span className="text-left truncate flex-1">{item.label}</span>}
+                                {!collapsed && (item.path === '/koreksi' || item.path === '/areamanager/koreksi-approval') && unreadKoreksiCount > 0 && (
+                                    <span className="bg-red-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full flex-shrink-0 animate-pulse">
+                                        {unreadKoreksiCount}
+                                    </span>
+                                )}
+                                {!collapsed && (item.path === '/user/troubleshooting' || item.path === '/areamanager/troubleshooting') && unreadTroubleshootingCount > 0 && (
+                                    <span className="bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full flex-shrink-0 animate-pulse">
+                                        {unreadTroubleshootingCount}
+                                    </span>
+                                )}
+                                {collapsed && (item.path === '/koreksi' || item.path === '/areamanager/koreksi-approval') && unreadKoreksiCount > 0 && (
+                                    <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-red-500 border border-white" />
+                                )}
+                                {collapsed && (item.path === '/user/troubleshooting' || item.path === '/areamanager/troubleshooting') && unreadTroubleshootingCount > 0 && (
+                                    <span className="absolute top-1 right-1 h-2.5 w-2.5 rounded-full bg-amber-500 border border-white" />
+                                )}
                             </button>
                         );
                     })}
@@ -107,7 +147,7 @@ export default function UserLayout({ children, title, activeRoute }) {
                 {/* Logout */}
                 <div className="p-2 border-t border-gray-100">
                     <button
-                        onClick={signOut}
+                        onClick={handleSignOut}
                         title="Keluar"
                         className={`w-full flex items-center gap-3 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors ${collapsed ? 'justify-center px-0 py-3' : 'px-4 py-2.5'}`}
                     >
@@ -140,16 +180,20 @@ export default function UserLayout({ children, title, activeRoute }) {
                         <h1 id="header-title" className="text-base sm:text-xl font-bold text-gray-800">{title}</h1>
                     </div>
 
-                    {/* Username (right side) */}
-                    <div className="flex items-center gap-2.5">
-                        <div className="bg-primary-100 text-primary-700 h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0">
-                            <span className="material-symbols-outlined text-lg">person</span>
-                        </div>
-                        <div className="hidden sm:block min-w-0">
-                            <p className="text-sm font-bold text-gray-800 truncate max-w-[160px]" id="header-username">
-                                {profile?.username || 'User'}
-                            </p>
-                            <p className="text-xs text-gray-400 truncate max-w-[160px]">{profile?.role || 'User'}</p>
+                    {/* Right side: Notification Bell + User Profile */}
+                    <div className="flex items-center gap-3">
+                        <NotificationDrawer />
+                        <div className="h-6 w-px bg-gray-200 hidden sm:block" />
+                        <div className="flex items-center gap-2.5">
+                            <div className="bg-primary-100 text-primary-700 h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span className="material-symbols-outlined text-lg">person</span>
+                            </div>
+                            <div className="hidden sm:block min-w-0">
+                                <p className="text-sm font-bold text-gray-800 truncate max-w-[160px]" id="header-username">
+                                    {profile?.username || 'User'}
+                                </p>
+                                <p className="text-xs text-gray-400 truncate max-w-[160px]">{profile?.role || 'User'}</p>
+                            </div>
                         </div>
                     </div>
                 </header>

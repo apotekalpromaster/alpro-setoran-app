@@ -61,19 +61,11 @@ export default function PengaturanPage() {
     const [profLoading, setProfLoading] = useState(false);
     const [profToast, setProfToast] = useState(null);
 
-    // ─── Notifikasi section ───────────────────────────────────────────────────
-    const [notifForm, setNotifForm] = useState({ email_reminder: true });
-    const [notifLoading, setNotifLoading] = useState(false);
-    const [notifToast, setNotifToast] = useState(null);
-
     useEffect(() => {
         if (profile) {
             setProfForm({
                 kcp_terdekat: profile.kcp_terdekat || '',
                 nomor_deposit_card: profile.nomor_deposit_card || '',
-            });
-            setNotifForm({
-                email_reminder: profile.email_reminder !== false,
             });
         }
     }, [profile]);
@@ -82,11 +74,11 @@ export default function PengaturanPage() {
     const handleChangePw = async (e) => {
         e.preventDefault();
         if (pwForm.next !== pwForm.confirm) {
-            setPwToast({ type: 'error', msg: 'Konfirmasi password baru tidak cocok.' });
+            setPwToast({ type: 'error', msg: 'Konfirmasi kata sandi baru tidak cocok.' });
             return;
         }
         if (pwForm.next.length < 8) {
-            setPwToast({ type: 'error', msg: 'Password baru minimal 8 karakter.' });
+            setPwToast({ type: 'error', msg: 'Kata sandi baru minimal 8 karakter.' });
             return;
         }
         setPwLoading(true);
@@ -97,16 +89,16 @@ export default function PengaturanPage() {
                 email: user?.email,
                 password: pwForm.current,
             });
-            if (signInErr) throw new Error('Password saat ini salah. Periksa kembali.');
+            if (signInErr) throw new Error('Kata sandi saat ini salah. Periksa kembali.');
 
             // Now update password
             const { error: updateErr } = await supabase.auth.updateUser({ password: pwForm.next });
             if (updateErr) throw updateErr;
 
             setPwForm({ current: '', next: '', confirm: '' });
-            setPwToast({ type: 'success', msg: '✅ Password berhasil diperbarui. Silakan login ulang jika sesi berakhir.' });
+            setPwToast({ type: 'success', msg: '✅ Kata sandi berhasil diperbarui. Silakan login ulang jika sesi berakhir.' });
         } catch (err) {
-            setPwToast({ type: 'error', msg: err.message || 'Gagal memperbarui password.' });
+            setPwToast({ type: 'error', msg: err.message || 'Gagal memperbarui kata sandi.' });
         } finally {
             setPwLoading(false);
         }
@@ -134,32 +126,14 @@ export default function PengaturanPage() {
         }
     };
 
-    /* ── Update Preferensi Notifikasi ────────────────────────────────────────── */
-    const handleUpdateNotif = async () => {
-        setNotifLoading(true);
-        setNotifToast(null);
-        try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({ email_reminder: notifForm.email_reminder })
-                .eq('id', profile.id);
-            if (error) throw error;
-            setNotifToast({ type: 'success', msg: '✅ Preferensi notifikasi tersimpan.' });
-        } catch (err) {
-            setNotifToast({ type: 'error', msg: err.message || 'Gagal menyimpan preferensi.' });
-        } finally {
-            setNotifLoading(false);
-        }
-    };
-
     return (
         <UserLayout title="Pengaturan" activeRoute="/pengaturan">
             <div className="max-w-2xl mx-auto space-y-6">
 
                 {/* Header */}
-                <div>
-                    <h1 className="text-2xl font-extrabold text-gray-900">Pengaturan Akun</h1>
-                    <p className="text-gray-500 text-sm mt-1">Kelola keamanan, profil, dan preferensi notifikasi Anda.</p>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h1 className="text-2xl font-black text-gray-900">Pengaturan Akun</h1>
+                    <p className="text-gray-500 text-sm mt-1">Kelola kata sandi akun, data profil, dan nomor deposit card toko Anda.</p>
                 </div>
 
                 {/* ── 1. KEAMANAN KATA SANDI ──────────────────────────────────── */}
@@ -202,7 +176,7 @@ export default function PengaturanPage() {
                         <button
                             type="submit"
                             disabled={pwLoading}
-                            className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto"
+                            className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto text-xs font-extrabold cursor-pointer"
                         >
                             {pwLoading ? (
                                 <><span className="material-symbols-outlined animate-spin text-sm">sync</span> Memperbarui...</>
@@ -221,43 +195,43 @@ export default function PengaturanPage() {
 
                     {/* Read-only info */}
                     <div className="mb-5 p-4 bg-gray-50 rounded-xl text-sm space-y-2 border border-gray-100">
-                        <div className="flex justify-between">
-                            <span className="text-gray-500 font-medium">Nama Pengguna</span>
-                            <span className="font-bold text-gray-800">{profile?.username || '-'}</span>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-500 font-medium text-xs">Nama Pengguna (Kode Toko)</span>
+                            <span className="font-bold text-gray-800 text-xs">{profile?.username || '-'}</span>
                         </div>
-                        <div className="flex justify-between">
-                            <span className="text-gray-500 font-medium">Email</span>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-500 font-medium text-xs">Email Penanggung Jawab</span>
                             <span className="font-mono text-gray-700 text-xs">{user?.email || '-'}</span>
                         </div>
-                        <div className="flex justify-between">
-                            <span className="text-gray-500 font-medium">Peran</span>
-                            <span className="font-bold text-primary-600">{profile?.role || '-'}</span>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-500 font-medium text-xs">Peran Pengguna</span>
+                            <span className="font-bold text-primary-600 text-xs">{profile?.role || '-'}</span>
                         </div>
                     </div>
 
                     <form onSubmit={handleUpdateProfil} className="space-y-4">
-                        <Field label="KCP Terdekat">
+                        <Field label="KCP Bank Terdekat">
                             <input
                                 type="text"
                                 value={profForm.kcp_terdekat}
                                 onChange={(e) => setProfForm(p => ({ ...p, kcp_terdekat: e.target.value.toUpperCase() }))}
-                                placeholder="cth: KCP Mangga Dua"
-                                className="form-input uppercase"
+                                placeholder="cth: KCP MANGGA DUA"
+                                className="form-input uppercase text-xs"
                             />
                         </Field>
-                        <Field label="Nomor Deposit Card">
+                        <Field label="Nomor Deposit Card Toko">
                             <input
                                 type="text"
                                 value={profForm.nomor_deposit_card}
                                 onChange={(e) => setProfForm(p => ({ ...p, nomor_deposit_card: e.target.value.toUpperCase() }))}
-                                placeholder="cth: 4xxx-xxxx-xxxx-7890"
-                                className="form-input font-mono uppercase"
+                                placeholder="cth: 4XXX-XXXX-XXXX-7890"
+                                className="form-input font-mono uppercase text-xs"
                             />
                         </Field>
                         <button
                             type="submit"
                             disabled={profLoading}
-                            className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto"
+                            className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto text-xs font-extrabold cursor-pointer"
                         >
                             {profLoading ? (
                                 <><span className="material-symbols-outlined animate-spin text-sm">sync</span> Menyimpan...</>
@@ -266,43 +240,6 @@ export default function PengaturanPage() {
                             )}
                         </button>
                     </form>
-                </Section>
-
-                {/* ── 3. PREFERENSI NOTIFIKASI ────────────────────────────────── */}
-                <Section title="Preferensi Notifikasi" icon="notifications" color="text-amber-500">
-                    {notifToast && (
-                        <Toast message={notifToast.msg} type={notifToast.type} onClose={() => setNotifToast(null)} />
-                    )}
-                    <div className="space-y-4">
-                        <label className="flex items-start gap-4 cursor-pointer group">
-                            <div className="relative mt-0.5">
-                                <input
-                                    type="checkbox"
-                                    checked={notifForm.email_reminder}
-                                    onChange={(e) => setNotifForm(p => ({ ...p, email_reminder: e.target.checked }))}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-checked:bg-primary-500 rounded-full transition-colors peer-focus:ring-2 ring-primary-300" />
-                                <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform peer-checked:translate-x-5" />
-                            </div>
-                            <div>
-                                <p className="font-semibold text-gray-800 text-sm">Email Pengingat Laporan</p>
-                                <p className="text-xs text-gray-500 mt-0.5">Terima notifikasi email saat Anda belum mengirimkan laporan sesuai jadwal.</p>
-                            </div>
-                        </label>
-
-                        <button
-                            onClick={handleUpdateNotif}
-                            disabled={notifLoading}
-                            className="btn-primary disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto"
-                        >
-                            {notifLoading ? (
-                                <><span className="material-symbols-outlined animate-spin text-sm">sync</span> Menyimpan...</>
-                            ) : (
-                                <><span className="material-symbols-outlined text-sm">save</span> Simpan Preferensi</>
-                            )}
-                        </button>
-                    </div>
                 </Section>
 
                 {/* ── FOOTER INFO ──────────────────────────────────────────────── */}

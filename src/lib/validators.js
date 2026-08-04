@@ -1,4 +1,21 @@
 /**
+ * Formats a Google Drive URL into a direct thumbnail binary URL for <img> tags.
+ * Converts /file/d/FILE_ID/view -> https://drive.google.com/thumbnail?id=FILE_ID&sz=w1000
+ */
+export function formatDriveImageUrl(url) {
+    if (!url || typeof url !== 'string') return url;
+    const trimmed = url.trim();
+    if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
+
+    const match = trimmed.match(/\/file\/d\/([^\/]+)/) || trimmed.match(/[?&]id=([^&]+)/);
+    if (match && match[1]) {
+        const fileId = match[1];
+        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+    }
+    return trimmed;
+}
+
+/**
  * @file validators.js
  * @description Port presisi dari fungsi validateSetoranData() di FormHandler.gs
  * DISCREPANCY_THRESHOLD dipertahankan dari Constants.gs
@@ -9,9 +26,8 @@ export const DISCREPANCY_THRESHOLD = 50000;
 export const JENIS_PELAPORAN_LIST = [
     'Setoran Harian',
     'Setoran 3x Seminggu',
-    'Setoran Sales Dengan Potongan Penjualan',
+    'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)',
     'Setoran Uang Pecahan Kecil',
-    'Setoran Uang Lebih',
     'Pengembalian Petty Cash',
     'Deposit Card Terblokir (Salah Input PIN 3x)',
     'Deposit Card Tertelan Mesin ATM',
@@ -77,7 +93,18 @@ export function validateSetoranData(data) {
         const nominalSetoran = parseRupiah(data.nominalSetoran);
         const potongan = parseRupiah(data.potonganPenjualan);
 
-        if (nominalSetoran <= 0) throw new Error('Nominal setoran harus lebih besar dari 0.');
+        if (nominalSetoran < 0) throw new Error('Nominal setoran tidak boleh negatif.');
+
+        const checkNonNegative = (val, label) => {
+            if (val && parseRupiah(val) < 0) throw new Error(`Nominal ${label} tidak boleh negatif.`);
+        };
+        checkNonNegative(data.bcaDebit, 'BCA Debit');
+        checkNonNegative(data.bcaKredit, 'BCA Kredit');
+        checkNonNegative(data.bcaQris, 'BCA QRIS');
+        checkNonNegative(data.briDebit, 'BRI Debit');
+        checkNonNegative(data.briKredit, 'BRI Kredit');
+        checkNonNegative(data.briQris, 'BRI QRIS');
+        checkNonNegative(data.bankTransfer, 'Bank Transfer');
         if (potongan < 0) throw new Error('Potongan tidak boleh negatif.');
 
         let totalPenjualan = 0;
@@ -87,14 +114,11 @@ export function validateSetoranData(data) {
             totalPenjualan = parseRupiah(data.nominalPenjualan);
         }
 
-        // Khusus "Setoran Uang Lebih": skip math check, bisa lebih dari dana tersedia
-        if (data.jenisPelaporan !== 'Setoran Uang Lebih') {
-            const danaTersedia = totalPenjualan - potongan;
-            if (nominalSetoran > danaTersedia) {
-                throw new Error(
-                    `Nominal setoran (${formatRupiah(nominalSetoran)}) melebihi dana tersedia (${formatRupiah(danaTersedia)}).`
-                );
-            }
+        const danaTersedia = totalPenjualan - potongan;
+        if (nominalSetoran > danaTersedia) {
+            throw new Error(
+                `Nominal setoran (${formatRupiah(nominalSetoran)}) melebihi dana tersedia (${formatRupiah(danaTersedia)}).`
+            );
         }
     }
 }

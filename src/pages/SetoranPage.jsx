@@ -5,7 +5,7 @@ import { useFormWizard } from '../context/FormWizardContext';
 import { JENIS_PELAPORAN_LIST } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
 
-const STEP_INFO = ['Detail Laporan', 'Detail Setoran', 'Ringkasan & Kirim'];
+const STEP_INFO = ['1. Informasi Sales & Metode', '2. Input Nominal & Bukti', '3. Periksa & Kirim'];
 
 export default function SetoranPage() {
     const { profile } = useAuth();
@@ -30,7 +30,6 @@ export default function SetoranPage() {
     };
 
     const showMultiTanggal =
-        formData.jenisPelaporan === 'Setoran 3x Seminggu' ||
         formData.jenisPelaporan === 'Setoran Uang Pecahan Kecil';
 
     const validate = () => {
@@ -69,7 +68,7 @@ export default function SetoranPage() {
     const today = new Date().toISOString().split('T')[0];
 
     return (
-        <UserLayout title="Input Setoran" activeRoute="/setoran">
+        <UserLayout title="Lapor Sales Toko" activeRoute="/setoran">
             <div className="max-w-2xl mx-auto">
                 {/* Progress Bar */}
                 <div className="mb-8">
@@ -90,13 +89,13 @@ export default function SetoranPage() {
 
                 <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-gray-200 space-y-8 animate-slide-in">
                     <div className="text-center border-b border-gray-100 pb-6">
-                        <h2 className="text-lg font-bold text-gray-800">Detail Laporan</h2>
-                        <p className="text-sm text-gray-500 mt-1">Lengkapi data di bawah ini dengan teliti.</p>
+                        <h2 className="text-lg font-bold text-gray-800">Langkah 1: Informasi Sales & Cara Setor</h2>
+                        <p className="text-sm text-gray-500 mt-1">Pilih jenis laporan sales, tanggal penjualan, dan cara penyetoran uang.</p>
                     </div>
 
                     {/* Jenis Pelaporan */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Pelaporan</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Pilih Jenis Pelaporan Sales</label>
                         <select
                             value={formData.jenisPelaporan}
                             onChange={(e) => updateField({ jenisPelaporan: e.target.value })}
@@ -111,7 +110,7 @@ export default function SetoranPage() {
                     {/* Tanggal Penjualan & Setoran */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Penjualan</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Penjualan (Tanggal Sales)</label>
                             <input
                                 type="date" max={today} min="2026-04-01"
                                 value={formData.tanggalPenjualan}
@@ -121,7 +120,7 @@ export default function SetoranPage() {
                             {errors.tanggalPenjualan && <p className="text-red-600 text-xs mt-1">{errors.tanggalPenjualan}</p>}
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Setoran</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Uang Disetorkan ke Bank</label>
                             <input
                                 type="date" max={today} min="2026-04-01"
                                 value={formData.tanggalSetoran}
@@ -167,7 +166,7 @@ export default function SetoranPage() {
 
                     {/* Metode Setoran */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Metode Setoran</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Cara Penyetoran Uang (Metode Setoran)</label>
                         <select
                             value={formData.metodeSetoran}
                             onChange={(e) => updateField({ metodeSetoran: e.target.value })}
@@ -184,7 +183,7 @@ export default function SetoranPage() {
                     {/* Metode Lain (conditional) */}
                     {formData.metodeSetoran === 'Metode Setoran Lain' && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Metode Lain Yang Digunakan</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Sebutkan Cara Penyetoran Lainnya</label>
                             <input
                                 type="text"
                                 value={formData.metodeLain}
@@ -201,7 +200,7 @@ export default function SetoranPage() {
                             type="submit"
                             className="w-full flex justify-center py-3.5 px-4 rounded-lg shadow-lg shadow-primary-500/30 text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 transition-all transform hover:-translate-y-0.5"
                         >
-                            Lanjut ke Detail <span className="material-symbols-outlined ml-2 text-base align-middle">arrow_forward</span>
+                            Lanjut ke Input Nominal (Langkah 2) <span className="material-symbols-outlined ml-2 text-base align-middle">arrow_forward</span>
                         </button>
                     </div>
                 </form>

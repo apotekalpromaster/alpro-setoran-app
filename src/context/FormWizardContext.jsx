@@ -19,6 +19,14 @@ const defaultState = {
     // Step 2 fields
     nominalPenjualan: [],    // array, support multi-tanggal
     potonganPenjualan: '',
+    // Non-cash fields (EDC & Transfer)
+    bcaDebit: '',
+    bcaKredit: '',
+    bcaQris: '',
+    briDebit: '',
+    briKredit: '',
+    briQris: '',
+    bankTransfer: '',
     nominalSetoran: '',
     penjelasan: '',
     nomorDepositCard: '',

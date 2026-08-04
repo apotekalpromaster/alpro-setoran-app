@@ -2,25 +2,39 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function ProtectedRoute({ children, allowedRoles }) {
-    const { user, profile, loading } = useAuth();
+    const { user, profile, authReady } = useAuth();
 
-    if (loading) {
+    // If user is not logged in, redirect immediately without waiting if auth is ready
+    if (!user && authReady) {
+        return <Navigate to="/login" replace />;
+    }
+
+    // Wait until initial auth resolves only if user is unknown
+    if (!authReady && !user) {
         return (
-            <div className="flex h-screen items-center justify-center bg-gray-100">
-                <div className="flex items-center gap-2 text-primary-600">
-                    <span className="material-symbols-outlined animate-spin text-3xl">sync</span>
-                    <span className="font-medium">Memuat...</span>
+            <div className="flex h-screen items-center justify-center bg-gray-100 font-sans">
+                <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
+                    <span className="material-symbols-outlined animate-spin text-4xl text-amber-500">sync</span>
+                    <span className="text-sm font-semibold text-gray-700">Memuat profil pengguna...</span>
                 </div>
             </div>
         );
     }
 
     if (!user) {
-        return <Navigate to="/" replace />;
+        return <Navigate to="/login" replace />;
     }
 
-    if (allowedRoles && profile && !allowedRoles.includes(profile.role)) {
-        return <Navigate to="/" replace />; // Or to a 'Not Authorized' page
+    if (allowedRoles && allowedRoles.length > 0) {
+        const userRole = (profile?.role || '').toString().trim().toLowerCase();
+        const hasPermission = allowedRoles.some(
+            (role) => role.toString().trim().toLowerCase() === userRole
+        );
+
+        if (!hasPermission) {
+            console.warn(`[ProtectedRoute] Access denied. Role "${profile?.role}" is not allowed for this route.`);
+            return <Navigate to="/" replace />;
+        }
     }
 
     return children;

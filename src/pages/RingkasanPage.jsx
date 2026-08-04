@@ -7,7 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { uploadToDrive } from '../services/driveService';
 import UserLayout from '../components/UserLayout';
 
-const STEP_INFO = ['Detail Laporan', 'Detail Setoran', 'Ringkasan & Kirim'];
+const STEP_INFO = ['1. Informasi Sales & Metode', '2. Input Nominal & Bukti', '3. Periksa & Kirim'];
 
 function formatDate(d) {
     return d ? new Date(d).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '-';
@@ -22,7 +22,7 @@ export default function RingkasanPage() {
     const [uploadStatus, setUploadStatus] = useState('');
     const [error, setError] = useState('');
     const [driveWarning, setDriveWarning] = useState('');
-
+    const [lightboxImg, setLightboxImg] = useState(null);
 
     const isNonFinancial = NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan);
 
@@ -37,26 +37,58 @@ export default function RingkasanPage() {
     const nominalSetoran = parseRupiah(formData.nominalSetoran);
     const selisih = danaTersedia - nominalSetoran;
 
+    const totalNonTunai =
+        parseRupiah(formData.bcaDebit) +
+        parseRupiah(formData.bcaKredit) +
+        parseRupiah(formData.bcaQris) +
+        parseRupiah(formData.briDebit) +
+        parseRupiah(formData.briKredit) +
+        parseRupiah(formData.briQris) +
+        parseRupiah(formData.bankTransfer);
+
+    const grandTotalSales = totalPenjualan + totalNonTunai;
+
+    // Mapping label tag slot bukti yang spesifik & mudah dipahami
+    const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(formData.jenisPelaporan);
+    const slotLabels = isSingleProofType
+        ? [
+            "Bukti 1: Dokumentasi Utama",
+            "Bukti 2: Lampiran Pendukung",
+            "Bukti 3: Lampiran Pendukung",
+            "Bukti 4: Foto Pendukung",
+            "Bukti 5: Foto Pendukung"
+          ]
+        : [
+            "Bukti 1: Kutipan Harian Kasir",
+            "Bukti 2: Struk Settlement EDC",
+            "Bukti 3: Struk / Resi Setoran Bank",
+            "Bukti 4: Foto Pendukung",
+            "Bukti 5: Foto Pendukung"
+          ];
+
     const handleKirim = async () => {
-        if (!window.confirm('Kirim laporan sekarang?')) return;
+        if (!window.confirm('Kirim laporan sales sekarang?')) return;
         setIsSubmitting(true);
         setError('');
 
         try {
             // 1. Upload staged files to Google Drive (via Edge Function)
-            //    Strict requirement: If Drive upload fails, fail the entire submission.
             let buktiUrls = [...(formData.buktiUrls || [])];
             if (formData.buktiFiles?.length > 0) {
+                const filesToUpload = formData.buktiFiles.filter(Boolean);
+                let uploadCount = 1;
                 for (let i = 0; i < formData.buktiFiles.length; i++) {
-                    const { file } = formData.buktiFiles[i];
-                    try {
-                        setUploadStatus(`Mengunggah lampiran (${i + 1}/${formData.buktiFiles.length})...`);
-                        const url = await uploadToDrive(file);
-                        if (!url) throw new Error("Gagal mendapatkan URL Google Drive.");
-                        buktiUrls.push(url);
-                    } catch (driveErr) {
-                        // Throw to outer catch block to stop submission and display error
-                        throw new Error(`Gagal saat mengunggah "${file.name}": ${driveErr.message}. Silahkan coba beberapa saat lagi.`);
+                    const item = formData.buktiFiles[i];
+                    if (item && item.file) {
+                        try {
+                            setUploadStatus(`Mengunggah lampiran (${uploadCount}/${filesToUpload.length})...`);
+                            const url = await uploadToDrive(item.file);
+                            if (!url) throw new Error("Gagal mendapatkan URL Google Drive.");
+                            buktiUrls.push(url);
+                            uploadCount++;
+                        } catch (driveErr) {
+                            throw new Error(`Gagal saat mengunggah "${item.file.name}": ${driveErr.message}. Silahkan coba beberapa saat lagi.`);
+                        }
                     }
                 }
                 setUploadStatus('Menyimpan data laporan...');
@@ -79,6 +111,15 @@ export default function RingkasanPage() {
                 waktu_kejadian: formData.waktuKejadian || null,
                 bukti_urls: buktiUrls,
                 kcp_terdekat: formData.kcpTerdekat || null,
+                // Kolom Non-Tunai baru
+                bca_debit: i === 0 ? (parseRupiah(formData.bcaDebit) || 0) : 0,
+                bca_kredit: i === 0 ? (parseRupiah(formData.bcaKredit) || 0) : 0,
+                bca_qris: i === 0 ? (parseRupiah(formData.bcaQris) || 0) : 0,
+                bri_debit: i === 0 ? (parseRupiah(formData.briDebit) || 0) : 0,
+                bri_kredit: i === 0 ? (parseRupiah(formData.briKredit) || 0) : 0,
+                bri_qris: i === 0 ? (parseRupiah(formData.briQris) || 0) : 0,
+                bank_transfer: i === 0 ? (parseRupiah(formData.bankTransfer) || 0) : 0,
+                total_non_tunai: i === 0 ? (totalNonTunai || 0) : 0,
             }));
 
             const { error: insertError } = await supabase.from('laporan').insert(rows);
@@ -90,8 +131,6 @@ export default function RingkasanPage() {
                 formData.jenisPelaporan === 'Deposit Card Terblokir (Salah Input PIN 3x)';
 
             if (isCriticalIssue) {
-                // Jangan pakai 'await' agar berjalan non-blocking di background,
-                // tangkap error silently agar user form tidak terblokir
                 supabase.functions.invoke('send-critical-alert', {
                     body: {
                         cabang: profile?.username || 'Tidak Diketahui',
@@ -108,9 +147,20 @@ export default function RingkasanPage() {
                 state: {
                     success: true,
                     jenisPelaporan: formData.jenisPelaporan,
+                    tanggalPenjualan: formData.tanggalPenjualan,
+                    tanggalPenjualanTambahan: formData.tanggalPenjualanTambahan,
                     tanggalSetoran: formData.tanggalSetoran,
+                    metodeSetoran: formData.metodeSetoran,
+                    metodeLain: formData.metodeLain,
+                    totalPenjualan: totalPenjualan,
+                    potongan: potongan,
                     nominalSetoran: nominalSetoran,
+                    totalNonTunai: totalNonTunai,
+                    grandTotalSales: grandTotalSales,
+                    selisih: selisih,
+                    buktiCount: formData.buktiFiles?.filter(Boolean).length || 0,
                     username: profile?.username,
+                    kodeToko: profile?.kode_toko || profile?.username,
                 },
             });
         } catch (err) {
@@ -123,13 +173,13 @@ export default function RingkasanPage() {
     };
 
     return (
-        <UserLayout title="Ringkasan Laporan" activeRoute="/setoran">
+        <UserLayout title="Lapor Sales Toko" activeRoute="/setoran">
             <div className="max-w-4xl mx-auto">
                 {/* Progress Bar */}
                 <div className="mb-8">
                     <div className="flex items-center justify-between mb-2">
                         {STEP_INFO.map((label, i) => (
-                            <div key={i} className={`flex items-center gap-2 text-xs font-bold text-primary-600`}>
+                            <div key={i} className="flex items-center gap-2 text-xs font-bold text-primary-600">
                                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-500 text-white text-xs font-bold">
                                     {i < 2 ? <span className="material-symbols-outlined text-sm">check</span> : i + 1}
                                 </span>
@@ -143,8 +193,8 @@ export default function RingkasanPage() {
                 </div>
 
                 <div className="text-center mb-8">
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Ringkasan Laporan</h1>
-                    <p className="mt-2 text-gray-500 text-sm">Mohon periksa kembali detail setoran Anda.</p>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Langkah 3: Periksa & Kirim Lapor Sales</h1>
+                    <p className="mt-2 text-gray-500 text-sm">Periksa kembali seluruh angka penjualan dan foto bukti sebelum dikirimkan.</p>
                 </div>
 
                 {driveWarning && (
@@ -165,10 +215,10 @@ export default function RingkasanPage() {
                 )}
 
                 <div className="space-y-6 animate-slide-in">
-                    {/* Informasi Laporan */}
+                    {/* Informasi Laporan Sales */}
                     <section>
                         <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                            <span className="material-symbols-outlined text-primary-500">info</span> Informasi Laporan
+                            <span className="material-symbols-outlined text-primary-500">info</span> Informasi Laporan Sales
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <InfoCard icon="person" label="Nama Pelapor" value={profile?.username || '-'} />
@@ -180,59 +230,116 @@ export default function RingkasanPage() {
                         </div>
                     </section>
 
-                    {/* Rincian Transaksi */}
-                    {!isNonFinancial && nominals.length > 0 && (
+                    {/* Rincian Omset Sales Harian */}
+                    {!isNonFinancial && (
                         <section>
                             <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-green-600">payments</span> Rincian Transaksi
+                                <span className="material-symbols-outlined text-green-600">payments</span> Rincian Omset Sales Harian
                             </h3>
-                            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden px-6 py-4">
+                            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden px-6 py-4 space-y-4">
                                 <table className="w-full border-collapse">
                                     <thead>
                                         <tr>
-                                            <th className="py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-left border-b-2 border-gray-100 w-3/4">Deskripsi</th>
-                                            <th className="py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right border-b-2 border-gray-100 w-1/4">Nominal</th>
+                                            <th className="py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider text-left border-b-2 border-gray-100 w-3/4">Deskripsi Rincian</th>
+                                            <th className="py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider text-right border-b-2 border-gray-100 w-1/4">Nominal</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {/* Sales Tunai */}
                                         {nominals.map((nom, idx) => (
                                             <tr key={idx}>
-                                                <td className="py-3 text-sm text-gray-700 border-b border-gray-50">Penjualan Tgl {formatDate(allDates[idx])}</td>
-                                                <td className="py-3 text-sm text-right font-medium text-gray-900 border-b border-gray-50">{formatRupiah(parseRupiah(nom))}</td>
+                                                <td className="py-2.5 text-sm text-gray-700">Penjualan Tunai Tgl {formatDate(allDates[idx])}</td>
+                                                <td className="py-2.5 text-sm text-right font-medium text-gray-900">{formatRupiah(parseRupiah(nom))}</td>
                                             </tr>
                                         ))}
                                         {potongan > 0 && (
                                             <tr>
-                                                <td className="py-3 text-sm text-red-500">Potongan Penjualan</td>
-                                                <td className="py-3 text-sm text-right font-medium text-red-500">({formatRupiah(potongan)})</td>
+                                                <td className="py-2.5 text-sm text-red-500">Potongan Uang Sales (Top Up Petty Cash)</td>
+                                                <td className="py-2.5 text-sm text-right font-medium text-red-500">({formatRupiah(potongan)})</td>
                                             </tr>
                                         )}
-                                        <tr>
-                                            <td className="py-3 text-sm font-bold text-gray-900 pt-4 border-t border-gray-200">Total Dana Tersedia</td>
-                                            <td className="py-3 text-sm text-right font-bold text-gray-900 pt-4 border-t border-gray-200">{formatRupiah(danaTersedia)}</td>
+                                        <tr className="bg-gray-50/70 font-semibold">
+                                            <td className="py-2 text-sm text-gray-800">Jumlah Setoran Tunai ke Bank</td>
+                                            <td className="py-2 text-sm text-right text-primary-600 font-bold">{formatRupiah(nominalSetoran)}</td>
                                         </tr>
-                                        <tr>
-                                            <td className="py-3 text-sm font-bold text-primary-600 border-none">Total Disetorkan</td>
-                                            <td className="py-3 text-lg text-right font-bold text-primary-600 border-none">{formatRupiah(nominalSetoran)}</td>
+
+                                        {/* Non-Tunai Breakdown */}
+                                        {totalNonTunai > 0 && (
+                                            <>
+                                                <tr className="border-t-2 border-gray-100">
+                                                    <td colSpan={2} className="pt-3 pb-1 text-xs font-bold text-blue-800 uppercase tracking-wider">
+                                                        Penjualan Non-Tunai (EDC & Transfer)
+                                                    </td>
+                                                </tr>
+                                                {parseRupiah(formData.bcaDebit) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BCA Debit</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.bcaDebit))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.bcaKredit) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BCA Kredit</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.bcaKredit))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.bcaQris) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BCA QRIS</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.bcaQris))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.briDebit) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BRI Debit</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.briDebit))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.briKredit) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BRI Kredit</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.briKredit))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.briQris) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• BRI QRIS</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.briQris))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.bankTransfer) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• Transfer Bank</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.bankTransfer))}</td>
+                                                    </tr>
+                                                )}
+                                            </>
+                                        )}
+
+                                        {/* Grand Total */}
+                                        <tr className="border-t-2 border-orange-200 bg-orange-50/50">
+                                            <td className="py-3 text-sm font-extrabold text-orange-950">TOTAL SALES HARIAN (Tunai + Non-Tunai)</td>
+                                            <td className="py-3 text-lg text-right font-black text-orange-600">{formatRupiah(grandTotalSales)}</td>
                                         </tr>
                                     </tbody>
                                 </table>
+
                                 {selisih > 0 && (
-                                    <div className="mt-4 bg-yellow-50 border border-yellow-100 rounded-lg p-3 flex items-center justify-between">
+                                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-yellow-600 text-lg">warning</span>
-                                            <span className="text-yellow-800 font-bold text-xs uppercase tracking-wide">Kurang Setor</span>
+                                            <span className="material-symbols-outlined text-red-600 text-lg">warning</span>
+                                            <span className="text-red-800 font-bold text-xs uppercase tracking-wide">Status Selisih Tunai</span>
                                         </div>
-                                        <span className="text-yellow-900 font-bold text-sm">{formatRupiah(selisih)}</span>
+                                        <span className="text-red-900 font-bold text-sm">Setoran Kurang {formatRupiah(selisih)}</span>
                                     </div>
                                 )}
                                 {selisih < 0 && (
-                                    <div className="mt-4 bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-center justify-between">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <span className="material-symbols-outlined text-blue-600 text-lg">info</span>
-                                            <span className="text-blue-800 font-bold text-xs uppercase tracking-wide">Lebih Setor</span>
+                                            <span className="text-blue-800 font-bold text-xs uppercase tracking-wide">Status Selisih Tunai</span>
                                         </div>
-                                        <span className="text-blue-900 font-bold text-sm">{formatRupiah(Math.abs(selisih))}</span>
+                                        <span className="text-blue-900 font-bold text-sm">Setoran Lebih {formatRupiah(Math.abs(selisih))}</span>
                                     </div>
                                 )}
                             </div>
@@ -260,21 +367,49 @@ export default function RingkasanPage() {
                         </section>
                     )}
 
-                    {/* Bukti Foto */}
-                    {formData.buktiFiles?.length > 0 && (
+                    {/* Bukti Lampiran Foto */}
+                    {formData.buktiFiles?.filter(Boolean).length > 0 && (
                         <section>
-                            <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-blue-500">attach_file</span> Bukti Lampiran
-                            </h3>
-                            <div className="grid grid-cols-3 gap-3">
-                                {formData.buktiFiles.map((f, i) => (
-                                    <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                                        <img src={f.preview} alt={f.name} className="w-full h-full object-cover" />
-                                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1">
-                                            <p className="text-white text-[10px] truncate">Bukti #{i + 1}</p>
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-blue-500">attach_file</span> Bukti Lampiran Foto (Struk & Resi)
+                                </h3>
+                                <span className="text-[11px] font-semibold text-gray-400">Klik foto untuk perbesar</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                                {formData.buktiFiles.map((f, slotIdx) => {
+                                    if (!f) return null;
+                                    const tagLabel = slotLabels[slotIdx] || `Bukti ${slotIdx + 1}`;
+                                    return (
+                                        <div
+                                            key={slotIdx}
+                                            onClick={() => f.preview && setLightboxImg({ url: f.preview, name: f.name, label: tagLabel })}
+                                            className="relative group aspect-[4/3] rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-gray-900 cursor-pointer hover:shadow-md transition-all transform hover:-translate-y-0.5"
+                                        >
+                                            {f.preview ? (
+                                                <img src={f.preview} alt={f.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                            ) : (
+                                                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 p-3 bg-gray-50">
+                                                    <span className="material-symbols-outlined text-4xl text-red-500">picture_as_pdf</span>
+                                                    <span className="text-[11px] font-bold mt-1 text-gray-700 truncate max-w-full" title={f.name}>{f.name}</span>
+                                                </div>
+                                            )}
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent p-3 flex flex-col justify-between opacity-95 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex justify-end">
+                                                    <span className="bg-black/60 backdrop-blur-xs text-white text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1 border border-white/20 font-medium">
+                                                        <span className="material-symbols-outlined text-[13px]">zoom_in</span> Pratinjau
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="inline-block bg-primary-600/90 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-md tracking-wide mb-1 border border-white/10">
+                                                        {tagLabel}
+                                                    </span>
+                                                    <p className="text-gray-200 text-[11px] truncate font-medium drop-shadow-sm" title={f.name}>{f.name}</p>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </section>
                     )}
@@ -294,11 +429,37 @@ export default function RingkasanPage() {
                         {isSubmitting ? (
                             <><span className="material-symbols-outlined animate-spin text-lg">sync</span> {uploadStatus || 'Mengirim...'}</>
                         ) : (
-                            <><span className="material-symbols-outlined text-lg">send</span> Kirim Laporan</>
+                            <><span className="material-symbols-outlined text-lg">send</span> Kirim Lapor Sales</>
                         )}
                     </button>
                 </div>
             </div>
+
+            {/* Modal Lightbox Pratinjau Foto Penuh */}
+            {lightboxImg && (
+                <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setLightboxImg(null)}>
+                    <div className="relative max-w-4xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl space-y-3 p-5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                            <div>
+                                <span className="text-[11px] font-bold text-primary-600 uppercase tracking-wider block">{lightboxImg.label}</span>
+                                <h4 className="font-bold text-gray-900 text-sm truncate max-w-md" title={lightboxImg.name}>{lightboxImg.name}</h4>
+                            </div>
+                            <button onClick={() => setLightboxImg(null)} className="h-9 w-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors">
+                                <span className="material-symbols-outlined text-base">close</span>
+                            </button>
+                        </div>
+                        <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-gray-950 rounded-xl p-2 shadow-inner">
+                            <img src={lightboxImg.url} alt={lightboxImg.name} className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg" />
+                        </div>
+                        <div className="pt-1 flex justify-between items-center text-xs text-gray-500">
+                            <span>Periksa kejelasan angka penjualan pada foto struk di atas.</span>
+                            <button type="button" onClick={() => setLightboxImg(null)} className="btn-secondary py-1.5 px-4 text-xs">
+                                Tutup Pratinjau
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </UserLayout>
     );
 }

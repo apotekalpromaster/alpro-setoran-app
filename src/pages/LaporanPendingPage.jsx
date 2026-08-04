@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
 
 /**
- * LaporanPendingPage — Gap Analysis
+ * LaporanPendingPage â€” Gap Analysis
  *
  * Algorithm:
  * 1. Fetch all active User profiles (with email, frekuensi_setoran)
  * 2. Fetch all laporan tanggal_setor in the selected date range
  * 3. For each business day in the range:
  *    - If a user hasn't submitted any laporan on that day AND
- *    - Their frekuensi_setoran requires a report that day → mark as PENDING
+ *    - Their frekuensi_setoran requires a report that day â†’ mark as PENDING
  * 4. Display list of (user, pending dates) pairs for follow-up
  */
 
@@ -29,7 +29,7 @@ function getDateRange(period) {
     if (period === 'yesterday') { start.setDate(today.getDate() - 1); today.setDate(today.getDate() - 1); }
     else if (period === 'last_7') start.setDate(today.getDate() - 6);
     else if (period === 'last_30') start.setDate(today.getDate() - 29);
-    const fmt = (d) => d.toISOString().split('T')[0];
+    const fmt = (d) => d.toLocaleDateString('sv-SE');
     return { start: fmt(start), end: fmt(today) };
 }
 
@@ -39,7 +39,7 @@ function getBusinessDaysBetween(start, end) {
     const last = new Date(end);
     while (cur <= last) {
         const dow = cur.getDay(); // 0=Sun, 1=Mon...6=Sat
-        if (dow !== 0 && dow !== 6) days.push(cur.toISOString().split('T')[0]);
+        if (dow !== 0 && dow !== 6) days.push(cur.toLocaleDateString('sv-SE'));
         cur.setDate(cur.getDate() + 1);
     }
     return days;
@@ -70,7 +70,31 @@ export default function LaporanPendingPage() {
     const [sendingEmail, setSendingEmail] = useState(false);
     const [emailResult, setEmailResult] = useState('');
 
-    useEffect(() => { loadPendingData(); }, []);
+    // Area Manager filtering states
+    const [areaManagers, setAreaManagers] = useState([]);
+    const [selectedAM, setSelectedAM] = useState('');
+
+    const [sendingAMs, setSendingAMs] = useState({});
+    const [emailAMResults, setEmailAMResults] = useState({});
+
+    useEffect(() => {
+        fetchAreaManagers();
+        loadPendingData();
+    }, []);
+
+    const fetchAreaManagers = async () => {
+        try {
+            const { data, error: err } = await supabase
+                .from('profiles')
+                .select('username, email')
+                .eq('role', 'AreaManager')
+                .order('username');
+            if (err) throw err;
+            setAreaManagers(data || []);
+        } catch (e) {
+            console.error('Gagal mengambil data Area Manager:', e.message);
+        }
+    };
 
     const loadPendingData = async () => {
         const { start, end } = period !== 'custom' ? getDateRange(period) : { start: startDate, end: endDate };
@@ -80,31 +104,54 @@ export default function LaporanPendingPage() {
         setLoading(true); setError(''); setPendingData([]); setEmailResult('');
 
         try {
-            // 1. All active users
+            // 1. All active users (with area_manager)
             const { data: users, error: uErr } = await supabase
                 .from('profiles')
-                .select('id, username, email, frekuensi_setoran')
+                .select('id, username, email, frekuensi_setoran, area_manager')
                 .eq('role', 'User');
             if (uErr) throw uErr;
 
-            // 2. All reports in range
-            const { data: laporanRaw, error: lErr } = await supabase
-                .from('laporan')
-                .select('user_id, tanggal_setor')
-                .gte('tanggal_setor', start)
-                .lte('tanggal_setor', end);
-            if (lErr) throw lErr;
+            // 2. All reports in range (with sequential fetching to prevent truncation)
+            let laporanRaw = [];
+            let rFrom = 0;
+            const limit = 1000;
+            let hasMore = true;
+
+            while (hasMore) {
+                const { data: pageData, error: lErr } = await supabase
+                    .from('laporan')
+                    .select('user_id, tanggal_jual')
+                    .gte('tanggal_jual', start)
+                    .lte('tanggal_jual', end)
+                    .range(rFrom, rFrom + limit - 1);
+                if (lErr) throw lErr;
+
+                laporanRaw = [...laporanRaw, ...pageData];
+                if (pageData.length < limit) {
+                    hasMore = false;
+                } else {
+                    rFrom += limit;
+                }
+            }
 
             // 3. Build a Set<userId_date> of submitted dates
-            const submitted = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_setor}`));
+            const submitted = new Set(laporanRaw.map((r) => `${r.user_id}_${r.tanggal_jual}`));
 
             // 4. Business days in range
             const bizDays = getBusinessDaysBetween(start, end);
 
+            // 4.1 Filter business days to only include dates older than 4 days (tolerance period)
+            const limitDateStr = (() => {
+                const d = new Date();
+                d.setDate(d.getDate() - 4);
+                return d.toLocaleDateString('sv-SE');
+            })();
+            const filteredBizDays = bizDays.filter(day => day < limitDateStr);
+
             // 5. For each user find missing days
             const results = [];
             users.forEach((user) => {
-                const missingDays = bizDays.filter((day) => {
+                const missingDays = filteredBizDays.filter((day) => {
                     const shouldReport = isScheduledDay(day, user.frekuensi_setoran || 'SETIAP HARI');
                     const didReport = submitted.has(`${user.id}_${day}`);
                     return shouldReport && !didReport;
@@ -115,6 +162,7 @@ export default function LaporanPendingPage() {
                         namaToko: user.username,
                         email: user.email,
                         frekuensi: user.frekuensi_setoran || 'SETIAP HARI',
+                        areaManager: user.area_manager || 'Tanpa Area Manager',
                         tanggalBolong: missingDays,
                     });
                 }
@@ -139,11 +187,46 @@ export default function LaporanPendingPage() {
                 body: { pending: pendingData },
             });
             if (err) throw err;
-            setEmailResult(`✅ Selesai! Sukses: ${data?.success ?? '?'}, Gagal: ${data?.failed ?? '?'}`);
+            setEmailResult(`Selesai! Sukses: ${data?.success ?? '?'}, Gagal: ${data?.failed ?? '?'}`);
         } catch (e) {
-            setEmailResult(`❌ Gagal: ${e.message}`);
+            setEmailResult(`Gagal: ${e.message}`);
         } finally {
             setSendingEmail(false);
+        }
+    };
+
+    const handleSendReminderForAM = async (amName, groupOutlets) => {
+        if (!groupOutlets.length) return;
+        
+        // Find the Area Manager's registered email
+        const amInfo = areaManagers.find(am => am.username === amName);
+        const amEmail = amInfo ? amInfo.email : null;
+        
+        const targetEmail = amEmail || 'areamanager@apotekalpro.id';
+        const promptMsg = amEmail 
+            ? `Kirim email pengingat ke Area Manager ${amName} (${amEmail}) untuk ${groupOutlets.length} toko?`
+            : `Area Manager ${amName} tidak memiliki email terdaftar. Kirim email pengingat default ke areamanager@apotekalpro.id?`;
+            
+        if (!window.confirm(promptMsg)) return;
+
+        setSendingAMs(prev => ({ ...prev, [amName]: true }));
+        setEmailAMResults(prev => ({ ...prev, [amName]: '' }));
+        try {
+            const { data, error: err } = await supabase.functions.invoke('send-reminder-emails', {
+                body: { 
+                    recipientEmail: targetEmail,
+                    pending: groupOutlets 
+                },
+            });
+            if (err) throw err;
+            setEmailAMResults(prev => ({ 
+                ...prev, 
+                [amName]: `Sukses: ${data?.success ?? '?'}, Gagal: ${data?.failed ?? '?'}` 
+            }));
+        } catch (e) {
+            setEmailAMResults(prev => ({ ...prev, [amName]: `Gagal: ${e.message}` }));
+        } finally {
+            setSendingAMs(prev => ({ ...prev, [amName]: false }));
         }
     };
 
@@ -155,8 +238,21 @@ export default function LaporanPendingPage() {
                     <div className="flex flex-col md:flex-row items-end gap-4">
                         <div className="flex-1">
                             <label className="block text-xs font-medium text-gray-500 mb-1">Periode</label>
-                            <select value={period} onChange={(e) => setPeriod(e.target.value)} className="form-input bg-gray-50">
+                            <select value={period} onChange={(e) => setPeriod(e.target.value)} className="form-input bg-gray-50 font-semibold cursor-pointer">
                                 {PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                        </div>
+                        <div className="w-full md:w-64">
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Filter Area Manager</label>
+                            <select 
+                                value={selectedAM} 
+                                onChange={(e) => setSelectedAM(e.target.value)} 
+                                className="form-input bg-gray-50 font-semibold cursor-pointer"
+                            >
+                                <option value="">Semua Area Manager</option>
+                                {areaManagers.map(am => (
+                                    <option key={am.username} value={am.username}>{am.username}</option>
+                                ))}
                             </select>
                         </div>
                         {period === 'custom' && (
@@ -171,31 +267,19 @@ export default function LaporanPendingPage() {
                                 </div>
                             </div>
                         )}
-                        <button onClick={loadPendingData} className="btn-primary h-10 px-5 text-sm flex-shrink-0">
+                        <button onClick={loadPendingData} className="btn-primary h-10 px-5 text-sm flex-shrink-0 cursor-pointer">
                             <span className="material-symbols-outlined text-sm">analytics</span> Analisis
                         </button>
                     </div>
                 </div>
 
-                {/* Info bar + Send email */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                {/* Info bar */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex items-center justify-between shadow-xs">
                     <div className="text-sm text-gray-600 flex items-center gap-2">
                         <span className="material-symbols-outlined text-orange-500 align-middle">pending_actions</span>
                         Menampilkan toko yang belum melapor pada:
-                        <span className="font-bold text-gray-900 bg-orange-50 px-2 py-0.5 rounded text-sm ml-1">{periodDisplay || '...'}</span>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                        <button
-                            onClick={handleSendReminder}
-                            disabled={sendingEmail || !pendingData.length}
-                            className="flex items-center gap-2 bg-primary-500 text-white px-5 py-2.5 rounded-lg hover:bg-primary-600 transition-colors shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                        >
-                            {sendingEmail
-                                ? <><span className="material-symbols-outlined animate-spin text-sm">sync</span> Mengirim...</>
-                                : <><span className="material-symbols-outlined text-sm">mail</span> Kirim Email Pengingat</>
-                            }
-                        </button>
-                        {emailResult && <p className="text-xs font-medium text-gray-700">{emailResult}</p>}
+                        <span className="font-bold text-gray-900 bg-orange-50 px-2.5 py-1 rounded-md text-xs ml-1">{periodDisplay || '...'}</span>
+                        <span className="text-[10px] text-gray-400 font-semibold bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-md ml-1">Batas Toleransi: &gt; 4 Hari</span>
                     </div>
                 </div>
 
@@ -211,68 +295,125 @@ export default function LaporanPendingPage() {
                     <div className="flex items-center gap-3 text-red-600 bg-red-50 border border-red-200 p-4 rounded-xl">
                         <span className="material-symbols-outlined">error</span><p className="text-sm">{error}</p>
                     </div>
-                ) : (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        {pendingData.length === 0 ? (
-                            <div className="p-16 text-center">
-                                <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-green-50 mb-4">
-                                    <span className="material-symbols-outlined text-green-500 text-4xl">check_circle</span>
+                ) : (() => {
+                    const filteredPendingData = pendingData.filter(item => {
+                        if (selectedAM && item.areaManager !== selectedAM) return false;
+                        return true;
+                    });
+
+                    // Grouping
+                    const groupedGroups = {};
+                    filteredPendingData.forEach(item => {
+                        const amName = item.areaManager || 'Tanpa Area Manager';
+                        if (!groupedGroups[amName]) {
+                            groupedGroups[amName] = [];
+                        }
+                        groupedGroups[amName].push(item);
+                    });
+
+                    return (
+                        <div className="space-y-6">
+                            {filteredPendingData.length === 0 ? (
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-16 text-center">
+                                    <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-green-50 mb-4">
+                                        <span className="material-symbols-outlined text-green-500 text-4xl">check_circle</span>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-gray-900">Semua Laporan Lengkap!</h3>
+                                    <p className="text-gray-500 mt-1 text-sm">Tidak ada toko yang pending laporan pada periode ini (dengan toleransi &gt; 4 hari).</p>
                                 </div>
-                                <h3 className="text-lg font-bold text-gray-900">Semua Laporan Lengkap!</h3>
-                                <p className="text-gray-500 mt-1 text-sm">Tidak ada toko yang pending laporan pada periode ini.</p>
-                            </div>
-                        ) : (
-                            <>
-                                {/* Red summary banner */}
-                                <div className="bg-red-50 border-b border-red-100 px-6 py-3 flex items-center gap-3">
-                                    <span className="material-symbols-outlined text-red-500">warning</span>
-                                    <p className="text-sm font-bold text-red-700">
-                                        {pendingData.length} toko belum melapor — {pendingData.reduce((s, p) => s + p.tanggalBolong.length, 0)} total hari bolong
-                                    </p>
-                                </div>
-                                <div className="overflow-x-auto custom-scrollbar">
-                                    <table className="w-full text-left border-collapse text-sm">
-                                        <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                                            <tr>
-                                                <th className="px-6 py-4 w-12 text-center">#</th>
-                                                <th className="px-6 py-4">Nama Toko</th>
-                                                <th className="px-6 py-4">Frekuensi</th>
-                                                <th className="px-6 py-4">Email Terdaftar</th>
-                                                <th className="px-6 py-4">Tanggal Belum Lapor</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {pendingData.map((item, idx) => (
-                                                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-6 py-4 text-gray-400 text-center">{idx + 1}</td>
-                                                    <td className="px-6 py-4 font-bold text-gray-900">{item.namaToko}</td>
-                                                    <td className="px-6 py-4 text-xs text-gray-500">{item.frekuensi}</td>
-                                                    <td className="px-6 py-4">
-                                                        {item.email
-                                                            ? <span className="text-gray-700">{item.email}</span>
-                                                            : <span className="text-red-500 italic text-xs flex items-center gap-1"><span className="material-symbols-outlined text-sm">warning</span>Email tidak tersedia</span>
-                                                        }
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex flex-wrap gap-1.5">
-                                                            {item.tanggalBolong.map((tgl) => (
-                                                                <span key={tgl} className="inline-flex items-center bg-red-50 text-red-700 text-xs px-2 py-0.5 rounded-md border border-red-100 font-medium">
-                                                                    <span className="material-symbols-outlined text-[10px] mr-1">calendar_today</span>
-                                                                    {formatDateDisplay(tgl)}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                )}
-            </div>
+                            ) : (
+                                <>
+                                    {/* Red summary banner */}
+                                    <div className="bg-red-50 border border-red-200 px-6 py-4 rounded-xl flex items-center gap-3 shadow-xs">
+                                        <span className="material-symbols-outlined text-red-500 text-2xl">warning</span>
+                                        <p className="text-sm font-bold text-red-700">
+                                            {filteredPendingData.length} toko belum melapor � {filteredPendingData.reduce((s, p) => s + p.tanggalBolong.length, 0)} total hari bolong
+                                        </p>
+                                    </div>
+
+                                    {Object.entries(groupedGroups).map(([amName, groupOutlets]) => (
+                                        <div key={amName} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-slide-in">
+                                            {/* Group Header */}
+                                            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-primary-500">supervisor_account</span>
+                                                    <h3 className="font-bold text-gray-800">
+                                                        Area Manager: <span className="text-primary-600 font-extrabold">{amName}</span>
+                                                        <span className="ml-2 text-xs font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                                                            {groupOutlets.length} Toko
+                                                        </span>
+                                                    </h3>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {emailAMResults[amName] && (
+                                                        <p className="text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-md">
+                                                            {emailAMResults[amName]}
+                                                        </p>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleSendReminderForAM(amName, groupOutlets)}
+                                                        disabled={sendingAMs[amName] || !groupOutlets.length}
+                                                        className="flex items-center gap-1.5 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors font-semibold text-xs disabled:opacity-50 shadow-xs cursor-pointer"
+                                                    >
+                                                        {sendingAMs[amName] ? (
+                                                            <><span className="material-symbols-outlined animate-spin text-xs">sync</span> Mengirim...</>
+                                                        ) : (
+                                                            <><span className="material-symbols-outlined text-xs">mail</span> Kirim Email Pengingat</>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="overflow-x-auto custom-scrollbar">
+                                                <table className="w-full text-left border-collapse text-sm">
+                                                    <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                                                        <tr>
+                                                            <th className="px-6 py-4 w-12 text-center">#</th>
+                                                            <th className="px-6 py-4">Nama Toko</th>
+                                                            <th className="px-6 py-4">Frekuensi</th>
+                                                            <th className="px-6 py-4">Email Terdaftar</th>
+                                                            <th className="px-6 py-4">Tanggal Belum Lapor</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {groupOutlets.map((item, idx) => (
+                                                            <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                                                <td className="px-6 py-4 text-gray-400 text-center">{idx + 1}</td>
+                                                                <td className="px-6 py-4 font-bold text-gray-900">{item.namaToko}</td>
+                                                                <td className="px-6 py-4 text-xs text-gray-500">{item.frekuensi}</td>
+                                                                <td className="px-6 py-4">
+                                                                    {item.email ? (
+                                                                        <span className="text-gray-700">{item.email}</span>
+                                                                    ) : (
+                                                                        <span className="text-red-500 italic text-xs flex items-center gap-1">
+                                                                            <span className="material-symbols-outlined text-sm">warning</span>Email tidak tersedia
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {item.tanggalBolong.map((tgl) => (
+                                                                            <span key={tgl} className="inline-flex items-center bg-red-50 text-red-700 text-xs px-2 py-0.5 rounded-md border border-red-100 font-medium">
+                                                                                <span className="material-symbols-outlined text-[10px] mr-1">calendar_today</span>
+                                                                                {formatDateDisplay(tgl)}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </>
+                            )}
+                        </div>
+                    );
+                })()}            </div>
         </AdminLayout>
     );
 }
+
+

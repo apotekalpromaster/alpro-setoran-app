@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import AutocompleteInput from '../components/AutocompleteInput';
 
 export default function LoginPage() {
@@ -22,7 +22,6 @@ export default function LoginPage() {
             if (!username.trim()) throw new Error('Username tidak boleh kosong.');
 
             // Step 1: Cari email dari username via RPC SECURITY DEFINER
-            // Fungsi ini bypass RLS secara aman agar anon role bisa membaca email
             setStatus({ message: 'Memverifikasi username...', type: 'loading' });
             const { data: emailResult, error: rpcLookupErr } = await supabase
                 .rpc('get_email_by_username', { p_username: username.trim() });
@@ -32,7 +31,6 @@ export default function LoginPage() {
                 throw new Error('Gagal memverifikasi username. Coba lagi beberapa saat.');
             }
 
-            // emailResult is a scalar TEXT (null if not found)
             const resolvedEmail = emailResult ?? null;
 
             if (!resolvedEmail) {
@@ -47,8 +45,7 @@ export default function LoginPage() {
 
             setStatus({ message: 'Login berhasil! Mengalihkan...', type: 'success' });
 
-            // Step 3: Ambil role via RPC untuk menentukan redirect
-            // Menggunakan SECURITY DEFINER agar tidak terkena RLS setelah login
+            // Step 3: Ambil role via RPC / Direct Query untuk menentukan redirect
             let role = null;
             try {
                 const { data: rpcData, error: rpcError } = await supabase
@@ -71,11 +68,15 @@ export default function LoginPage() {
                 role = profileRows?.[0]?.role ?? null;
             }
 
-            // Redirect berdasarkan role, default ke /beranda jika role tidak diketahui
-            if (role === 'Admin' || role === 'Finance') {
-                navigate('/admin');
+            const cleanRole = (role || '').toString().trim().toLowerCase();
+
+            // Redirect berdasarkan role (case-insensitive)
+            if (cleanRole === 'admin' || cleanRole === 'finance') {
+                navigate('/admin/beranda', { replace: true });
+            } else if (cleanRole === 'areamanager') {
+                navigate('/areamanager/dashboard', { replace: true });
             } else {
-                navigate('/beranda');
+                navigate('/beranda', { replace: true });
             }
 
         } catch (err) {
@@ -99,7 +100,6 @@ export default function LoginPage() {
 
         setStatus({ message: 'Mencari akun...', type: 'loading' });
 
-        // Cari email berdasarkan username via RPC (aman, bypass RLS)
         const { data: resolvedEmail, error: lookupErr } = await supabase
             .rpc('get_email_by_username', { p_username: username.trim() });
 
@@ -123,12 +123,29 @@ export default function LoginPage() {
         }
     };
 
+    // Stabilized queryFn reference to prevent infinite callback invalidation & race conditions
+    const handleSearchUsernames = useCallback(async (term) => {
+        try {
+            const { data, error } = await safeSupabaseQuery(
+                supabase.rpc('search_usernames', { search_term: term }),
+                5000
+            );
+            if (error) {
+                console.error('[LoginPage] search_usernames error:', error);
+                return [];
+            }
+            return (data || []).map((row) => ({ username: row.username }));
+        } catch (err) {
+            console.warn('[LoginPage] search_usernames timeout/error:', err.message);
+            return [];
+        }
+    }, []);
+
     return (
         <div className="bg-gray-100 flex items-center justify-center min-h-screen font-sans p-4">
             <div className="w-full max-w-sm p-8 space-y-6 bg-white shadow-2xl rounded-2xl">
                 <div className="text-center">
                     <div className="mx-auto flex justify-center mb-6">
-                        {/* Logo placeholder - assuming logo comes from Google Drive normally, we use a placeholder or local asset in Vite */}
                         <img src="/logo.png" alt="Logo Apotek Alpro" className="h-20 w-auto object-contain transition-transform hover:scale-105" />
                     </div>
                     <h2 className="mt-5 text-3xl font-extrabold text-primary-500">Selamat Datang Kembali</h2>
@@ -138,20 +155,12 @@ export default function LoginPage() {
                 <div className="border-t border-primary-500/30"></div>
 
                 <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
-                    {/* Username field dengan autocomplete dropdown via RPC search_usernames */}
                     <AutocompleteInput
                         value={username}
                         onChange={setUsername}
                         onSelect={(item) => item && setUsername(item.username)}
                         column="username"
-                        queryFn={async (term) => {
-                            const { data, error } = await supabase.rpc('search_usernames', { search_term: term });
-                            if (error) {
-                                console.error('[LoginPage] search_usernames error:', error);
-                                return [];
-                            }
-                            return (data || []).map((row) => ({ username: row.username }));
-                        }}
+                        queryFn={handleSearchUsernames}
                         placeholder="USERNAME"
                         icon="person"
                         minChars={2}
@@ -163,7 +172,6 @@ export default function LoginPage() {
                             style: { textTransform: 'uppercase' },
                         }}
                     />
-
 
                     <div className="relative fade-in">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -185,6 +193,7 @@ export default function LoginPage() {
                             </span>
                         </div>
                     </div>
+
                     <div className="text-right mt-2">
                         <a href="#" onClick={handleForgotPassword} className="text-xs text-primary-500 hover:text-primary-600 font-medium transition-colors">Lupa Password?</a>
                     </div>
@@ -193,7 +202,7 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed"
+                            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
                         >
                             {isLoading ? (
                                 <><span className="material-symbols-outlined animate-spin text-sm align-middle mr-1">sync</span> Memproses...</>
