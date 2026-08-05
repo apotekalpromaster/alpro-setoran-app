@@ -10,6 +10,7 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [status, setStatus] = useState({ message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
+    const [loginStepText, setLoginStepText] = useState('Memproses...');
     const navigate = useNavigate();
     const { signIn } = useAuth();
 
@@ -22,7 +23,7 @@ export default function LoginPage() {
             if (!username.trim()) throw new Error('Username tidak boleh kosong.');
 
             // Step 1: Cari email dari username via RPC SECURITY DEFINER
-            setStatus({ message: 'Memverifikasi username...', type: 'loading' });
+            setLoginStepText('Memverifikasi username...');
             const { data: emailResult, error: rpcLookupErr } = await supabase
                 .rpc('get_email_by_username', { p_username: username.trim() });
 
@@ -38,12 +39,13 @@ export default function LoginPage() {
             }
 
             // Step 2: Login dengan email yang sudah di-resolve
-            setStatus({ message: 'Masuk...', type: 'loading' });
+            setLoginStepText('Memverifikasi kredensial...');
             const { data, error } = await signIn(resolvedEmail, password);
 
             if (error) throw error;
 
-            setStatus({ message: 'Login berhasil! Mengalihkan...', type: 'success' });
+            setLoginStepText('Mengalihkan...');
+            setStatus({ message: 'Login berhasil! Mengalihkan ke beranda...', type: 'success' });
 
             // Step 3: Ambil role via RPC / Direct Query untuk menentukan redirect
             let role = null;
@@ -151,6 +153,33 @@ export default function LoginPage() {
 
                 <div className="border-t border-primary-500/30"></div>
 
+                {/* Alert Banner Box — Placed at the top of the form for maximum visibility */}
+                {status.message && (status.type === 'error' || status.type === 'success') && (
+                    <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs font-semibold shadow-xs transition-all animate-fade-in ${
+                        status.type === 'error'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : 'bg-green-50 text-green-700 border-green-200'
+                    }`}>
+                        <div className="flex items-center gap-2 text-left">
+                            <span className={`material-symbols-outlined text-base flex-shrink-0 ${
+                                status.type === 'error' ? 'text-red-500' : 'text-green-500'
+                            }`}>
+                                {status.type === 'error' ? 'error' : 'check_circle'}
+                            </span>
+                            <span>{status.message}</span>
+                        </div>
+                        {status.type === 'error' && status.canRetry && (
+                            <button
+                                type="button"
+                                onClick={handleLogin}
+                                className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-[11px] shrink-0 cursor-pointer flex items-center gap-1 shadow-xs"
+                            >
+                                <span className="material-symbols-outlined text-xs">refresh</span> Coba Lagi
+                            </button>
+                        )}
+                    </div>
+                )}
+
                 <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
                     <AutocompleteInput
                         value={username}
@@ -202,39 +231,13 @@ export default function LoginPage() {
                             className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-bold text-white bg-primary-500 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
                         >
                             {isLoading ? (
-                                <><span className="material-symbols-outlined animate-spin text-sm align-middle mr-1">sync</span> Memproses...</>
+                                <><span className="material-symbols-outlined animate-spin text-sm align-middle mr-1">sync</span> {loginStepText}</>
                             ) : 'Masuk'}
                         </button>
                     </div>
                 </form>
 
-                {status.message && (
-                    <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs font-semibold shadow-xs transition-all animate-fade-in ${
-                        status.type === 'error'
-                            ? 'bg-red-50 text-red-700 border-red-200'
-                            : status.type === 'success'
-                            ? 'bg-green-50 text-green-700 border-green-200'
-                            : 'bg-orange-50 text-orange-700 border-orange-200'
-                    }`}>
-                        <div className="flex items-center gap-2 text-left">
-                            <span className={`material-symbols-outlined text-base flex-shrink-0 ${
-                                status.type === 'error' ? 'text-red-500' : status.type === 'success' ? 'text-green-500' : 'text-orange-500 animate-spin'
-                            }`}>
-                                {status.type === 'error' ? 'error' : status.type === 'success' ? 'check_circle' : 'sync'}
-                            </span>
-                            <span>{status.message}</span>
-                        </div>
-                        {status.type === 'error' && status.canRetry && (
-                            <button
-                                type="button"
-                                onClick={handleLogin}
-                                className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-[11px] shrink-0 cursor-pointer flex items-center gap-1 shadow-xs"
-                            >
-                                <span className="material-symbols-outlined text-xs">refresh</span> Coba Lagi
-                            </button>
-                        )}
-                    </div>
-                )}
+
 
                 <div className="text-center text-xs text-gray-400 pt-6 border-t border-gray-100 mt-6">
                     <p>&copy; 2025 OSS Department, Apotek Alpro</p>
