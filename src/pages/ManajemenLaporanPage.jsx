@@ -38,6 +38,7 @@ export default function ManajemenLaporanPage() {
     const [showHighSelisih, setShowHighSelisih] = useState(false);
     const [kcpFilter, setKcpFilter] = useState('');
     const [jenisFilter, setJenisFilter] = useState('');
+    const [isAnomalyCollapsed, setIsAnomalyCollapsed] = useState(false);
 
     // Data
     const [rows, setRows] = useState([]);
@@ -323,13 +324,14 @@ export default function ManajemenLaporanPage() {
         );
     }, [filtered, currentPage]);
 
-    // Grand Totals
+    // Grand Totals (FIXED: added totalNonTunai, totalPosNonTunai, & totalSelisihNonTunai)
     const totals = useMemo(() => {
         let totalSales = 0;
         let totalPotongan = 0;
         let totalSetor = 0;
+        let totalNonTunai = 0;
         let totalPosSales = 0;
-        let totalSalesForPos = 0;
+        let totalPosNonTunai = 0;
         const seenOutletDates = new Set();
 
         filtered.forEach((r) => {
@@ -339,25 +341,38 @@ export default function ManajemenLaporanPage() {
             }
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
+            totalNonTunai += Number(r.total_non_tunai || 0);
 
             const posValAll = r.posVal;
             const posVal = isValidTypeForPOS ? posValAll : undefined;
 
             const uniqKey = (r.kode_toko || r.username) + '_' + r.tanggal_jual;
             if (posVal !== undefined && posVal !== null && !seenOutletDates.has(uniqKey)) {
-                totalPosSales += Number(posVal);
-                totalSalesForPos += Number(r.nominal_jual || 0);
+                totalPosSales += Number(posVal || 0);
+                if (r.posNonTunai !== undefined && r.posNonTunai !== null) {
+                    totalPosNonTunai += Number(r.posNonTunai || 0);
+                }
                 seenOutletDates.add(uniqKey);
             }
         });
 
-        // Compare grand total values directly to prevent double-counting of POS sales across multiple report types
         const totalSelisih1 = totalSales - totalPosSales;
         const totalSelisih2 = (totalPotongan + totalSetor) - totalPosSales;
-        const hasAnyPosForTotals = totalPosSales > 0;
-        const hasAnyPosForTotals2 = totalPosSales > 0;
+        const totalSelisihNonTunai = totalNonTunai - totalPosNonTunai;
+        const hasAnyPosForTotals = totalPosSales > 0 || totalPosNonTunai > 0;
 
-        return { totalSales, totalPotongan, totalSetor, totalPosSales, totalSelisih1, totalSelisih2, hasAnyPosForTotals, hasAnyPosForTotals2 };
+        return { 
+            totalSales, 
+            totalPotongan, 
+            totalSetor, 
+            totalNonTunai, 
+            totalPosSales, 
+            totalPosNonTunai, 
+            totalSelisih1, 
+            totalSelisih2, 
+            totalSelisihNonTunai, 
+            hasAnyPosForTotals 
+        };
     }, [filtered]);
 
     // CSV export
@@ -463,7 +478,7 @@ export default function ManajemenLaporanPage() {
                         {/* Search + Autocomplete */}
                         <div className="sm:col-span-2 md:col-span-1 lg:col-span-2">
                             <AutocompleteInput
-                                label="Pencarian Apotek"
+                                label="Pencarian Nama / Kode Cabang"
                                 value={searchTerm}
                                 onChange={handleSearchInput}
                                 onSelect={(item) => item && setSearchTerm(item.username)}
@@ -510,7 +525,7 @@ export default function ManajemenLaporanPage() {
 
                         {/* Date Sampai */}
                         <div>
-                            <label className="block text-xs font-semibold text-gray-500 mb-1">Sampai</label>
+                            <label className="block text-xs font-semibold text-gray-500 mb-1">Sampai Tanggal Sales</label>
                             <input 
                                 type="date" 
                                 value={endDate} 
@@ -544,7 +559,7 @@ export default function ManajemenLaporanPage() {
                                 >
                                     <div className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full shadow-xs transition-transform ${showHighSelisih ? 'translate-x-4' : ''}`} />
                                 </div>
-                                <span className="text-xs font-bold text-gray-700">Tampilkan Selisih &gt; 50rb</span>
+                                <span className="text-xs font-bold text-gray-700">Filter Selisih &gt; Rp 50.000</span>
                             </label>
                         </div>
 
@@ -600,39 +615,62 @@ export default function ManajemenLaporanPage() {
                         </div>
 
                         {(duplicateOutletDates.length > 0 || unreportedOutletDates.length > 0) && (
-                            <div className="mx-6 mt-5 mb-1 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg flex items-start gap-3 animate-fade-in shadow-xs">
-                                <span className="material-symbols-outlined text-red-500 flex-shrink-0 mt-0.5">warning</span>
-                                <div className="w-full">
-                                    <p className="text-xs font-bold text-red-800 uppercase">Pemberitahuan Penting Penjualan Outlet</p>
-                                    
-                                    {duplicateOutletDates.length > 0 && (
-                                        <div className="mt-2">
-                                            <p className="text-xs text-red-700 font-bold">
-                                                Terdapat pelaporan tanggal sales duplikat untuk:
+                            <div className="mx-6 mt-5 mb-1 bg-red-50 border border-red-200 border-l-4 border-l-red-500 rounded-lg overflow-hidden animate-fade-in shadow-2xs">
+                                <div 
+                                    onClick={() => setIsAnomalyCollapsed(p => !p)}
+                                    className="p-3.5 flex items-center justify-between cursor-pointer select-none hover:bg-red-100/50 transition-colors"
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        <span className="material-symbols-outlined text-red-500 text-xl flex-shrink-0">warning</span>
+                                        <div>
+                                            <p className="text-xs font-bold text-red-800 uppercase">Peringatan Anomali &amp; Tunggakan Laporan Outlet</p>
+                                            <p className="text-[10px] text-red-600">
+                                                {isAnomalyCollapsed ? 'Klik untuk melihat rincian tanggal duplikat dan apotek belum lapor.' : 'Terdeteksi tangal duplikat atau tunggakan laporan sales.'}
                                             </p>
-                                            <ul className="list-disc list-inside text-xs text-red-700 mt-1 font-semibold">
-                                                {duplicateOutletDates.map((d, i) => (
-                                                    <li key={i}>{d.username} pada tanggal {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</li>
-                                                ))}
-                                            </ul>
                                         </div>
-                                    )}
-
-                                    {unreportedOutletDates.length > 0 && (
-                                        <div className="mt-3">
-                                            <p className="text-xs text-red-700 font-bold">
-                                                Apotek belum melaporkan penjualan (sales) untuk tanggal berikut:
-                                            </p>
-                                            <ul className="list-disc list-inside text-xs text-red-700 mt-1 font-semibold max-h-32 overflow-y-auto custom-scrollbar">
-                                                {unreportedOutletDates.map((d, i) => (
-                                                    <li key={i}>{d.username} pada tanggal {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                    
-                                    <p className="text-[10px] text-red-600 mt-2 font-medium">Harap periksa apakah ada kesalahan penginputan tanggal atau kelalaian pelaporan pada outlet bersangkutan.</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="h-7 w-7 flex items-center justify-center rounded-lg bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-transform shadow-2xs"
+                                        aria-label={isAnomalyCollapsed ? 'Tampilkan' : 'Sembunyikan'}
+                                    >
+                                        <span className="material-symbols-outlined text-base">
+                                            {isAnomalyCollapsed ? 'expand_more' : 'expand_less'}
+                                        </span>
+                                    </button>
                                 </div>
+
+                                {!isAnomalyCollapsed && (
+                                    <div className="px-4 pb-4 pt-1 border-t border-red-100/80 space-y-3">
+                                        {duplicateOutletDates.length > 0 && (
+                                            <div>
+                                                <p className="text-xs text-red-800 font-bold">
+                                                    Terdapat pelaporan tanggal sales duplikat untuk:
+                                                </p>
+                                                <ul className="list-disc list-inside text-xs text-red-700 mt-1 font-semibold">
+                                                    {duplicateOutletDates.map((d, i) => (
+                                                        <li key={i}>{d.username} pada tanggal {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {unreportedOutletDates.length > 0 && (
+                                            <div>
+                                                <p className="text-xs text-red-800 font-bold">
+                                                    Apotek belum melaporkan penjualan (sales) untuk tanggal berikut:
+                                                </p>
+                                                <ul className="list-disc list-inside text-xs text-red-700 mt-1 font-semibold max-h-32 overflow-y-auto custom-scrollbar">
+                                                    {unreportedOutletDates.map((d, i) => (
+                                                        <li key={i}>{d.username} pada tanggal {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        
+                                        <p className="text-[10px] text-red-600 font-medium">Harap periksa apakah ada kesalahan penginputan tanggal atau kelalaian pelaporan pada outlet bersangkutan.</p>
+                                    </div>
+                                )}
                             </div>
                         )}
                         {filtered.length === 0 ? (
