@@ -72,7 +72,7 @@ export default function AreaManagerDashboardPage() {
     const [tempStartDate, setTempStartDate] = useState(defaultStart());
     const [tempEndDate, setTempEndDate] = useState(defaultEnd());
     const [showHighSelisih, setShowHighSelisih] = useState(false);
-    const [isTunggakanCollapsed, setIsTunggakanCollapsed] = useState(false);
+    const [isTunggakanCollapsed, setIsTunggakanCollapsed] = useState(true);
     const [selectedJenis, setSelectedJenis] = useState([]);
     const [showJenisDropdown, setShowJenisDropdown] = useState(false);
     const [specialCase, setSpecialCase] = useState('');
