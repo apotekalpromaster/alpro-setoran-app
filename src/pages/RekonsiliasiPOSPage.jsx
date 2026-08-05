@@ -34,6 +34,8 @@ export default function RekonsiliasiPOSPage() {
     const [parsedData, setParsedData] = useState([]);
     const [fileName, setFileName] = useState('');
     const [profilesForLookup, setProfilesForLookup] = useState([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(100);
 
     useEffect(() => {
         fetchBranches();
@@ -183,10 +185,18 @@ export default function RekonsiliasiPOSPage() {
     const filteredReconData = useMemo(() => {
         return reconData.filter(item => {
             const matchBranch = !selectedBranch || item.branch === selectedBranch;
-            const matchStatus = statusFilter === 'All' || item.status === statusFilter;
+            const matchStatus = statusFilter === 'All' || 
+                (statusFilter === 'Selisih' ? (item.status1 === 'Selisih' || item.status2 === 'Selisih') : item.status1 === statusFilter);
             return matchBranch && matchStatus;
         });
     }, [reconData, selectedBranch, statusFilter]);
+
+    const totalPages = itemsPerPage > 0 ? Math.ceil(filteredReconData.length / itemsPerPage) : 1;
+    const paginatedReconData = useMemo(() => {
+        if (itemsPerPage === 0) return filteredReconData;
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredReconData.slice(start, start + itemsPerPage);
+    }, [filteredReconData, currentPage, itemsPerPage]);
 
     const stats = useMemo(() => {
         let total = reconData.length;
@@ -206,17 +216,53 @@ export default function RekonsiliasiPOSPage() {
     }, [reconData]);
 
     const grandTotals = useMemo(() => {
-        return filteredReconData.reduce((acc, item) => {
+        const totals = filteredReconData.reduce((acc, item) => {
             acc.posSales += item.posSales || 0;
             acc.reportSales += item.reportSales || 0;
             acc.reportSetoran += item.reportSetoran || 0;
             acc.reportPotongan += item.reportPotongan || 0;
             acc.setoranPlusPotongan += item.setoranPlusPotongan || 0;
-            acc.delta1 += item.delta1 || 0;
-            acc.delta2 += item.delta2 || 0;
             return acc;
-        }, { posSales: 0, reportSales: 0, reportSetoran: 0, reportPotongan: 0, setoranPlusPotongan: 0, delta1: 0, delta2: 0 });
+        }, { posSales: 0, reportSales: 0, reportSetoran: 0, reportPotongan: 0, setoranPlusPotongan: 0 });
+
+        const delta1 = totals.posSales - totals.reportSales;
+        const delta2 = totals.posSales - totals.setoranPlusPotongan;
+
+        return { ...totals, delta1, delta2 };
     }, [filteredReconData]);
+
+    const downloadCSV = () => {
+        if (!filteredReconData.length) return;
+        const header = 'Tanggal Jual,Nama Cabang,Sales Xilnex,Sales Manual,Potongan,Nominal Setoran,Selisih 1,Status 1,Selisih 2,Status 2\n';
+        const body = filteredReconData.map((item) => {
+            const s1Lbl = { Cocok: 'Cocok', Selisih: 'Selisih', BelumLapor: 'Belum Lapor', BelumPOS: 'POS Kosong' }[item.status1] || '-';
+            const s2Lbl = { Cocok: 'Cocok', Selisih: 'Selisih', BelumLapor: 'Belum Lapor', BelumPOS: 'POS Kosong' }[item.status2] || '-';
+            return [
+                item.date,
+                `"${item.branch}"`,
+                item.hasPOS ? item.posSales : '',
+                item.hasReport ? item.reportSales : '',
+                item.hasReport ? item.reportPotongan : '',
+                item.hasReport ? item.reportSetoran : '',
+                item.delta1,
+                `"${s1Lbl}"`,
+                item.delta2,
+                `"${s2Lbl}"`
+            ].join(',');
+        }).join('\n');
+
+        const timestamp = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+        let footer = `\n\n# Total Baris: ${filteredReconData.length}\n# Tanggal Ekspor: ${timestamp} WIB\n`;
+        footer += `# Filter - Cabang: ${selectedBranch || 'Semua'}, Status: ${statusFilter}, Periode: ${startDate} s/d ${endDate}\n`;
+
+        const blob = new Blob([header + body + footer], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Rekonsiliasi_Xilnex_${startDate}_${endDate}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
 
 // ============================================================
@@ -588,30 +634,42 @@ const handleFileChange = (e) => {
                                         disabled={loading}
                                     >
                                         <option value="All">Semua Status</option>
-                                        <option value="Cocok">Cocok (Sesuai)</option>
-                                        <option value="Selisih">Selisih (Mismatch)</option>
-                                        <option value="BelumLapor">Laporan Belum Diinput</option>
-                                        <option value="BelumPOS">POS Belum Diupload</option>
+                                        <option value="Cocok">Cocok / Sesuai</option>
+                                        <option value="Selisih">Selisih (Sales / Setoran)</option>
+                                        <option value="BelumLapor">Belum Lapor (Laporan Toko Kosong)</option>
+                                        <option value="BelumPOS">Data Xilnex Belum Upload</option>
                                     </select>
                                 </div>
                             </div>
-                            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                                <button
-                                    type="button"
-                                    onClick={handleResetFilter}
-                                    disabled={loading}
-                                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                                >
-                                    <span className="material-symbols-outlined text-sm">restart_alt</span> Reset Filter
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleApplyFilter}
-                                    disabled={loading}
-                                    className="bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-                                >
-                                    <span className="material-symbols-outlined text-sm">search</span> Terapkan Filter
-                                </button>
+                            <div className="flex justify-between items-center gap-2 pt-2 border-t border-gray-100 flex-wrap">
+                                <div>
+                                    <button
+                                        type="button"
+                                        onClick={downloadCSV}
+                                        disabled={loading || !filteredReconData.length}
+                                        className="bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">download</span> Ekspor CSV
+                                    </button>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleResetFilter}
+                                        disabled={loading}
+                                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">restart_alt</span> Reset Filter
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleApplyFilter}
+                                        disabled={loading}
+                                        className="bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">search</span> Terapkan Filter
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -697,11 +755,11 @@ const handleFileChange = (e) => {
                                                 {filteredReconData.length === 0 ? (
                                                     <tr><td colSpan="10" className="py-10 text-center text-gray-400">Tidak ada data rekonsiliasi yang cocok dengan kriteria filter.</td></tr>
                                                 ) : (
-                                                    filteredReconData.map((item, idx) => {
+                                                    paginatedReconData.map((item, idx) => {
                                                         const rowCls2 = (item.status1 === "Selisih" || item.status2 === "Selisih") ? "bg-red-50/30" : item.status1 === "BelumLapor" ? "bg-yellow-50/20" : "";
                                                         const B = (s, theme) => {
                                                             const col = s === "Cocok" ? "bg-green-50 text-green-700 border-green-200" : s === "Selisih" ? (theme === "orange" ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-red-50 text-red-700 border-red-200") : s === "BelumLapor" ? "bg-yellow-50 text-yellow-700 border-yellow-200" : "bg-gray-100 text-gray-600 border-gray-300";
-                                                            const lbl = {Cocok:"Cocok",Selisih:"Selisih",BelumLapor:"Blm Lapor",BelumPOS:"Xilnex Ksg"}[s] || "-";
+                                                            const lbl = {Cocok:"Cocok",Selisih:"Selisih",BelumLapor:"Belum Lapor",BelumPOS:"POS Kosong"}[s] || "-";
                                                             return <span className={"px-2 py-0.5 text-[10px] font-bold rounded-full border " + col}>{lbl}</span>;
                                                         };
                                                         const D = (v) => v === 0 ? <span className="text-gray-400">Rp 0</span> : <span className={v > 0 ? "text-blue-600" : "text-red-600"}>{(v > 0 ? "+" : "") + formatRupiah(v)}</span>;
@@ -736,6 +794,53 @@ const handleFileChange = (e) => {
                                                 </tr>
                                             </tfoot>
                                         </table>
+                                    </div>
+
+                                    {/* Pagination Controls */}
+                                    <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-gray-600 font-medium">
+                                                Menampilkan {itemsPerPage > 0 ? `${Math.min((currentPage - 1) * itemsPerPage + 1, filteredReconData.length)} - ${Math.min(currentPage * itemsPerPage, filteredReconData.length)}` : filteredReconData.length} dari <strong className="text-gray-800">${filteredReconData.length}</strong> baris
+                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <label className="text-[11px] text-gray-500 font-semibold">Tampilkan:</label>
+                                                <select
+                                                    value={itemsPerPage}
+                                                    onChange={(e) => {
+                                                        setItemsPerPage(Number(e.target.value));
+                                                        setCurrentPage(1);
+                                                    }}
+                                                    className="form-input py-1 px-2 text-xs bg-white cursor-pointer border border-gray-300 rounded-md"
+                                                >
+                                                    <option value={50}>50 baris</option>
+                                                    <option value={100}>100 baris</option>
+                                                    <option value={250}>250 baris</option>
+                                                    <option value={0}>Semua baris</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {totalPages > 1 && (
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                                    disabled={currentPage === 1}
+                                                    className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                                                >
+                                                    Sebelumnya
+                                                </button>
+                                                <span className="px-3 text-xs font-bold text-gray-600">
+                                                    Halaman {currentPage} dari {totalPages}
+                                                </span>
+                                                <button
+                                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                                    disabled={currentPage === totalPages}
+                                                    className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                                                >
+                                                    Berikutnya
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </>
