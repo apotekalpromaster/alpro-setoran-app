@@ -641,23 +641,42 @@ const handleFileChange = (e) => {
                                     </select>
                                 </div>
                             </div>
-                            <div className="flex justify-between items-center gap-2 pt-2 border-t border-gray-100 flex-wrap">
-                                <div>
+                            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 pt-3 border-t border-gray-100">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <button
                                         type="button"
                                         onClick={downloadCSV}
                                         disabled={loading || !filteredReconData.length}
-                                        className="bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                                        className="bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-xs cursor-pointer"
                                     >
                                         <span className="material-symbols-outlined text-sm">download</span> Ekspor CSV
                                     </button>
+
+                                    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 h-8">
+                                        <span className="material-symbols-outlined text-gray-400 text-sm">table_rows</span>
+                                        <label className="text-xs text-gray-600 font-bold whitespace-nowrap">Tampilkan:</label>
+                                        <select
+                                            value={itemsPerPage}
+                                            onChange={(e) => {
+                                                setItemsPerPage(Number(e.target.value));
+                                                setCurrentPage(1);
+                                            }}
+                                            className="bg-transparent text-xs font-bold text-gray-800 cursor-pointer focus:outline-none pr-1"
+                                        >
+                                            <option value={50}>50 baris</option>
+                                            <option value={100}>100 baris</option>
+                                            <option value={250}>250 baris</option>
+                                            <option value={0}>Semua baris</option>
+                                        </select>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2">
+
+                                <div className="flex items-center gap-2">
                                     <button
                                         type="button"
                                         onClick={handleResetFilter}
                                         disabled={loading}
-                                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                        className="flex-1 sm:flex-initial bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
                                     >
                                         <span className="material-symbols-outlined text-sm">restart_alt</span> Reset Filter
                                     </button>
@@ -665,7 +684,7 @@ const handleFileChange = (e) => {
                                         type="button"
                                         onClick={handleApplyFilter}
                                         disabled={loading}
-                                        className="bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                                        className="flex-1 sm:flex-initial bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-xs cursor-pointer"
                                     >
                                         <span className="material-symbols-outlined text-sm">search</span> Terapkan Filter
                                     </button>
@@ -730,25 +749,25 @@ const handleFileChange = (e) => {
                                         </div>
                                     )}
 
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200 text-left">
-                                            <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                                <tr className="border-b border-gray-200">
-                                                    <th className="py-3 px-4 whitespace-nowrap" rowSpan="2">Tanggal Jual</th>
-                                                    <th className="py-3 px-4 whitespace-nowrap" rowSpan="2">Nama Cabang</th>
-                                                    <th className="py-3 px-4 text-right whitespace-nowrap bg-blue-50 text-blue-700" rowSpan="2">Sales Xilnex</th>
-                                                    <th className="py-3 px-4 text-center text-purple-700 bg-purple-50" colSpan="3">Data Laporan Manual</th>
-                                                    <th className="py-3 px-4 text-center text-red-700 bg-red-50" colSpan="2">Selisih POS vs Sales Manual</th>
-                                                    <th className="py-3 px-4 text-center text-orange-700 bg-orange-50" colSpan="2">Selisih POS vs Setoran+Potongan</th>
+                                    <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
+                                        <table className="min-w-full divide-y divide-gray-200 text-left border-collapse">
+                                            <thead className="text-xs font-bold uppercase tracking-wider sticky top-0 z-20 bg-gray-100 border-b border-gray-200">
+                                                <tr>
+                                                    <th className="py-3 px-4 whitespace-nowrap bg-gray-100 sticky top-0 z-20 border-b border-gray-200 text-gray-700" rowSpan="2">Tanggal Jual</th>
+                                                    <th className="py-3 px-4 whitespace-nowrap bg-gray-100 sticky top-0 z-20 border-b border-gray-200 text-gray-700" rowSpan="2">Nama Cabang</th>
+                                                    <th className="py-3 px-4 text-right whitespace-nowrap bg-blue-100 text-blue-900 sticky top-0 z-20 border-b border-gray-200 font-bold" rowSpan="2">Sales Xilnex</th>
+                                                    <th className="py-3 px-4 text-center text-purple-900 bg-purple-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="3">Data Laporan Manual</th>
+                                                    <th className="py-3 px-4 text-center text-red-900 bg-red-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="2">Selisih POS vs Sales Manual</th>
+                                                    <th className="py-3 px-4 text-center text-orange-900 bg-orange-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="2">Selisih POS vs Setoran+Potongan</th>
                                                 </tr>
                                                 <tr className="border-b-2 border-gray-300">
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-600">Sales Manual</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-600">Potongan</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-600">Nominal Setoran</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-red-50 text-red-500">Selisih 1</th>
-                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-red-50 text-red-500">Status 1</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-orange-50 text-orange-500">Selisih 2</th>
-                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-orange-50 text-orange-500">Status 2</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-800 sticky top-[38px] z-20 border-b border-gray-200">Sales Manual</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-800 sticky top-[38px] z-20 border-b border-gray-200">Potongan</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-800 sticky top-[38px] z-20 border-b border-gray-200">Nominal Setoran</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-red-50 text-red-800 sticky top-[38px] z-20 border-b border-gray-200">Selisih 1</th>
+                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-red-50 text-red-800 sticky top-[38px] z-20 border-b border-gray-200">Status 1</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-orange-50 text-orange-800 sticky top-[38px] z-20 border-b border-gray-200">Selisih 2</th>
+                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-orange-50 text-orange-800 sticky top-[38px] z-20 border-b border-gray-200">Status 2</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
@@ -780,7 +799,7 @@ const handleFileChange = (e) => {
                                                     })
                                                 )}
                                             </tbody>
-                                            <tfoot className="bg-gray-100 border-t-2 border-gray-400 text-xs font-bold text-gray-800">
+                                            <tfoot className="bg-gray-100 border-t-2 border-gray-400 text-xs font-bold text-gray-800 sticky bottom-0 z-20 shadow-md">
                                                 <tr>
                                                     <td className="py-3 px-4" colSpan="2">Grand Total ({filteredReconData.length} baris)</td>
                                                     <td className="py-3 px-4 text-right font-mono bg-blue-100">{formatRupiah(grandTotals.posSales)}</td>
@@ -798,44 +817,28 @@ const handleFileChange = (e) => {
 
                                     {/* Pagination Controls */}
                                     <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-xs text-gray-600 font-medium">
-                                                Menampilkan {itemsPerPage > 0 ? `${Math.min((currentPage - 1) * itemsPerPage + 1, filteredReconData.length)} - ${Math.min(currentPage * itemsPerPage, filteredReconData.length)}` : filteredReconData.length} dari <strong className="text-gray-800">${filteredReconData.length}</strong> baris
-                                            </span>
-                                            <div className="flex items-center gap-1.5">
-                                                <label className="text-[11px] text-gray-500 font-semibold">Tampilkan:</label>
-                                                <select
-                                                    value={itemsPerPage}
-                                                    onChange={(e) => {
-                                                        setItemsPerPage(Number(e.target.value));
-                                                        setCurrentPage(1);
-                                                    }}
-                                                    className="form-input py-1 px-2 text-xs bg-white cursor-pointer border border-gray-300 rounded-md"
-                                                >
-                                                    <option value={50}>50 baris</option>
-                                                    <option value={100}>100 baris</option>
-                                                    <option value={250}>250 baris</option>
-                                                    <option value={0}>Semua baris</option>
-                                                </select>
-                                            </div>
-                                        </div>
+                                        <span className="text-xs text-gray-600 font-semibold">
+                                            Menampilkan {itemsPerPage > 0 ? `${Math.min((currentPage - 1) * itemsPerPage + 1, filteredReconData.length)} - ${Math.min(currentPage * itemsPerPage, filteredReconData.length)}` : filteredReconData.length} dari <strong className="text-gray-800 font-extrabold">${filteredReconData.length}</strong> total baris
+                                        </span>
 
                                         {totalPages > 1 && (
-                                            <div className="flex items-center gap-1">
+                                            <div className="flex items-center gap-1.5">
                                                 <button
+                                                    type="button"
                                                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                                     disabled={currentPage === 1}
-                                                    className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                                                    className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs"
                                                 >
                                                     Sebelumnya
                                                 </button>
                                                 <span className="px-3 text-xs font-bold text-gray-600">
-                                                    Halaman {currentPage} dari {totalPages}
+                                                    Halaman <strong className="text-gray-900">{currentPage}</strong> dari <strong className="text-gray-900">{totalPages}</strong>
                                                 </span>
                                                 <button
+                                                    type="button"
                                                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                                     disabled={currentPage === totalPages}
-                                                    className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                                                    className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs"
                                                 >
                                                     Berikutnya
                                                 </button>
