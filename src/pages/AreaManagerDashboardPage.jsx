@@ -72,6 +72,7 @@ export default function AreaManagerDashboardPage() {
     const [tempStartDate, setTempStartDate] = useState(defaultStart());
     const [tempEndDate, setTempEndDate] = useState(defaultEnd());
     const [showHighSelisih, setShowHighSelisih] = useState(false);
+    const [isTunggakanCollapsed, setIsTunggakanCollapsed] = useState(false);
     const [selectedJenis, setSelectedJenis] = useState([]);
     const [showJenisDropdown, setShowJenisDropdown] = useState(false);
     const [specialCase, setSpecialCase] = useState('');
@@ -700,61 +701,83 @@ export default function AreaManagerDashboardPage() {
                             />
                         </div>
 
-                        {/* WARNING PANEL: TUNGGAKAN OUTLET */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                            <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                                <div>
-                                    <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-amber-500">warning</span>
-                                        Daftar Tunggakan Laporan Sales
-                                    </h3>
-                                    <p className="text-[10px] text-gray-400 mt-0.5">Daftar tanggal penjualan (sales) yang belum dilaporkan/disetor oleh masing-masing outlet binaan Anda.</p>
+                        {/* WARNING PANEL: TUNGGAKAN OUTLET (ACCORDION STRUCTURE) */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all">
+                            <div 
+                                onClick={() => setIsTunggakanCollapsed(p => !p)}
+                                className="px-5 py-3.5 bg-gray-50/70 hover:bg-gray-100/80 transition-colors flex items-center justify-between cursor-pointer select-none border-b border-gray-100"
+                            >
+                                <div className="flex items-center gap-2.5">
+                                    <span className="material-symbols-outlined text-amber-500 text-xl">warning</span>
+                                    <div>
+                                        <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                                            Daftar Tunggakan Laporan Sales
+                                        </h3>
+                                        <p className="text-[10px] text-gray-400">
+                                            {isTunggakanCollapsed ? 'Klik untuk membuka rincian cabang yang menunggak.' : 'Daftar tanggal penjualan (sales) yang belum dilaporkan/disetor.'}
+                                        </p>
+                                    </div>
                                 </div>
-                                <span className="text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-0.5 rounded-full">
-                                    {outletTunggakanList.length} Cabang Menunggak
-                                </span>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-full shadow-2xs">
+                                        {outletTunggakanList.length} Cabang Menunggak
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="h-8 w-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-gray-800 shadow-2xs transition-transform"
+                                        aria-label={isTunggakanCollapsed ? 'Tampilkan' : 'Sembunyikan'}
+                                    >
+                                        <span className="material-symbols-outlined text-lg">
+                                            {isTunggakanCollapsed ? 'expand_more' : 'expand_less'}
+                                        </span>
+                                    </button>
+                                </div>
                             </div>
 
-                            {outletTunggakanList.length === 0 ? (
-                                <div className="p-10 text-center space-y-2">
-                                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-green-50 border border-green-100 text-green-500 mb-2">
-                                        <span className="material-symbols-outlined text-2xl">check</span>
-                                    </div>
-                                    <p className="text-gray-700 font-bold text-sm">Semua Toko Disiplin Lapor!</p>
-                                    <p className="text-xs text-gray-400">Tidak ada tunggakan laporan harian di wilayah binaan Anda untuk saat ini.</p>
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto custom-scrollbar">
-                                    {outletTunggakanList.map((o) => (
-                                        <div key={o.id} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50/50 transition-colors">
-                                            <div className="space-y-1.5 flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-gray-900 text-sm">{o.username}</span>
-                                                    <span className="text-[10px] text-gray-400 font-mono">({o.kode_toko || '-'})</span>
-                                                </div>
-                                                <div className="flex flex-wrap gap-1 items-center">
-                                                    <span className="text-xs text-gray-500 mr-1.5 font-semibold">Tgl Penjualan Belum Lapor:</span>
-                                                    {o.missingDates.map((d, idx) => (
-                                                        <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-600 border border-red-100">
-                                                            {d.formatted}
-                                                        </span>
-                                                    ))}
-                                                </div>
+                            {!isTunggakanCollapsed && (
+                                <>
+                                    {outletTunggakanList.length === 0 ? (
+                                        <div className="p-8 text-center space-y-2">
+                                            <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-green-50 border border-green-100 text-green-500 mb-1">
+                                                <span className="material-symbols-outlined text-xl">check</span>
                                             </div>
-                                            <button 
-                                                onClick={() => handleCopyReminder(o.username, o.missingDates, o.id)}
-                                                className={`w-full sm:w-auto h-8 px-4 flex items-center justify-center gap-1.5 text-xs font-bold rounded-lg border transition-all shadow-xs whitespace-nowrap flex-shrink-0 cursor-pointer ${
-                                                    copiedId === o.id 
-                                                        ? 'bg-green-50 border-green-200 text-green-700'
-                                                        : 'bg-primary-600 border-primary-700 text-white hover:bg-primary-700'
-                                                }`}
-                                            >
-                                                <span className="material-symbols-outlined text-sm">{copiedId === o.id ? 'check' : 'chat'}</span>
-                                                {copiedId === o.id ? 'Teks Tersalin & Membuka WA' : 'Colek Via WA'}
-                                            </button>
+                                            <p className="text-gray-700 font-bold text-sm">Semua Toko Disiplin Lapor!</p>
+                                            <p className="text-xs text-gray-400">Tidak ada tunggakan laporan harian di wilayah binaan Anda untuk saat ini.</p>
                                         </div>
-                                    ))}
-                                </div>
+                                    ) : (
+                                        <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto custom-scrollbar animate-fade-in">
+                                            {outletTunggakanList.map((o) => (
+                                                <div key={o.id} className="p-3.5 px-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:bg-gray-50/50 transition-colors">
+                                                    <div className="space-y-1 flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-gray-900 text-sm">{o.username}</span>
+                                                            <span className="text-[10px] text-gray-400 font-mono">({o.kode_toko || '-'})</span>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-1 items-center">
+                                                            <span className="text-xs text-gray-500 mr-1.5 font-semibold">Tgl Penjualan Belum Lapor:</span>
+                                                            {o.missingDates.map((d, idx) => (
+                                                                <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-600 border border-red-100">
+                                                                    {d.formatted}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleCopyReminder(o.username, o.missingDates, o.id)}
+                                                        className={`w-full sm:w-auto h-8 px-3.5 flex items-center justify-center gap-1.5 text-xs font-bold rounded-lg border transition-all shadow-2xs whitespace-nowrap flex-shrink-0 cursor-pointer ${
+                                                            copiedId === o.id 
+                                                                ? 'bg-green-50 border-green-200 text-green-700'
+                                                                : 'bg-primary-600 border-primary-700 text-white hover:bg-primary-700'
+                                                        }`}
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">{copiedId === o.id ? 'check' : 'chat'}</span>
+                                                        {copiedId === o.id ? 'Teks Tersalin & Membuka WA' : 'Colek Via WA'}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
 
