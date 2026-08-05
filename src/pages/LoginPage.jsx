@@ -81,12 +81,15 @@ export default function LoginPage() {
 
         } catch (err) {
             console.error('[LoginPage] Login error:', err);
+            const isTimeout = err.message?.includes('Timeout') || err.message?.includes('Waktu permintaan') || err.message?.includes('Failed to fetch');
             const friendlyMsg = err.message?.includes('Invalid login credentials')
-                ? 'Username atau kata sandi salah.'
+                ? 'Username atau kata sandi salah. Periksa kembali entri Anda.'
+                : isTimeout
+                ? 'Waktu permintaan habis (Timeout). Periksa koneksi internet Anda.'
                 : err.message?.includes('Database error')
                 ? 'Terjadi gangguan koneksi database. Coba lagi beberapa saat.'
                 : err.message || 'Login gagal. Hubungi administrator.';
-            setStatus({ message: friendlyMsg, type: 'error' });
+            setStatus({ message: friendlyMsg, type: 'error', canRetry: isTimeout });
             setIsLoading(false);
         }
     };
@@ -125,20 +128,14 @@ export default function LoginPage() {
 
     // Stabilized queryFn reference to prevent infinite callback invalidation & race conditions
     const handleSearchUsernames = useCallback(async (term) => {
-        try {
-            const { data, error } = await safeSupabaseQuery(
-                supabase.rpc('search_usernames', { search_term: term }),
-                5000
-            );
-            if (error) {
-                console.error('[LoginPage] search_usernames error:', error);
-                return [];
-            }
-            return (data || []).map((row) => ({ username: row.username }));
-        } catch (err) {
-            console.warn('[LoginPage] search_usernames timeout/error:', err.message);
-            return [];
+        const { data, error } = await safeSupabaseQuery(
+            supabase.rpc('search_usernames', { search_term: term }),
+            5000
+        );
+        if (error) {
+            throw error;
         }
+        return (data || []).map((row) => ({ username: row.username }));
     }, []);
 
     return (
@@ -211,9 +208,33 @@ export default function LoginPage() {
                     </div>
                 </form>
 
-                <div className={`text-center text-sm font-bold h-4 mt-2 ${status.type === 'error' ? 'text-red-600' : status.type === 'success' ? 'text-green-600' : 'text-orange-500 animate-pulse'}`}>
-                    {status.message}
-                </div>
+                {status.message && (
+                    <div className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs font-semibold shadow-xs transition-all animate-fade-in ${
+                        status.type === 'error'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : status.type === 'success'
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : 'bg-orange-50 text-orange-700 border-orange-200'
+                    }`}>
+                        <div className="flex items-center gap-2 text-left">
+                            <span className={`material-symbols-outlined text-base flex-shrink-0 ${
+                                status.type === 'error' ? 'text-red-500' : status.type === 'success' ? 'text-green-500' : 'text-orange-500 animate-spin'
+                            }`}>
+                                {status.type === 'error' ? 'error' : status.type === 'success' ? 'check_circle' : 'sync'}
+                            </span>
+                            <span>{status.message}</span>
+                        </div>
+                        {status.type === 'error' && status.canRetry && (
+                            <button
+                                type="button"
+                                onClick={handleLogin}
+                                className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-[11px] shrink-0 cursor-pointer flex items-center gap-1 shadow-xs"
+                            >
+                                <span className="material-symbols-outlined text-xs">refresh</span> Coba Lagi
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 <div className="text-center text-xs text-gray-400 pt-6 border-t border-gray-100 mt-6">
                     <p>&copy; 2025 OSS Department, Apotek Alpro</p>

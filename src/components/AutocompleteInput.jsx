@@ -48,6 +48,7 @@ export default function AutocompleteInput({
 }) {
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [searchError, setSearchError] = useState('');
     const [activeIdx, setActiveIdx] = useState(-1);
     const wrapperRef = useRef(null);
     const debounceRef = useRef(null);
@@ -82,6 +83,7 @@ export default function AutocompleteInput({
 
         const currentSearchId = ++searchCounterRef.current;
         setIsLoading(true);
+        setSearchError('');
         try {
             let results;
 
@@ -107,11 +109,14 @@ export default function AutocompleteInput({
 
             if (isMountedRef.current && currentSearchId === searchCounterRef.current) {
                 setSuggestions(results || []);
+                setSearchError('');
             }
         } catch (err) {
             console.error('[AutocompleteInput] Search error:', err.message);
             if (isMountedRef.current && currentSearchId === searchCounterRef.current) {
                 setSuggestions([]);
+                const isTimeout = err.message?.includes('Timeout') || err.message?.includes('Waktu permintaan') || err.message?.includes('Failed to fetch');
+                setSearchError(isTimeout ? 'Gagal memuat rekomendasi (Timeout koneksi). Silakan ketik username lengkap Anda.' : 'Gagal memuat rekomendasi pencarian.');
             }
         } finally {
             if (isMountedRef.current && currentSearchId === searchCounterRef.current) {
@@ -124,6 +129,7 @@ export default function AutocompleteInput({
         const val = e.target.value.toUpperCase();
         onChange?.(val);
         setActiveIdx(-1);
+        setSearchError('');
 
         clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
@@ -163,6 +169,7 @@ export default function AutocompleteInput({
         onChange?.('');
         onSelect?.(null);
         setSuggestions([]);
+        setSearchError('');
         setActiveIdx(-1);
     };
 
@@ -215,6 +222,14 @@ export default function AutocompleteInput({
             {value.length > 0 && value.length < minChars && (
                 <p className="text-xs text-gray-400 mt-1">
                     Ketik minimal {minChars} huruf untuk memulai pencarian...
+                </p>
+            )}
+
+            {/* Search error hint */}
+            {searchError && (
+                <p className="text-xs text-amber-600 font-medium mt-1 flex items-start gap-1">
+                    <span className="material-symbols-outlined text-xs mt-0.5">warning</span>
+                    <span>{searchError}</span>
                 </p>
             )}
 
