@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFormWizard } from '../context/FormWizardContext';
 import { parseRupiah, formatRupiah, NON_FINANCIAL_TYPES } from '../lib/validators';
-import { supabase } from '../services/supabaseClient';
+import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { uploadToDrive } from '../services/driveService';
 import UserLayout from '../components/UserLayout';
 
@@ -72,29 +72,26 @@ export default function RingkasanPage() {
         setError('');
 
         try {
-            // 1. Upload staged files to Google Drive (via Edge Function)
+            // 1. Upload staged files to Google Drive in parallel for speed & resilience
             let buktiUrls = [...(formData.buktiUrls || [])];
             if (formData.buktiFiles?.length > 0) {
-                const filesToUpload = formData.buktiFiles.filter(Boolean);
-                let uploadCount = 1;
-                for (let i = 0; i < formData.buktiFiles.length; i++) {
-                    const item = formData.buktiFiles[i];
-                    if (item && item.file) {
-                        try {
-                            setUploadStatus(`Mengunggah lampiran (${uploadCount}/${filesToUpload.length})...`);
-                            const url = await uploadToDrive(item.file);
-                            if (!url) throw new Error("Gagal mendapatkan URL Google Drive.");
-                            buktiUrls.push(url);
-                            uploadCount++;
-                        } catch (driveErr) {
-                            throw new Error(`Gagal saat mengunggah "${item.file.name}": ${driveErr.message}. Silahkan coba beberapa saat lagi.`);
-                        }
+                const filesToUpload = formData.buktiFiles.filter(item => item && item.file);
+                if (filesToUpload.length > 0) {
+                    setUploadStatus(`Mengunggah ${filesToUpload.length} lampiran foto...`);
+                    try {
+                        const uploadPromises = filesToUpload.map(item => uploadToDrive(item.file));
+                        const uploadedUrls = await Promise.all(uploadPromises);
+                        uploadedUrls.forEach(url => {
+                            if (url) buktiUrls.push(url);
+                        });
+                    } catch (driveErr) {
+                        throw new Error(`Gagal saat mengunggah lampiran foto: ${driveErr.message}. Silakan coba beberapa saat lagi.`);
                     }
                 }
                 setUploadStatus('Menyimpan data laporan...');
             }
 
-            // 2. Insert each date row into Supabase `laporan`
+            // 2. Insert each date row into Supabase `laporan` with auto-retry resilience
             const rows = allDates.map((date, i) => ({
                 user_id: profile?.id,
                 tanggal_jual: date,
@@ -122,8 +119,30 @@ export default function RingkasanPage() {
                 total_non_tunai: i === 0 ? (totalNonTunai || 0) : 0,
             }));
 
-            const { error: insertError } = await supabase.from('laporan').insert(rows);
-            if (insertError) throw insertError;
+            let insertSuccess = false;
+            let lastErr = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    const { error: insertError } = await safeSupabaseQuery(
+                        supabase.from('laporan').insert(rows),
+                        10000
+                    );
+                    if (insertError) throw insertError;
+                    insertSuccess = true;
+                    break;
+                } catch (retryErr) {
+                    lastErr = retryErr;
+                    console.warn(`Simpan laporan percobaan ke-${attempt} gagal:`, retryErr.message);
+                    if (attempt < 3) {
+                        setUploadStatus(`Menyimpan data laporan (Percobaan ${attempt + 1}/3)...`);
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
+            }
+
+            if (!insertSuccess) {
+                throw lastErr || new Error('Gagal menyimpan laporan ke database.');
+            }
 
             // 3. Trigger critical alert email if needed (Asynchronous / Background)
             const isCriticalIssue =
@@ -165,7 +184,11 @@ export default function RingkasanPage() {
             });
         } catch (err) {
             console.error('Submit error:', err);
-            setError(err.message || 'Terjadi kesalahan saat mengirim laporan.');
+            let userMsg = err.message || 'Terjadi kesalahan saat mengirim laporan.';
+            if (userMsg.includes('Lock broken') || userMsg.includes('AbortError')) {
+                userMsg = 'Sistem sedang memperbarui koneksi keamanan. Silakan klik "Kirim Lapor Sales" sekali lagi.';
+            }
+            setError(userMsg);
         } finally {
             setIsSubmitting(false);
             setUploadStatus('');

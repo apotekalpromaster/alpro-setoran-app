@@ -7,7 +7,26 @@ if (!supabaseUrl || !supabaseAnonKey) {
     console.warn("Supabase credentials not found. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env");
 }
 
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
+    auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        lock: typeof navigator !== 'undefined' && navigator.locks
+            ? async (name, acquireTimeout, fn) => {
+                  try {
+                      return await fn();
+                  } catch (e) {
+                      if (e.name === 'AbortError' || (e.message && e.message.includes('Lock broken'))) {
+                          console.warn('Web Locks API abort bypassed safely:', e.message);
+                          return await fn();
+                      }
+                      throw e;
+                  }
+              }
+            : undefined,
+    }
+});
 
 /**
  * Utility helper to execute Supabase database queries with a mandatory safety timeout.
