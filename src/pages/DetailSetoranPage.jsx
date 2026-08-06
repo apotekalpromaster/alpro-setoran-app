@@ -93,7 +93,13 @@ export default function DetailSetoranPage() {
         parseRupiah(formData.briQris) +
         parseRupiah(formData.bankTransfer);
 
-    const grandTotalSales = totalPenjualan + totalNonTunai;
+    // --- Live Online Sales Calculator ---
+    const totalOnline =
+        parseRupiah(formData.onlineHalodoc) +
+        parseRupiah(formData.onlineTiktok) +
+        parseRupiah(formData.onlineTokopedia);
+
+    const grandTotalSales = totalPenjualan + totalNonTunai + totalOnline;
 
     // --- File upload staging (5 structured slots) ---
     const [stagedFiles, setStagedFiles] = useState(() => {
@@ -355,10 +361,41 @@ export default function DetailSetoranPage() {
                                 </div>
                             </section>
 
-                            {/* BAGIAN 3: UPLOAD BUKTI FOTO */}
+                            {/* BAGIAN 3: RINCIAN PENJUALAN ONLINE */}
+                            <section className="bg-purple-50/30 p-5 rounded-xl border border-purple-150 space-y-4">
+                                <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-white text-xs font-bold">3</span>
+                                        <h3 className="font-bold text-gray-800 text-base">Rincian Penjualan Online (Marketplace &amp; E-Commerce)</h3>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-gray-600 mt-1 ml-8">
+                                    Masukkan total angka penjualan dari Halodoc, TikTok Shop, dan Tokopedia. Jika tidak ada transaksi, biarkan Rp 0.
+                                </p>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-xl border border-purple-150 shadow-sm">
+                                    <CurrencyField
+                                        label="Penjualan Online Halodoc"
+                                        value={formData.onlineHalodoc}
+                                        onChange={(v) => updateField({ onlineHalodoc: v })}
+                                    />
+                                    <CurrencyField
+                                        label="Penjualan Online TikTok"
+                                        value={formData.onlineTiktok}
+                                        onChange={(v) => updateField({ onlineTiktok: v })}
+                                    />
+                                    <CurrencyField
+                                        label="Penjualan Online Tokopedia"
+                                        value={formData.onlineTokopedia}
+                                        onChange={(v) => updateField({ onlineTokopedia: v })}
+                                    />
+                                </div>
+                            </section>
+
+                            {/* BAGIAN 4: UPLOAD BUKTI FOTO */}
                             <section className="bg-white p-5 rounded-xl border border-gray-200 space-y-4">
                                 <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white text-xs font-bold">3</span>
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white text-xs font-bold">4</span>
                                     <h3 className="font-bold text-gray-800 text-base">Upload Bukti Foto (Maksimal 5 Foto)</h3>
                                 </div>
                                 <UploadSection
@@ -375,19 +412,23 @@ export default function DetailSetoranPage() {
                             <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100/70 border-2 border-orange-300/80 rounded-2xl p-6 shadow-md space-y-4">
                                 <div className="flex items-center justify-between border-b border-orange-200/80 pb-3">
                                     <h4 className="text-xs font-extrabold text-orange-900 uppercase tracking-wider flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-xl text-orange-600">analytics</span> TOTAL SALES HARIAN (Tunai + Non-Tunai)
+                                        <span className="material-symbols-outlined text-xl text-orange-600">analytics</span> TOTAL SALES HARIAN (Tunai + Non-Tunai + Sales Online)
                                     </h4>
                                     <span className="text-[10px] font-bold bg-orange-200/80 text-orange-900 px-2.5 py-1 rounded-full uppercase tracking-wider">Konsolidasi Omset</span>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-700">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-gray-700">
                                     <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs">
                                         <span className="text-gray-500 block text-[11px]">Total Sales Tunai Kasir:</span>
                                         <span className="font-bold text-base text-gray-900">{formatRupiah(totalPenjualan)}</span>
                                     </div>
                                     <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs">
-                                        <span className="text-gray-500 block text-[11px]">Total Sales Non-Tunai (EDC & Transfer):</span>
+                                        <span className="text-gray-500 block text-[11px]">Total Sales Non-Tunai (EDC &amp; Transfer):</span>
                                         <span className="font-bold text-base text-blue-700">{formatRupiah(totalNonTunai)}</span>
+                                    </div>
+                                    <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs">
+                                        <span className="text-gray-500 block text-[11px]">Total Sales Online (Marketplace):</span>
+                                        <span className="font-bold text-base text-purple-700">{formatRupiah(totalOnline)}</span>
                                     </div>
                                 </div>
 

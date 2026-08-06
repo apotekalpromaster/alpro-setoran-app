@@ -78,6 +78,9 @@ export default function KonfirmasiPage() {
                                         {(state?.totalNonTunai || 0) > 0 && (
                                             <DetailRow label="Total Sales Non-Tunai (EDC & Transfer)" value={formatRupiah(state.totalNonTunai)} info />
                                         )}
+                                        {(state?.totalOnline || 0) > 0 && (
+                                            <DetailRow label="Total Sales Online (Marketplace)" value={formatRupiah(state.totalOnline)} info />
+                                        )}
                                         
                                         {/* Grand Total */}
                                         <div className="pt-2 border-t border-gray-200 bg-orange-50/70 p-3 rounded-lg flex items-center justify-between mt-2">
