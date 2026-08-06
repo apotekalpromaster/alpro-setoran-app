@@ -100,8 +100,7 @@ export default function RekonsiliasiBankPage() {
                 const rowsToUpsert = parsedCards.map(item => ({
                     mapping_type: 'deposit_card',
                     key_code: item.bca_deposit_card.toString().trim(),
-                    outcode_target: item.outcode.toString().trim().toUpperCase(),
-                    store_name: item.store_name ? item.store_name.toString().trim() : null
+                    outcode_target: item.outcode.toString().trim().toUpperCase()
                 }));
 
                 const chunkSize = 500;
