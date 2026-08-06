@@ -288,6 +288,15 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                     if (Number(item.bri_qris_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI QRIS: ${formatRupiah(item.bri_qris_baru)}`);
                                                     if (Number(item.bank_transfer_baru || 0) > 0) nonTunaiDetailsBaru.push(`Transfer: ${formatRupiah(item.bank_transfer_baru)}`);
 
+                                                    const totalOnlineAsli = Number(lap.total_online || ((Number(lap.online_halodoc || 0) + Number(lap.online_tiktok || 0) + Number(lap.online_tokopedia || 0))));
+                                                    const totalOnlineBaru = item.total_online_baru !== null && item.total_online_baru !== undefined ? Number(item.total_online_baru) : (Number(item.online_halodoc_baru || 0) + Number(item.online_tiktok_baru || 0) + Number(item.online_tokopedia_baru || 0));
+                                                    const deltaOnline = totalOnlineBaru - totalOnlineAsli;
+
+                                                    const onlineDetailsBaru = [];
+                                                    if (item.online_halodoc_baru !== null && item.online_halodoc_baru !== undefined && Number(item.online_halodoc_baru) > 0) onlineDetailsBaru.push(`Halodoc: ${formatRupiah(item.online_halodoc_baru)}`);
+                                                    if (item.online_tiktok_baru !== null && item.online_tiktok_baru !== undefined && Number(item.online_tiktok_baru) > 0) onlineDetailsBaru.push(`TikTok: ${formatRupiah(item.online_tiktok_baru)}`);
+                                                    if (item.online_tokopedia_baru !== null && item.online_tokopedia_baru !== undefined && Number(item.online_tokopedia_baru) > 0) onlineDetailsBaru.push(`Tokopedia: ${formatRupiah(item.online_tokopedia_baru)}`);
+
                                                     return (
                                                         <>
                                                             <td className="py-4 px-6 text-right text-xs font-mono text-gray-500">
