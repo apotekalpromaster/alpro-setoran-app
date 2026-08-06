@@ -155,7 +155,13 @@ export default function RiwayatPage() {
             const briQr = Number(r.bri_qris || 0);
             const trf = Number(r.bank_transfer || 0);
             const totalNonTunai = Number(r.total_non_tunai || (bcaDb + bcaKr + bcaQr + briDb + briKr + briQr + trf));
-            const grandTotalSales = Number(r.nominal_jual || 0) + totalNonTunai;
+
+            const onlineHalodoc = Number(r.online_halodoc || 0);
+            const onlineTiktok = Number(r.online_tiktok || 0);
+            const onlineTokopedia = Number(r.online_tokopedia || 0);
+            const totalOnline = Number(r.total_online || (onlineHalodoc + onlineTiktok + onlineTokopedia));
+
+            const grandTotalSales = Number(r.nominal_jual || 0) + totalNonTunai + totalOnline;
 
             return {
                 ...r,
@@ -167,6 +173,10 @@ export default function RiwayatPage() {
                 bri_qris: briQr,
                 bank_transfer: trf,
                 total_non_tunai: totalNonTunai,
+                online_halodoc: onlineHalodoc,
+                online_tiktok: onlineTiktok,
+                online_tokopedia: onlineTokopedia,
+                total_online: totalOnline,
                 grand_total_sales: grandTotalSales
             };
         }).filter((item) => {
@@ -287,6 +297,10 @@ export default function RiwayatPage() {
         let totalBriQris = 0;
         let totalBankTransfer = 0;
         let totalNonTunai = 0;
+        let totalOnlineHalodoc = 0;
+        let totalOnlineTiktok = 0;
+        let totalOnlineTokopedia = 0;
+        let totalOnline = 0;
         let totalGrandSales = 0;
 
         filteredReports.forEach((r) => {
@@ -302,7 +316,13 @@ export default function RiwayatPage() {
                 const briQr = Number(r.bri_qris || 0);
                 const trf = Number(r.bank_transfer || 0);
                 const nonTunai = Number(r.total_non_tunai || (bcaDb + bcaKr + bcaQr + briDb + briKr + briQr + trf));
-                const grandSales = tunai + nonTunai;
+
+                const onlineHalodoc = Number(r.online_halodoc || 0);
+                const onlineTiktok = Number(r.online_tiktok || 0);
+                const onlineTokopedia = Number(r.online_tokopedia || 0);
+                const totalOnlineRow = Number(r.total_online || (onlineHalodoc + onlineTiktok + onlineTokopedia));
+
+                const grandSales = tunai + nonTunai + totalOnlineRow;
 
                 totalSalesTunai += tunai;
                 totalPotongan += pot;
@@ -315,6 +335,10 @@ export default function RiwayatPage() {
                 totalBriQris += briQr;
                 totalBankTransfer += trf;
                 totalNonTunai += nonTunai;
+                totalOnlineHalodoc += onlineHalodoc;
+                totalOnlineTiktok += onlineTiktok;
+                totalOnlineTokopedia += onlineTokopedia;
+                totalOnline += totalOnlineRow;
                 totalGrandSales += grandSales;
             }
         });
@@ -331,6 +355,10 @@ export default function RiwayatPage() {
             totalBriQris,
             totalBankTransfer,
             totalNonTunai,
+            totalOnlineHalodoc,
+            totalOnlineTiktok,
+            totalOnlineTokopedia,
+            totalOnline,
             totalGrandSales
         };
     }, [filteredReports]);
@@ -510,7 +538,7 @@ export default function RiwayatPage() {
 
                             {/* TABEL DATA SCROLLABLE DENGAN STICKY HEADER & FOOTER */}
                             <div className="overflow-x-auto max-h-[650px] border border-gray-200 rounded-xl shadow-inner bg-white">
-                                <table className="w-full text-xs text-left text-gray-600 min-w-[1780px] border-collapse">
+                                <table className="w-full text-xs text-left text-gray-600 min-w-[2200px] border-collapse">
                                     <thead className="text-[11px] font-extrabold text-gray-700 uppercase tracking-wider sticky top-0 z-20 bg-gray-100 shadow-xs border-b border-gray-200">
                                         <tr>
                                             <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 whitespace-nowrap">Tanggal Sales</th>
@@ -530,8 +558,14 @@ export default function RiwayatPage() {
                                             <th className="px-3 py-3 text-right bg-blue-50/40 text-blue-900 sticky top-0 z-20">Transfer Bank</th>
                                             <th className="px-3 py-3 text-right bg-blue-100/60 text-blue-950 font-black sticky top-0 z-20">Total Non-Tunai</th>
                                             
+                                            {/* Online Sales Columns */}
+                                            <th className="px-3 py-3 text-right bg-purple-50/40 text-purple-900 sticky top-0 z-20">Online Halodoc</th>
+                                            <th className="px-3 py-3 text-right bg-purple-50/40 text-purple-900 sticky top-0 z-20">Online TikTok</th>
+                                            <th className="px-3 py-3 text-right bg-purple-50/40 text-purple-900 sticky top-0 z-20">Online Tokopedia</th>
+                                            <th className="px-3 py-3 text-right bg-purple-100/60 text-purple-950 font-black sticky top-0 z-20">Total Online</th>
+
                                             {/* Grand Total Column */}
-                                            <th className="px-3 py-3 text-right bg-orange-100/80 text-orange-950 font-black sticky top-0 z-20">TOTAL SALES HARIAN (Tunai + Non-Tunai)</th>
+                                            <th className="px-3 py-3 text-right bg-orange-100/80 text-orange-950 font-black sticky top-0 z-20">TOTAL SALES HARIAN (Tunai + Non-Tunai + Sales Online)</th>
                                             <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20">Aksi</th>
                                         </tr>
                                     </thead>
@@ -595,6 +629,20 @@ export default function RiwayatPage() {
                                                     </td>
                                                     <td className="px-3 py-3 text-right font-mono font-bold text-blue-900 bg-blue-50/30">
                                                         {item.total_non_tunai > 0 ? formatRupiah(item.total_non_tunai) : <span className="text-gray-300">-</span>}
+                                                    </td>
+
+                                                    {/* Online Sales Cells */}
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.online_halodoc > 0 ? formatRupiah(item.online_halodoc) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.online_tiktok > 0 ? formatRupiah(item.online_tiktok) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.online_tokopedia > 0 ? formatRupiah(item.online_tokopedia) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono font-bold text-purple-900 bg-purple-50/30">
+                                                        {item.total_online > 0 ? formatRupiah(item.total_online) : <span className="text-gray-300">-</span>}
                                                     </td>
 
                                                     {/* Grand Total Cell */}
@@ -663,6 +711,18 @@ export default function RiwayatPage() {
                                             </td>
                                             <td className="px-3 py-3 text-right font-mono font-black text-blue-950">
                                                 {formatRupiah(tableTotals.totalNonTunai)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalOnlineHalodoc)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalOnlineTiktok)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalOnlineTokopedia)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono font-black text-purple-950">
+                                                {formatRupiah(tableTotals.totalOnline)}
                                             </td>
                                             <td className="px-3 py-3 text-right font-mono font-black text-orange-600 bg-orange-200/80 text-sm">
                                                 {formatRupiah(tableTotals.totalGrandSales)}
