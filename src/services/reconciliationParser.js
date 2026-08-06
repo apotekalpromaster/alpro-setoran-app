@@ -224,15 +224,36 @@ export function parseDepositCardExcel(arrayBuffer) {
 export function parseBriMidExcel(arrayBuffer) {
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });
+    if (workbook.SheetNames.length === 0) return [];
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
+    if (rawRows.length === 0) return [];
+
+    let headerIdx = 0;
+    let colMid = 0;
+    let colOutcode = 1;
+
+    for (let r = 0; r < Math.min(10, rawRows.length); r++) {
+        const row = rawRows[r];
+        if (!row) continue;
+        const midIdx = row.findIndex(cell => cell && cell.toString().toUpperCase().trim() === 'MID');
+        const outcodeIdx = row.findIndex(cell => cell && (cell.toString().toUpperCase().trim() === 'OUTCODE' || cell.toString().toUpperCase().trim().includes('KODE TOKO')));
+
+        if (midIdx !== -1 && outcodeIdx !== -1) {
+            headerIdx = r;
+            colMid = midIdx;
+            colOutcode = outcodeIdx;
+            break;
+        }
+    }
+
     const mappings = [];
-    for (let i = 1; i < rawRows.length; i++) {
+    for (let i = headerIdx + 1; i < rawRows.length; i++) {
         const row = rawRows[i];
         if (!row) continue;
-        const mid = (row[0] || '').toString().trim();
-        const outcode = (row[1] || '').toString().trim();
+        const mid = (row[colMid] || '').toString().trim();
+        const outcode = (row[colOutcode] || '').toString().trim();
 
         if (mid && outcode) {
             const cleanMid = mid.replace(/^0+/, '');
@@ -252,24 +273,43 @@ export function parseBriMidExcel(arrayBuffer) {
 export function parseBcaMidExcel(arrayBuffer) {
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });
+    if (workbook.SheetNames.length === 0) return [];
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
+    if (rawRows.length === 0) return [];
+
+    let headerIdx = 0;
+    let colMid = 1;
+    let colOutcode = 2;
+
+    for (let r = 0; r < Math.min(10, rawRows.length); r++) {
+        const row = rawRows[r];
+        if (!row) continue;
+        const midIdx = row.findIndex(cell => cell && cell.toString().toUpperCase().trim() === 'MID');
+        const outcodeIdx = row.findIndex(cell => cell && (cell.toString().toUpperCase().trim() === 'OUTCODE' || cell.toString().toUpperCase().trim().includes('KODE TOKO')));
+
+        if (midIdx !== -1 && outcodeIdx !== -1) {
+            headerIdx = r;
+            colMid = midIdx;
+            colOutcode = outcodeIdx;
+            break;
+        }
+    }
+
     const mappings = [];
-    for (let i = 2; i < rawRows.length; i++) {
+    for (let i = headerIdx + 1; i < rawRows.length; i++) {
         const row = rawRows[i];
         if (!row) continue;
-        const storeName = (row[1] || '').toString().trim();
-        const mid = (row[2] || '').toString().trim();
-        const outcode = (row[3] || '').toString().trim();
+        const mid = (row[colMid] || '').toString().trim();
+        const outcode = (row[colOutcode] || '').toString().trim();
 
         if (mid && outcode) {
             const cleanMid = mid.replace(/^0+/, '');
             mappings.push({
                 mid_bca: cleanMid,
                 raw_mid_bca: mid,
-                outcode: outcode.toUpperCase(),
-                store_name: storeName
+                outcode: outcode.toUpperCase()
             });
         }
     }
@@ -486,6 +526,91 @@ export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}, masterMapping
             net_amount: netCredit,
             raw_keterangan: desc
         });
+    }
+
+    return records;
+}
+
+// ============================================================
+// PARSER MUTASI BCA FOR SUPABASE (recon_bank_mutations_bca)
+// ============================================================
+export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {}, fileName = '') {
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) return [];
+
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+    const records = [];
+
+    for (let i = 7; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || row.length < 4) continue;
+
+        const rawDate = (row[0] || '').toString().trim();
+        const desc = (row[1] || '').toString().trim();
+        const rawAmountStr = (row[3] || '').toString().trim();
+
+        if (!rawDate || !desc) continue;
+
+        const isKartuKredit = desc.includes('KARTU KREDIT');
+
+        if (isKartuKredit) {
+            const keterangan = desc;
+            const kategori = 'KARTU KREDIT MID';
+            const tanggalMutasi = parseExcelDate(rawDate);
+            const tanggalSales = null;
+            const isDebit = rawAmountStr.toUpperCase().includes('DB');
+            const dbCr = isDebit ? 'DB' : 'CR';
+            const cleanAmountStr = rawAmountStr.replace(/[^0-9.-]/g, '');
+            const jumlah = parseFloat(cleanAmountStr) || 0;
+
+            let midCode = '';
+            const midMatch = desc.match(/MID\s*:\s*0*([1-9]\d*)/i);
+            if (midMatch) {
+                midCode = midMatch[1];
+            } else {
+                const rawMidMatch = desc.match(/MID\s*:\s*([0-9]+)/i);
+                if (rawMidMatch) {
+                    midCode = rawMidMatch[1].replace(/^0+/, '');
+                }
+            }
+
+            let grossAmount = 0;
+            const tghMatch = desc.match(/TGH\s*:\s*0*([0-9]+(?:\.[0-9]+)?)/i);
+            if (tghMatch) {
+                grossAmount = parseFloat(tghMatch[1]) || 0;
+            }
+
+            let adminFeeMdr = 0;
+            const admMatch = desc.match(/ADM\s*:\s*0*([0-9]+(?:\.[0-9]+)?)/i);
+            if (admMatch) {
+                adminFeeMdr = parseFloat(admMatch[1]) || 0;
+            }
+
+            let outcode = 'UNMAPPED';
+            if (midCode && masterMidMap[midCode]) {
+                outcode = masterMidMap[midCode];
+            } else if (midCode && masterMidMap[midCode.padStart(7, '0')]) {
+                outcode = masterMidMap[midCode.padStart(7, '0')];
+            }
+
+            records.push({
+                tanggal_mutasi: tanggalMutasi,
+                tanggal_sales: tanggalSales,
+                keterangan: keterangan,
+                kategori: kategori,
+                outcode: outcode ? outcode.toUpperCase() : 'UNMAPPED',
+                jumlah: jumlah,
+                admin_fee_mdr: adminFeeMdr,
+                gross_amount: grossAmount,
+                mid_code: midCode,
+                db_cr: dbCr,
+                rekening_no: '1784455991',
+                source_file: fileName || 'BCA PKU Excel'
+            });
+        }
     }
 
     return records;

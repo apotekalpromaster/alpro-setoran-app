@@ -106,12 +106,24 @@ export default function DetailSetoranPage() {
 
     const handleFileSlotChange = (slotIdx, file) => {
         if (!file) return;
-        const updated = [...stagedFiles];
         const isImage = file.type.startsWith('image/');
-        const preview = isImage ? URL.createObjectURL(file) : null;
-        updated[slotIdx] = { file, name: file.name, preview, isImage };
-        setStagedFiles(updated);
-        updateField({ buktiFiles: updated });
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const base64Data = e.target.result;
+            const updated = [...stagedFiles];
+            updated[slotIdx] = {
+                slotIdx,
+                file,
+                name: file.name,
+                type: file.type,
+                base64: base64Data,
+                preview: isImage ? base64Data : null,
+                isImage: isImage
+            };
+            setStagedFiles(updated);
+            updateField({ buktiFiles: updated });
+        };
+        reader.readAsDataURL(file);
     };
 
     const handleRemoveSlotFile = (slotIdx) => {
