@@ -34,6 +34,8 @@ export default function RekonsiliasiPOSPage() {
     const [parsedData, setParsedData] = useState([]);
     const [fileName, setFileName] = useState('');
     const [profilesForLookup, setProfilesForLookup] = useState([]);
+    const [isDragging, setIsDragging] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(100);
 
@@ -179,6 +181,7 @@ export default function RekonsiliasiPOSPage() {
             setError('Gagal memuat data rekonsiliasi: ' + (e.message || 'Koneksi terputus / timeout setelah masa idle. Silakan klik Coba Lagi.'));
         } finally {
             setLoading(false);
+            setUploadProgress('');
         }
     };
 
@@ -507,8 +510,10 @@ const handleFileChange = (e) => {
 
             if (deleteError) throw deleteError;
 
-            const chunkSize = 200;
+            const chunkSize = 500;
             for (let i = 0; i < parsedData.length; i += chunkSize) {
+                const currentBatch = Math.min(i + chunkSize, parsedData.length);
+                setUploadProgress(`Menyimpan data POS (${currentBatch} / ${parsedData.length} baris)...`);
                 const chunk = parsedData.slice(i, i + chunkSize);
                 const { error: insertError } = await supabase
                     .from('pos_sales_data')
@@ -579,7 +584,7 @@ const handleFileChange = (e) => {
                                 : 'border-transparent text-gray-500 hover:text-gray-700'
                         }`}
                     >
-                        Upload Excel POS
+                        Unggah Excel POS
                     </button>
                 </div>
 
@@ -853,9 +858,9 @@ const handleFileChange = (e) => {
                     <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-gray-200 space-y-6">
                         <div className="text-center space-y-2">
                             <span className="material-symbols-outlined text-5xl text-primary-500">cloud_upload</span>
-                            <h3 className="text-lg font-bold text-gray-800">Unggah Data Penjualan POS</h3>
+                            <h3 className="text-lg font-bold text-gray-800">Unggah Data Sales POS (Xilnex)</h3>
                             <p className="text-xs text-gray-500 max-w-md mx-auto">
-                                Unggah berkas Excel (.xlsx) dari sistem POS untuk dibandingkan secara otomatis dengan pelaporan setoran manual apotek.
+                                Unggah berkas Excel (.xlsx / .xls) dari laporan POS Xilnex untuk sinkronisasi otomatis dengan pelaporan setoran manual apotek.
                             </p>
                         </div>
 
@@ -873,28 +878,38 @@ const handleFileChange = (e) => {
                             </div>
                         )}
 
-                        <div className="border-2 border-dashed border-gray-300 hover:border-primary-400 transition-colors rounded-xl p-8 text-center relative cursor-pointer group">
+                        <div 
+                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                            onDragLeave={() => setIsDragging(false)}
+                            onDrop={(e) => { e.preventDefault(); setIsDragging(false); }}
+                            className={`border-2 border-dashed transition-all rounded-xl p-8 text-center relative cursor-pointer group ${isDragging ? 'border-primary-500 bg-primary-50/70 scale-[1.01] shadow-md' : 'border-gray-300 hover:border-primary-400 hover:bg-gray-50/50'}`}
+                        >
                             <input
                                 type="file"
                                 accept=".xlsx, .xls"
                                 onChange={handleFileChange}
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                             />
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
+                                <span className="material-symbols-outlined text-4xl text-primary-500 block group-hover:scale-110 transition-transform">
+                                    {fileName ? 'description' : 'cloud_upload'}
+                                </span>
                                 <span className="text-sm font-bold text-gray-700 group-hover:text-primary-600 block">
-                                    {fileName ? fileName : 'Pilih Berkas Excel POS (.xlsx)'}
+                                    {fileName ? fileName : 'Pilih atau Seret Berkas Excel POS (.xlsx / .xls)'}
                                 </span>
                                 <span className="text-xs text-gray-400 block">
-                                    {fileName ? 'Klik atau seret file lain untuk mengganti' : 'Seret berkas ke sini atau klik untuk mencari'}
+                                    {fileName ? 'Klik atau seret berkas baru untuk mengganti' : 'Seret berkas ke sini atau klik untuk memilih file dari komputer'}
                                 </span>
                             </div>
                         </div>
 
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-xs text-gray-600 space-y-2">
-                            <span className="font-bold text-gray-700 block">ðŸ’¡ Ketentuan Format Excel:</span>
+                            <span className="font-bold text-gray-800 flex items-center gap-1.5 mb-1">
+                                <span className="material-symbols-outlined text-amber-500 text-base">lightbulb</span> Ketentuan Format Berkas Excel POS:
+                            </span>
                             <ul className="list-disc pl-5 space-y-1">
                                 <li>Menerima berkas spreadsheet Excel (*.xlsx, *.xls).</li>
-                                <li>Mendukung <strong>Template Otomatis Baru (Cash & Card Automation)</strong> dengan Header pada <strong>baris 14</strong>, membaca sales tunai dari <strong>Kolom E (Cash Amount)</strong> yang bukan Rp 0, serta menyaring otomatis baris Total pada Kolom A, B, dan C.</li>
+                                <li>Mendukung <strong>Template Otomatis Baru (Cash &amp; Card Automation)</strong> dengan Header pada <strong>baris 14</strong>, membaca sales tunai dari <strong>Kolom E (Cash Amount)</strong> yang bukan Rp 0, serta menyaring otomatis baris Total pada Kolom A, B, dan C.</li>
                                 <li>Mendukung juga <strong>Template Lama</strong> dengan Header pada baris 13.</li>
                                 <li>Kolom B (Store) otomatis dicocokkan dengan <strong>Kode Toko</strong> pada profil apotek untuk mendapatkan kode cabang yang sesuai.</li>
                             </ul>
@@ -903,12 +918,12 @@ const handleFileChange = (e) => {
                         {parsedData.length > 0 && (
                             <div className="space-y-4 pt-4 border-t border-gray-100">
                                 <div className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-600 font-medium">Preview Data Parsed:</span>
-                                    <span className="font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded">{parsedData.length} Baris Terbaca</span>
+                                    <span className="text-gray-600 font-semibold">Pratinjau Data Parsed (10 Baris Pertama):</span>
+                                    <span className="font-bold text-primary-600 bg-primary-50 px-2.5 py-0.5 rounded border border-primary-200">{parsedData.length} Baris Terbaca</span>
                                 </div>
-                                <div className="border border-gray-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                                <div className="border border-gray-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto shadow-inner">
                                     <table className="min-w-full text-left text-xs">
-                                        <thead className="bg-gray-50 text-gray-500 font-bold sticky top-0">
+                                        <thead className="bg-gray-100 text-gray-600 font-bold sticky top-0 border-b border-gray-200">
                                             <tr>
                                                 <th className="p-2">Cabang</th>
                                                 <th className="p-2">Tanggal</th>
@@ -917,9 +932,9 @@ const handleFileChange = (e) => {
                                                 <th className="p-2 text-right">Total Online</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-100 text-gray-600">
+                                        <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
                                             {parsedData.slice(0, 10).map((row, idx) => (
-                                                <tr key={idx} className="hover:bg-gray-50">
+                                                <tr key={idx} className="hover:bg-gray-50/50">
                                                     <td className="p-2 font-semibold">{row.kode_cabang}</td>
                                                     <td className="p-2">{row.tanggal_jual}</td>
                                                     <td className="p-2 text-right font-mono">{formatRupiah(row.sales_pos)}</td>
@@ -936,17 +951,17 @@ const handleFileChange = (e) => {
                                 <button
                                     onClick={handleSavePOS}
                                     disabled={loading}
-                                    className="btn-primary w-full py-2.5 flex items-center justify-center gap-2"
+                                    className="btn-primary w-full py-2.5 flex items-center justify-center gap-2 cursor-pointer shadow-md"
                                 >
                                     {loading ? (
                                         <>
                                             <span className="animate-spin inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
-                                            Menyimpan...
+                                            {uploadProgress || 'Menyimpan...'}
                                         </>
                                     ) : (
                                         <>
                                             <span className="material-symbols-outlined">save</span>
-                                            Simpan POS & Lakukan Rekonsiliasi
+                                            Simpan Data POS &amp; Jalankan Rekonsiliasi
                                         </>
                                     )}
                                 </button>
