@@ -27,6 +27,10 @@ const defaultState = {
     briKredit: '',
     briQris: '',
     bankTransfer: '',
+    // Online sales fields (Marketplace & E-Commerce)
+    onlineHalodoc: '',
+    onlineTiktok: '',
+    onlineTokopedia: '',
     nominalSetoran: '',
     penjelasan: '',
     nomorDepositCard: '',

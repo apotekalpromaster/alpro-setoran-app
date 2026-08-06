@@ -193,9 +193,20 @@ export default function AreaManagerDashboardPage() {
                                       Number(row.bri_debit || 0) + Number(row.bri_kredit || 0) + Number(row.bri_qris || 0) +
                                       Number(row.bank_transfer || 0) || Number(row.total_non_tunai || 0);
 
+                const onlineHalodoc = Number(row.online_halodoc || 0);
+                const onlineTiktok = Number(row.online_tiktok || 0);
+                const onlineTokopedia = Number(row.online_tokopedia || 0);
+                const totalOnline = Number(row.total_online || (onlineHalodoc + onlineTiktok + onlineTokopedia));
+                const isArchived = row.isArchived || row.status === 'Archived' || row.jenis_pelaporan === 'HAPUS_DATA';
+
                 return {
                     ...row,
                     total_non_tunai: totalNonTunai,
+                    online_halodoc: onlineHalodoc,
+                    online_tiktok: onlineTiktok,
+                    online_tokopedia: onlineTokopedia,
+                    total_online: totalOnline,
+                    isArchived,
                     selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
                     username: o.username || '-',
                     kode_toko: o.kode_toko || '-'
@@ -367,8 +378,9 @@ export default function AreaManagerDashboardPage() {
     const duplicateOutletDates = useMemo(() => {
         const counts = {};
         reports.forEach(r => {
+            const isArchived = r.isArchived || r.status === 'Archived' || r.jenis_pelaporan === 'HAPUS_DATA';
             const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            if (isPrimary) {
+            if (isPrimary && !isArchived) {
                 const key = r.username + '_' + r.tanggal_jual;
                 counts[key] = (counts[key] || 0) + 1;
             }
@@ -538,18 +550,31 @@ export default function AreaManagerDashboardPage() {
         let totalPotongan = 0;
         let totalSetor = 0;
         let totalNonTunai = 0;
+        let totalOnlineHalodoc = 0;
+        let totalOnlineTiktok = 0;
+        let totalOnlineTokopedia = 0;
+        let totalOnline = 0;
         let totalPosSales = 0;
         let totalPosNonTunai = 0;
         const seenOutletDates = new Set();
 
         filteredReports.forEach((r) => {
+            const isArchived = r.isArchived || r.status === 'Archived' || r.jenis_pelaporan === 'HAPUS_DATA';
             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(r.jenis_pelaporan);
-            if (isValidTypeForPOS && !r.isUnreported) {
+
+            if (isValidTypeForPOS && !r.isUnreported && !isArchived) {
                 totalSales += Number(r.nominal_jual || 0);
             }
-            totalPotongan += Number(r.potongan || 0);
-            totalSetor += Number(r.nominal_setoran || 0);
-            totalNonTunai += Number(r.total_non_tunai || 0);
+            if (!r.isUnreported && !isArchived) {
+                totalPotongan += Number(r.potongan || 0);
+                totalSetor += Number(r.nominal_setoran || 0);
+                totalNonTunai += Number(r.total_non_tunai || 0);
+
+                totalOnlineHalodoc += Number(r.online_halodoc || 0);
+                totalOnlineTiktok += Number(r.online_tiktok || 0);
+                totalOnlineTokopedia += Number(r.online_tokopedia || 0);
+                totalOnline += Number(r.total_online || 0);
+            }
 
             const codeKey = r.kode_toko + '_' + r.tanggal_jual;
             const nameKey = r.username + '_' + r.tanggal_jual;
@@ -575,6 +600,10 @@ export default function AreaManagerDashboardPage() {
             totalPotongan, 
             totalSetor, 
             totalNonTunai, 
+            totalOnlineHalodoc,
+            totalOnlineTiktok,
+            totalOnlineTokopedia,
+            totalOnline,
             totalPosSales, 
             totalPosNonTunai, 
             totalSelisih1, 
@@ -971,7 +1000,7 @@ export default function AreaManagerDashboardPage() {
                                     </div>
                                 ) : (
                                     <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
-                                        <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1500px] border-collapse">
+                                        <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[2000px] border-collapse">
                                             <colgroup>
                                                 <col style={{ width: '160px' }} />
                                                 <col style={{ width: '90px' }} />
@@ -984,6 +1013,10 @@ export default function AreaManagerDashboardPage() {
                                                 <col style={{ width: '125px' }} />
                                                 <col style={{ width: '135px' }} />
                                                 <col style={{ width: '125px' }} />
+                                                <col style={{ width: '125px' }} />
+                                                <col style={{ width: '115px' }} />
+                                                <col style={{ width: '115px' }} />
+                                                <col style={{ width: '115px' }} />
                                                 <col style={{ width: '125px' }} />
                                                 <col style={{ width: '60px' }} />
                                             </colgroup>
@@ -1001,12 +1034,19 @@ export default function AreaManagerDashboardPage() {
                                                     <th className="px-3 py-3 text-right bg-purple-50 text-purple-900 font-bold sticky top-0 z-20 border-b border-gray-200">Sales Non-Tunai (Xilnex)</th>
                                                     <th className="px-3 py-3 text-right bg-blue-50/50 text-blue-900 font-bold sticky top-0 z-20 border-b border-gray-200">Total Non-Tunai Toko</th>
                                                     <th className="px-3 py-3 text-center bg-indigo-50 text-indigo-900 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Non-Tunai</th>
+                                                    <th className="px-3 py-3 text-right bg-purple-50/60 text-purple-900 font-bold sticky top-0 z-20 border-b border-gray-200">Online Halodoc</th>
+                                                    <th className="px-3 py-3 text-right bg-purple-50/60 text-purple-900 font-bold sticky top-0 z-20 border-b border-gray-200">Online TikTok</th>
+                                                    <th className="px-3 py-3 text-right bg-purple-50/60 text-purple-900 font-bold sticky top-0 z-20 border-b border-gray-200">Online Tokopedia</th>
+                                                    <th className="px-3 py-3 text-right bg-purple-100/70 text-purple-950 font-bold sticky top-0 z-20 border-b border-gray-200">Total Online Toko</th>
                                                     <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 text-gray-700 bg-white">
                                                 {filteredReports.map((row) => {
-                                                    const badge = getBadge(row.jenis_pelaporan);
+                                                    const isArchived = row.isArchived || row.status === 'Archived' || row.jenis_pelaporan === 'HAPUS_DATA';
+                                                    const badge = isArchived 
+                                                        ? { label: 'Terarsip / Dihapus', cls: 'bg-red-100 text-red-800 border border-red-200 font-extrabold' }
+                                                        : getBadge(row.jenis_pelaporan);
                                                     const isAnomali = badge.cls.includes('bg-red-100');
 
                                                     const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(row.jenis_pelaporan);
@@ -1028,7 +1068,7 @@ export default function AreaManagerDashboardPage() {
                                                     const sNonTunai = hasPOSNonTunai ? (row.total_non_tunai || 0) - posNonTunaiVal : null;
 
                                                     return (
-                                                        <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (row.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}>
+                                                        <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (isArchived ? 'bg-red-50/20 opacity-75' : row.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}>
                                                             <td className="px-3 py-3 font-bold text-gray-900 text-xs break-words" title={row.username}>
                                                                 <div>{row.username}</div>
                                                                 <div className="text-[10px] text-gray-400 font-mono font-normal">({row.kode_toko})</div>
@@ -1050,9 +1090,15 @@ export default function AreaManagerDashboardPage() {
                                                             <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs bg-blue-50/30 font-semibold">
                                                                 {posVal1 !== undefined ? formatRupiah(posVal1) : <span className="text-gray-300">-</span>}
                                                             </td>
-                                                            <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_jual || 0)}</td>
-                                                            <td className="px-3 py-3 text-right text-red-600 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.potongan || 0)}</td>
-                                                            <td className="px-3 py-3 text-right font-bold text-green-700 font-mono text-xs">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.nominal_setoran || 0)}</td>
+                                                            <td className="px-3 py-3 text-right text-gray-900 font-mono text-xs">
+                                                                {row.isUnreported ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.nominal_jual || 0)}</span> : formatRupiah(row.nominal_jual || 0)}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right text-red-600 font-mono text-xs">
+                                                                {row.isUnreported ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">({formatRupiah(row.potongan || 0)})</span> : formatRupiah(row.potongan || 0)}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right font-bold text-green-700 font-mono text-xs">
+                                                                {row.isUnreported ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.nominal_setoran || 0)}</span> : formatRupiah(row.nominal_setoran || 0)}
+                                                            </td>
                                                             <td className="px-3 py-3 text-center font-mono text-xs bg-red-50/10">
                                                                 {selisihChipNew(s1)}
                                                             </td>
@@ -1062,9 +1108,23 @@ export default function AreaManagerDashboardPage() {
                                                             <td className="px-3 py-3 text-right text-purple-950 font-mono text-xs bg-purple-50/30 font-bold">
                                                                 {posNonTunaiVal !== undefined ? formatRupiah(posNonTunaiVal) : <span className="text-gray-300">-</span>}
                                                             </td>
-                                                            <td className="px-3 py-3 text-right font-bold text-blue-800 font-mono text-xs bg-blue-50/20">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.total_non_tunai || 0)}</td>
+                                                            <td className="px-3 py-3 text-right font-bold text-blue-800 font-mono text-xs bg-blue-50/20">
+                                                                {row.isUnreported ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.total_non_tunai || 0)}</span> : formatRupiah(row.total_non_tunai || 0)}
+                                                            </td>
                                                             <td className="px-3 py-3 text-center font-mono text-xs bg-indigo-50/20">
                                                                 {selisihChipNew(sNonTunai)}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right font-mono text-xs text-gray-700">
+                                                                {row.isUnreported || !row.online_halodoc ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.online_halodoc)}</span> : formatRupiah(row.online_halodoc)}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right font-mono text-xs text-gray-700">
+                                                                {row.isUnreported || !row.online_tiktok ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.online_tiktok)}</span> : formatRupiah(row.online_tiktok)}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right font-mono text-xs text-gray-700">
+                                                                {row.isUnreported || !row.online_tokopedia ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.online_tokopedia)}</span> : formatRupiah(row.online_tokopedia)}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right font-bold font-mono text-xs text-purple-900 bg-purple-50/20">
+                                                                {row.isUnreported || !row.total_online ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.total_online)}</span> : formatRupiah(row.total_online)}
                                                             </td>
                                                             <td className="px-3 py-3 text-center">
                                                                 {row.isUnreported ? (
@@ -1114,6 +1174,18 @@ export default function AreaManagerDashboardPage() {
                                                     </td>
                                                     <td className="px-3 py-3 text-center font-extrabold font-mono bg-indigo-200/50">
                                                         {tableTotals.hasAnyPosForTotals ? selisihChipNew(tableTotals.totalSelisihNonTunai) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-extrabold text-purple-900 font-mono">
+                                                        {formatRupiah(tableTotals.totalOnlineHalodoc)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-extrabold text-purple-900 font-mono">
+                                                        {formatRupiah(tableTotals.totalOnlineTiktok)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-extrabold text-purple-900 font-mono">
+                                                        {formatRupiah(tableTotals.totalOnlineTokopedia)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-extrabold text-purple-950 font-mono bg-purple-200/50">
+                                                        {formatRupiah(tableTotals.totalOnline)}
                                                     </td>
                                                     <td className="px-3 py-3 bg-orange-100"></td>
                                                 </tr>

@@ -65,7 +65,12 @@ export default function RingkasanPage() {
         parseRupiah(formData.briQris) +
         parseRupiah(formData.bankTransfer);
 
-    const grandTotalSales = totalPenjualan + totalNonTunai;
+    const totalOnline =
+        parseRupiah(formData.onlineHalodoc) +
+        parseRupiah(formData.onlineTiktok) +
+        parseRupiah(formData.onlineTokopedia);
+
+    const grandTotalSales = totalPenjualan + totalNonTunai + totalOnline;
 
     // Mapping label tag slot bukti yang spesifik & mudah dipahami
     const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(formData.jenisPelaporan);
@@ -154,6 +159,11 @@ export default function RingkasanPage() {
                 bri_qris: i === 0 ? (parseRupiah(formData.briQris) || 0) : 0,
                 bank_transfer: i === 0 ? (parseRupiah(formData.bankTransfer) || 0) : 0,
                 total_non_tunai: i === 0 ? (totalNonTunai || 0) : 0,
+                // Kolom Penjualan Online
+                online_halodoc: i === 0 ? (parseRupiah(formData.onlineHalodoc) || 0) : 0,
+                online_tiktok: i === 0 ? (parseRupiah(formData.onlineTiktok) || 0) : 0,
+                online_tokopedia: i === 0 ? (parseRupiah(formData.onlineTokopedia) || 0) : 0,
+                total_online: i === 0 ? (totalOnline || 0) : 0,
             }));
 
             let insertSuccess = false;
@@ -212,6 +222,7 @@ export default function RingkasanPage() {
                     potongan: potongan,
                     nominalSetoran: nominalSetoran,
                     totalNonTunai: totalNonTunai,
+                    totalOnline: totalOnline,
                     grandTotalSales: grandTotalSales,
                     selisih: selisih,
                     buktiCount: formData.buktiFiles?.filter(Boolean).length || 0,
@@ -376,9 +387,38 @@ export default function RingkasanPage() {
                                             </>
                                         )}
 
+                                        {/* Online Sales Breakdown */}
+                                        {totalOnline > 0 && (
+                                            <>
+                                                <tr className="border-t-2 border-gray-100">
+                                                    <td colSpan={2} className="pt-3 pb-1 text-xs font-bold text-purple-800 uppercase tracking-wider">
+                                                        Penjualan Online (Marketplace &amp; E-Commerce)
+                                                    </td>
+                                                </tr>
+                                                {parseRupiah(formData.onlineHalodoc) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• Halodoc</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.onlineHalodoc))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.onlineTiktok) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• TikTok Shop</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.onlineTiktok))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.onlineTokopedia) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• Tokopedia</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.onlineTokopedia))}</td>
+                                                    </tr>
+                                                )}
+                                            </>
+                                        )}
+
                                         {/* Grand Total */}
                                         <tr className="border-t-2 border-orange-200 bg-orange-50/50">
-                                            <td className="py-3 text-sm font-extrabold text-orange-950">TOTAL SALES HARIAN (Tunai + Non-Tunai)</td>
+                                            <td className="py-3 text-sm font-extrabold text-orange-950">TOTAL SALES HARIAN (Tunai + Non-Tunai + Sales Online)</td>
                                             <td className="py-3 text-lg text-right font-black text-orange-600">{formatRupiah(grandTotalSales)}</td>
                                         </tr>
                                     </tbody>

@@ -38,6 +38,21 @@ export default function AreaManagerKoreksiApprovalPage() {
         setLoading(true);
         setError('');
         try {
+            // 1. Fetch profiles of outlets in this AM's area
+            const { data: outletData } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('area_manager', profile.username);
+
+            const outletIds = (outletData || []).map(o => o.id);
+
+            if (outletIds.length === 0) {
+                setRequests([]);
+                setLoading(false);
+                return;
+            }
+
+            // 2. Fetch all koreksi_requests belonging to these outlets
             let query = supabase
                 .from('koreksi_requests')
                 .select(`
@@ -52,6 +67,10 @@ export default function AreaManagerKoreksiApprovalPage() {
                     bri_kredit_baru,
                     bri_qris_baru,
                     bank_transfer_baru,
+                    online_halodoc_baru,
+                    online_tiktok_baru,
+                    online_tokopedia_baru,
+                    total_online_baru,
                     penjelasan_koreksi,
                     status,
                     created_at,
@@ -62,13 +81,15 @@ export default function AreaManagerKoreksiApprovalPage() {
                     tanggal_setor_baru,
                     catatan_admin,
                     bukti_urls_baru,
-                    profiles!koreksi_requests_requested_by_fkey!inner (
+                    profiles!koreksi_requests_requested_by_fkey (
+                        id,
                         username,
                         role,
                         area_manager
                     ),
-                    laporan (
+                    laporan!inner (
                         id,
+                        user_id,
                         tanggal_jual,
                         jenis_pelaporan,
                         nominal_jual,
@@ -81,10 +102,18 @@ export default function AreaManagerKoreksiApprovalPage() {
                         bri_kredit,
                         bri_qris,
                         bank_transfer,
-                        total_non_tunai
+                        total_non_tunai,
+                        online_halodoc,
+                        online_tiktok,
+                        online_tokopedia,
+                        total_online,
+                        profiles:user_id (
+                            username,
+                            kode_toko
+                        )
                     )
                 `)
-                .eq('profiles.area_manager', profile.username)
+                .in('laporan.user_id', outletIds)
                 .order('created_at', { ascending: false });
 
             if (statusFilter !== 'All') {
@@ -245,7 +274,8 @@ export default function AreaManagerKoreksiApprovalPage() {
                                         const lap = item.laporan;
                                         if (!lap) return null;
 
-                                        const branch = item.profiles?.username || '-';
+                                        const branchName = lap.profiles?.username || item.profiles?.username || '-';
+                                        const isAMDirect = item.requested_by === profile?.id || item.profiles?.role === 'AreaManager';
                                         
                                         // Calculate differences
                                         const deltaJual = item.nominal_jual_baru - lap.nominal_jual;
@@ -258,15 +288,15 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                     {new Date(item.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                 </td>
                                                 <td className="py-4 px-6">
-                                                    <div className="font-bold text-gray-900">{branch}</div>
+                                                    <div className="font-bold text-gray-900">{branchName}</div>
                                                     <div className="flex items-center gap-1.5 mt-1">
                                                         <span className="text-[11px] font-semibold text-gray-500">PIC: {item.profiles?.username || '-'}</span>
                                                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase ${
-                                                            item.profiles?.role === 'AreaManager'
+                                                            isAMDirect
                                                                 ? 'bg-purple-100 text-purple-800 border border-purple-200'
                                                                 : 'bg-gray-100 text-gray-700 border border-gray-200'
                                                         }`}>
-                                                            {item.profiles?.role === 'AreaManager' ? 'Area Manager' : 'Staf Toko'}
+                                                            {isAMDirect ? 'Koreksi Langsung AM' : 'Staf Toko'}
                                                         </span>
                                                     </div>
                                                 </td>
@@ -287,6 +317,15 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                     if (Number(item.bri_kredit_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI Kredit: ${formatRupiah(item.bri_kredit_baru)}`);
                                                     if (Number(item.bri_qris_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI QRIS: ${formatRupiah(item.bri_qris_baru)}`);
                                                     if (Number(item.bank_transfer_baru || 0) > 0) nonTunaiDetailsBaru.push(`Transfer: ${formatRupiah(item.bank_transfer_baru)}`);
+
+                                                    const totalOnlineAsli = Number(lap.total_online || ((Number(lap.online_halodoc || 0) + Number(lap.online_tiktok || 0) + Number(lap.online_tokopedia || 0))));
+                                                    const totalOnlineBaru = item.total_online_baru !== null && item.total_online_baru !== undefined ? Number(item.total_online_baru) : (Number(item.online_halodoc_baru || 0) + Number(item.online_tiktok_baru || 0) + Number(item.online_tokopedia_baru || 0));
+                                                    const deltaOnline = totalOnlineBaru - totalOnlineAsli;
+
+                                                    const onlineDetailsBaru = [];
+                                                    if (item.online_halodoc_baru !== null && item.online_halodoc_baru !== undefined && Number(item.online_halodoc_baru) > 0) onlineDetailsBaru.push(`Halodoc: ${formatRupiah(item.online_halodoc_baru)}`);
+                                                    if (item.online_tiktok_baru !== null && item.online_tiktok_baru !== undefined && Number(item.online_tiktok_baru) > 0) onlineDetailsBaru.push(`TikTok: ${formatRupiah(item.online_tiktok_baru)}`);
+                                                    if (item.online_tokopedia_baru !== null && item.online_tokopedia_baru !== undefined && Number(item.online_tokopedia_baru) > 0) onlineDetailsBaru.push(`Tokopedia: ${formatRupiah(item.online_tokopedia_baru)}`);
 
                                                     return (
                                                         <>
@@ -341,6 +380,19 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                                                 )}
                                                                                 {nonTunaiDetailsBaru.map((det, dIdx) => (
                                                                                     <div key={dIdx} className="text-[10px] text-blue-600 font-normal">{det}</div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                        {(totalOnlineBaru > 0 || totalOnlineAsli > 0) && (
+                                                                            <div className="mt-1.5 pt-1.5 border-t border-gray-200/60 font-bold text-purple-900">
+                                                                                Online: <strong>{formatRupiah(totalOnlineBaru)}</strong>
+                                                                                {deltaOnline !== 0 && (
+                                                                                    <span className={`text-[10px] ml-1 ${deltaOnline > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                                        ({deltaOnline > 0 ? '+' : ''}{formatRupiah(deltaOnline)})
+                                                                                    </span>
+                                                                                )}
+                                                                                {onlineDetailsBaru.map((det, dIdx) => (
+                                                                                    <div key={dIdx} className="text-[10px] text-purple-600 font-normal">{det}</div>
                                                                                 ))}
                                                                             </div>
                                                                         )}
