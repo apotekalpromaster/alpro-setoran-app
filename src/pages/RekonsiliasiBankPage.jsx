@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
+import { parseDepositCardExcel } from '../services/reconciliationParser';
 
 export default function RekonsiliasiBankPage() {
     const { profile } = useAuth();
@@ -62,7 +63,6 @@ export default function RekonsiliasiBankPage() {
         setSuccessMsg('');
 
         try {
-            // Stub pemrosesan data harian baru
             setSuccessMsg('Logika pemrosesan data harian baru sedang disiapkan untuk arsitektur dari 0.');
             setActiveTab('tabel');
         } catch (e) {
@@ -73,19 +73,59 @@ export default function RekonsiliasiBankPage() {
         }
     };
 
-    // Phase 1 Stub: Handler Kelola Master Mapping (Siap diisi logika recon_master_mids)
+    // Handler Kelola Master Mapping: Logika Penyimpanan Deposit Card BCA ke Supabase (recon_master_mids)
     const handleUploadMasterFiles = async () => {
+        if (!depositCardFile && !briMidFile && !bcaMidFile && !pkuCabangFile) {
+            setError('Pilih minimal 1 file master untuk diunggah (misal: REFERENSI 2 Deposit Card BCA).');
+            return;
+        }
+
         setLoading(true);
         setError('');
         setSuccessMsg('');
 
         try {
-            // Stub pemrosesan master mapping baru
-            setSuccessMsg('Logika pemrosesan master mapping baru (recon_master_mids) sedang disiapkan.');
-            setDepositCardFile(null);
-            setBriMidFile(null);
-            setBcaMidFile(null);
-            setPkuCabangFile(null);
+            let totalSaved = 0;
+            const messages = [];
+
+            // 1. Process REFERENSI 2: Deposit Card BCA -> recon_master_mids
+            if (depositCardFile) {
+                const buf = await depositCardFile.arrayBuffer();
+                const parsedCards = parseDepositCardExcel(buf);
+
+                if (!parsedCards || parsedCards.length === 0) {
+                    throw new Error('File Excel Deposit Card BCA tidak memiliki data valid (Kolom A Deposit Card & Kolom C Outcode).');
+                }
+
+                const rowsToUpsert = parsedCards.map(item => ({
+                    mapping_type: 'deposit_card',
+                    key_code: item.bca_deposit_card.toString().trim(),
+                    outcode_target: item.outcode.toString().trim().toUpperCase(),
+                    store_name: item.store_name ? item.store_name.toString().trim() : null
+                }));
+
+                const chunkSize = 500;
+                for (let i = 0; i < rowsToUpsert.length; i += chunkSize) {
+                    const chunk = rowsToUpsert.slice(i, i + chunkSize);
+                    const { error: upsertErr } = await safeSupabaseQuery(
+                        supabase.from('recon_master_mids').upsert(chunk, { onConflict: 'mapping_type,key_code' }),
+                        12000
+                    );
+                    if (upsertErr) {
+                        throw new Error(`Gagal menyimpan Deposit Card ke Supabase: ${upsertErr.message}`);
+                    }
+                }
+
+                totalSaved += rowsToUpsert.length;
+                messages.push(`${rowsToUpsert.length} data Deposit Card BCA`);
+                setDepositCardFile(null);
+            }
+
+            if (messages.length > 0) {
+                setSuccessMsg(`✓ Berhasil mengunggah & menyimpan ${messages.join(', ')} ke tabel Supabase (recon_master_mids)!`);
+            } else {
+                setSuccessMsg('Penyiapan logika master mapping lainnya sedang dikembangkan.');
+            }
         } catch (e) {
             console.error('Error uploading master files:', e);
             setError(e.message || 'Gagal memproses file master.');
@@ -140,7 +180,7 @@ export default function RekonsiliasiBankPage() {
                                 : 'border-transparent text-gray-500 hover:text-gray-700'
                         }`}
                     >
-                        ⚙️ Kelola Master Mapping (MID & Cabang)
+                        ⚙️ Kelola Master Mapping (MID &amp; Cabang)
                     </button>
                 </div>
 
