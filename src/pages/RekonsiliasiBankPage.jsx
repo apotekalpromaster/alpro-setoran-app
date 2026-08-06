@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
-import { parseDepositCardExcel, parseBriMidExcel, parseBcaMidExcel } from '../services/reconciliationParser';
+import { parseDepositCardExcel, parseBriMidExcel, parseBcaMidExcel, parseBcaMutationExcelForSupabase } from '../services/reconciliationParser';
 
 // Helper to eliminate duplicate key_codes within a single batch to prevent PostgreSQL "ON CONFLICT DO UPDATE cannot affect row a second time"
 const deduplicateRows = (rows) => {
@@ -11,6 +11,18 @@ const deduplicateRows = (rows) => {
     (rows || []).forEach(row => {
         if (row && row.key_code) {
             map.set(`${row.mapping_type}_${row.key_code}`, row);
+        }
+    });
+    return Array.from(map.values());
+};
+
+
+const deduplicateMutations = (rows) => {
+    const map = new Map();
+    (rows || []).forEach(r => {
+        if (r && r.tanggal_mutasi && r.keterangan) {
+            const k = `${r.tanggal_mutasi}_${r.keterangan}_${r.jumlah}_${r.db_cr}`;
+            map.set(k, r);
         }
     });
     return Array.from(map.values());
@@ -61,10 +73,10 @@ export default function RekonsiliasiBankPage() {
         }
     };
 
-    // Phase 1 Stub: Handler Unggah Data Harian (Siap diisi logika baru)
+    // Handler Unggah Data Harian (Mutasi BCA -> recon_bank_mutations_bca)
     const handleUploadDailyFiles = async () => {
         if (!fileBri && !fileBca) {
-            setError('Pilih minimal 1 file harian untuk diproses.');
+            setError('Pilih minimal 1 file harian untuk diproses (misal: Mutasi BCA).');
             return;
         }
 
@@ -73,8 +85,57 @@ export default function RekonsiliasiBankPage() {
         setSuccessMsg('');
 
         try {
-            setSuccessMsg('Logika pemrosesan data harian baru sedang disiapkan untuk arsitektur dari 0.');
-            setActiveTab('tabel');
+            let totalSaved = 0;
+            const messages = [];
+
+            // 1. Process Mutasi BCA (Ref 6) -> recon_bank_mutations_bca
+            if (fileBca) {
+                // Fetch Master MIDs to build mid -> outcode map
+                const { data: masterData, error: masterErr } = await safeSupabaseQuery(
+                    supabase.from('recon_master_mids').select('key_code, outcode_target'),
+                    6000
+                );
+
+                const masterMidMap = {};
+                if (!masterErr && masterData) {
+                    masterData.forEach(m => {
+                        if (m.key_code && m.outcode_target) {
+                            masterMidMap[m.key_code.trim()] = m.outcode_target.trim().toUpperCase();
+                        }
+                    });
+                }
+
+                const buf = await fileBca.arrayBuffer();
+                const parsedRecords = parseBcaMutationExcelForSupabase(buf, masterMidMap, fileBca.name);
+
+                if (!parsedRecords || parsedRecords.length === 0) {
+                    throw new Error('File Excel Mutasi BCA tidak memiliki data transaksi KARTU KREDIT MID valid.');
+                }
+
+                const rowsToUpsert = deduplicateMutations(parsedRecords);
+
+                const chunkSize = 500;
+                for (let i = 0; i < rowsToUpsert.length; i += chunkSize) {
+                    const chunk = rowsToUpsert.slice(i, i + chunkSize);
+                    const { error: upsertErr } = await safeSupabaseQuery(
+                        supabase.from('recon_bank_mutations_bca').upsert(chunk, { onConflict: 'tanggal_mutasi,keterangan,jumlah,db_cr' }),
+                        15000
+                    );
+                    if (upsertErr) {
+                        throw new Error(`Gagal menyimpan Mutasi BCA ke Supabase: ${upsertErr.message}`);
+                    }
+                }
+
+                totalSaved += rowsToUpsert.length;
+                messages.push(`${rowsToUpsert.length} data Mutasi BCA (KARTU KREDIT MID)`);
+                setFileBca(null);
+            }
+
+            if (messages.length > 0) {
+                setSuccessMsg(`✓ Berhasil mengunggah & menyimpan ${messages.join(', ')} ke tabel Supabase (recon_bank_mutations_bca)!`);
+            } else {
+                setSuccessMsg('Penyiapan pemrosesan mutasi lainnya sedang dikembangkan.');
+            }
         } catch (e) {
             console.error('Error uploading daily files:', e);
             setError(e.message || 'Gagal memproses file Excel.');

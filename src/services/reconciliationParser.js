@@ -530,3 +530,88 @@ export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}, masterMapping
 
     return records;
 }
+
+// ============================================================
+// PARSER MUTASI BCA FOR SUPABASE (recon_bank_mutations_bca)
+// ============================================================
+export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {}, fileName = '') {
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) return [];
+
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+    const records = [];
+
+    for (let i = 7; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || row.length < 4) continue;
+
+        const rawDate = (row[0] || '').toString().trim();
+        const desc = (row[1] || '').toString().trim();
+        const rawAmountStr = (row[3] || '').toString().trim();
+
+        if (!rawDate || !desc) continue;
+
+        const isKartuKredit = desc.includes('KARTU KREDIT');
+
+        if (isKartuKredit) {
+            const keterangan = desc;
+            const kategori = 'KARTU KREDIT MID';
+            const tanggalMutasi = parseExcelDate(rawDate);
+            const tanggalSales = null;
+            const isDebit = rawAmountStr.toUpperCase().includes('DB');
+            const dbCr = isDebit ? 'DB' : 'CR';
+            const cleanAmountStr = rawAmountStr.replace(/[^0-9.-]/g, '');
+            const jumlah = parseFloat(cleanAmountStr) || 0;
+
+            let midCode = '';
+            const midMatch = desc.match(/MID\s*:\s*0*([1-9]\d*)/i);
+            if (midMatch) {
+                midCode = midMatch[1];
+            } else {
+                const rawMidMatch = desc.match(/MID\s*:\s*([0-9]+)/i);
+                if (rawMidMatch) {
+                    midCode = rawMidMatch[1].replace(/^0+/, '');
+                }
+            }
+
+            let grossAmount = 0;
+            const tghMatch = desc.match(/TGH\s*:\s*0*([0-9]+(?:\.[0-9]+)?)/i);
+            if (tghMatch) {
+                grossAmount = parseFloat(tghMatch[1]) || 0;
+            }
+
+            let adminFeeMdr = 0;
+            const admMatch = desc.match(/ADM\s*:\s*0*([0-9]+(?:\.[0-9]+)?)/i);
+            if (admMatch) {
+                adminFeeMdr = parseFloat(admMatch[1]) || 0;
+            }
+
+            let outcode = 'UNMAPPED';
+            if (midCode && masterMidMap[midCode]) {
+                outcode = masterMidMap[midCode];
+            } else if (midCode && masterMidMap[midCode.padStart(7, '0')]) {
+                outcode = masterMidMap[midCode.padStart(7, '0')];
+            }
+
+            records.push({
+                tanggal_mutasi: tanggalMutasi,
+                tanggal_sales: tanggalSales,
+                keterangan: keterangan,
+                kategori: kategori,
+                outcode: outcode ? outcode.toUpperCase() : 'UNMAPPED',
+                jumlah: jumlah,
+                admin_fee_mdr: adminFeeMdr,
+                gross_amount: grossAmount,
+                mid_code: midCode,
+                db_cr: dbCr,
+                rekening_no: '1784455991',
+                source_file: fileName || 'BCA PKU Excel'
+            });
+        }
+    }
+
+    return records;
+}
