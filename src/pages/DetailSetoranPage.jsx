@@ -319,61 +319,67 @@ export default function DetailSetoranPage() {
                             </section>
 
                             {/* BAGIAN 2: PENJUALAN NON-TUNAI (EDC & TRANSFER) */}
-                            <section className="bg-blue-50/40 p-5 rounded-xl border border-blue-100 space-y-5">
-                                <div className="border-b border-blue-200/60 pb-3">
+                            <section className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+                                <div className="border-b border-gray-100 pb-3">
                                     <div className="flex items-center gap-2">
-                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold">2</span>
-                                        <h3 className="font-bold text-gray-800 text-base">Penjualan Non-Tunai (EDC & Transfer)</h3>
+                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold shadow-xs">2</span>
+                                        <h3 className="font-bold text-gray-800 text-base">Penjualan Non-Tunai (EDC &amp; Transfer)</h3>
                                     </div>
-                                    <p className="text-xs text-gray-600 mt-1 ml-8">
+                                    <p className="text-xs text-gray-500 mt-1 ml-8">
                                         Masukkan total angka dari kertas settlement EDC BCA, EDC BRI, dan Transfer Bank. Jika tidak ada transaksi, biarkan Rp 0.
                                     </p>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {/* BCA Group */}
-                                    <div className="space-y-3 bg-white p-4 rounded-xl border border-blue-150 shadow-sm">
-                                        <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 uppercase tracking-wider border-b border-blue-50 pb-2">
+                                    <div className="space-y-3 bg-blue-50/20 p-4 rounded-xl border border-blue-100">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 uppercase tracking-wider border-b border-blue-100 pb-2">
                                             <span className="material-symbols-outlined text-base">credit_card</span> EDC BCA
                                         </div>
-                                        <CurrencyField label="BCA Debit" value={formData.bcaDebit} onChange={(v) => updateField({ bcaDebit: v })} />
-                                        <CurrencyField label="BCA Kredit" value={formData.bcaKredit} onChange={(v) => updateField({ bcaKredit: v })} />
-                                        <CurrencyField label="BCA QRIS" value={formData.bcaQris} onChange={(v) => updateField({ bcaQris: v })} />
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <CurrencyField label="BCA Debit" value={formData.bcaDebit} onChange={(v) => updateField({ bcaDebit: v })} />
+                                            <CurrencyField label="BCA Kredit" value={formData.bcaKredit} onChange={(v) => updateField({ bcaKredit: v })} />
+                                            <CurrencyField label="BCA QRIS" value={formData.bcaQris} onChange={(v) => updateField({ bcaQris: v })} />
+                                        </div>
                                     </div>
 
                                     {/* BRI Group */}
-                                    <div className="space-y-3 bg-white p-4 rounded-xl border border-blue-150 shadow-sm">
-                                        <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 uppercase tracking-wider border-b border-blue-50 pb-2">
+                                    <div className="space-y-3 bg-blue-50/20 p-4 rounded-xl border border-blue-100">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 uppercase tracking-wider border-b border-blue-100 pb-2">
                                             <span className="material-symbols-outlined text-base">credit_card</span> EDC BRI
                                         </div>
-                                        <CurrencyField label="BRI Debit" value={formData.briDebit} onChange={(v) => updateField({ briDebit: v })} />
-                                        <CurrencyField label="BRI Kredit" value={formData.briKredit} onChange={(v) => updateField({ briKredit: v })} />
-                                        <CurrencyField label="BRI QRIS" value={formData.briQris} onChange={(v) => updateField({ briQris: v })} />
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <CurrencyField label="BRI Debit" value={formData.briDebit} onChange={(v) => updateField({ briDebit: v })} />
+                                            <CurrencyField label="BRI Kredit" value={formData.briKredit} onChange={(v) => updateField({ briKredit: v })} />
+                                            <CurrencyField label="BRI QRIS" value={formData.briQris} onChange={(v) => updateField({ briQris: v })} />
+                                        </div>
                                     </div>
                                 </div>
 
                                 {/* Bank Transfer Group */}
-                                <div className="bg-white p-4 rounded-xl border border-blue-150 shadow-sm">
-                                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 uppercase tracking-wider border-b border-emerald-50 pb-2 mb-3">
+                                <div className="bg-emerald-50/20 p-4 rounded-xl border border-emerald-100">
+                                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 uppercase tracking-wider border-b border-emerald-100 pb-2 mb-3">
                                         <span className="material-symbols-outlined text-base">account_balance</span> Transfer Bank
                                     </div>
-                                    <CurrencyField label="Bank Transfer" value={formData.bankTransfer} onChange={(v) => updateField({ bankTransfer: v })} />
+                                    <div className="max-w-md">
+                                        <CurrencyField label="Bank Transfer" value={formData.bankTransfer} onChange={(v) => updateField({ bankTransfer: v })} />
+                                    </div>
                                 </div>
                             </section>
 
                             {/* BAGIAN 3: RINCIAN PENJUALAN ONLINE */}
-                            <section className="bg-purple-50/30 p-5 rounded-xl border border-purple-150 space-y-4">
-                                <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+                            <section className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+                                <div className="border-b border-gray-100 pb-3">
                                     <div className="flex items-center gap-2">
-                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-white text-xs font-bold">3</span>
+                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-white text-xs font-bold shadow-xs">3</span>
                                         <h3 className="font-bold text-gray-800 text-base">Rincian Penjualan Online (Marketplace &amp; E-Commerce)</h3>
                                     </div>
+                                    <p className="text-xs text-gray-500 mt-1 ml-8">
+                                        Masukkan total angka penjualan dari Halodoc, TikTok Shop, dan Tokopedia. Jika tidak ada transaksi, biarkan Rp 0.
+                                    </p>
                                 </div>
-                                <p className="text-xs text-gray-600 mt-1 ml-8">
-                                    Masukkan total angka penjualan dari Halodoc, TikTok Shop, dan Tokopedia. Jika tidak ada transaksi, biarkan Rp 0.
-                                </p>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-xl border border-purple-150 shadow-sm">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-purple-50/20 p-4 rounded-xl border border-purple-100">
                                     <CurrencyField
                                         label="Penjualan Online Halodoc"
                                         value={formData.onlineHalodoc}
@@ -393,9 +399,9 @@ export default function DetailSetoranPage() {
                             </section>
 
                             {/* BAGIAN 4: UPLOAD BUKTI FOTO */}
-                            <section className="bg-white p-5 rounded-xl border border-gray-200 space-y-4">
+                            <section className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
                                 <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white text-xs font-bold">4</span>
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white text-xs font-bold shadow-xs">4</span>
                                     <h3 className="font-bold text-gray-800 text-base">Upload Bukti Foto (Maksimal 5 Foto)</h3>
                                 </div>
                                 <UploadSection
@@ -409,32 +415,32 @@ export default function DetailSetoranPage() {
                             </section>
 
                             {/* KARTU TOTAL SALES HARIAN (GRAND TOTAL) */}
-                            <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100/70 border-2 border-orange-300/80 rounded-2xl p-6 shadow-md space-y-4">
-                                <div className="flex items-center justify-between border-b border-orange-200/80 pb-3">
-                                    <h4 className="text-xs font-extrabold text-orange-900 uppercase tracking-wider flex items-center gap-2">
+                            <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100/70 border-2 border-orange-300 rounded-2xl p-6 shadow-md space-y-5">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-orange-200/80 pb-3 gap-2">
+                                    <h4 className="text-xs font-extrabold text-orange-950 uppercase tracking-wider flex items-center gap-2">
                                         <span className="material-symbols-outlined text-xl text-orange-600">analytics</span> TOTAL SALES HARIAN (Tunai + Non-Tunai + Sales Online)
                                     </h4>
-                                    <span className="text-[10px] font-bold bg-orange-200/80 text-orange-900 px-2.5 py-1 rounded-full uppercase tracking-wider">Konsolidasi Omset</span>
+                                    <span className="self-start sm:self-auto text-[10px] font-bold bg-orange-200/90 text-orange-950 px-3 py-1 rounded-full uppercase tracking-wider border border-orange-300/60">Konsolidasi Omset</span>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-gray-700">
-                                    <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs">
-                                        <span className="text-gray-500 block text-[11px]">Total Sales Tunai Kasir:</span>
-                                        <span className="font-bold text-base text-gray-900">{formatRupiah(totalPenjualan)}</span>
+                                    <div className="bg-white/90 p-3.5 rounded-xl border border-orange-200/70 shadow-xs flex flex-col justify-between h-full space-y-2">
+                                        <span className="text-gray-600 font-medium block text-[11px] min-h-[2.25rem] flex items-center leading-snug">Total Sales Tunai Kasir:</span>
+                                        <span className="font-bold text-base text-gray-900 font-mono">{formatRupiah(totalPenjualan)}</span>
                                     </div>
-                                    <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs">
-                                        <span className="text-gray-500 block text-[11px]">Total Sales Non-Tunai (EDC &amp; Transfer):</span>
-                                        <span className="font-bold text-base text-blue-700">{formatRupiah(totalNonTunai)}</span>
+                                    <div className="bg-white/90 p-3.5 rounded-xl border border-orange-200/70 shadow-xs flex flex-col justify-between h-full space-y-2">
+                                        <span className="text-gray-600 font-medium block text-[11px] min-h-[2.25rem] flex items-center leading-snug">Total Sales Non-Tunai (EDC &amp; Transfer):</span>
+                                        <span className="font-bold text-base text-blue-700 font-mono">{formatRupiah(totalNonTunai)}</span>
                                     </div>
-                                    <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs">
-                                        <span className="text-gray-500 block text-[11px]">Total Sales Online (Marketplace):</span>
-                                        <span className="font-bold text-base text-purple-700">{formatRupiah(totalOnline)}</span>
+                                    <div className="bg-white/90 p-3.5 rounded-xl border border-orange-200/70 shadow-xs flex flex-col justify-between h-full space-y-2">
+                                        <span className="text-gray-600 font-medium block text-[11px] min-h-[2.25rem] flex items-center leading-snug">Total Sales Online (Marketplace):</span>
+                                        <span className="font-bold text-base text-purple-700 font-mono">{formatRupiah(totalOnline)}</span>
                                     </div>
                                 </div>
 
-                                <div className="pt-2 border-t-2 border-orange-300 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
+                                <div className="pt-3 border-t-2 border-orange-300 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                                     <span className="text-sm font-black text-orange-950 uppercase tracking-wide">GRAND TOTAL SALES</span>
-                                    <span className="text-2xl sm:text-3xl font-black text-orange-600 tracking-tight">{formatRupiah(grandTotalSales)}</span>
+                                    <span className="text-2xl sm:text-3xl font-black text-orange-600 tracking-tight font-mono">{formatRupiah(grandTotalSales)}</span>
                                 </div>
                             </div>
                         </div>
@@ -578,15 +584,15 @@ function CurrencyField({ label, value, onChange }) {
         onChange(raw > 0 ? formatRupiah(raw) : '');
     };
     return (
-        <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">{label}</label>
+        <div className="flex flex-col justify-between h-full">
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5 min-h-[2.25rem] flex items-center leading-snug">{label}</label>
             <input
                 type="text"
                 inputMode="numeric"
                 value={value || ''}
                 onChange={handleChange}
                 placeholder="Rp 0"
-                className="form-input"
+                className="form-input text-sm font-medium w-full"
                 autoComplete="off"
             />
         </div>
