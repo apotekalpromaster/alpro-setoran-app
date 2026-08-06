@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
-import { parseDepositCardExcel, parseBcaMidExcel } from '../services/reconciliationParser';
+import { parseDepositCardExcel, parseBriMidExcel, parseBcaMidExcel } from '../services/reconciliationParser';
 
 export default function RekonsiliasiBankPage() {
     const { profile } = useAuth();
@@ -120,7 +120,39 @@ export default function RekonsiliasiBankPage() {
                 setDepositCardFile(null);
             }
 
-            // 2. Process REFERENSI 4: Master MID BCA -> recon_master_mids
+            // 2. Process REFERENSI 3: Master MID BRI -> recon_master_mids
+            if (briMidFile) {
+                const buf = await briMidFile.arrayBuffer();
+                const parsedMids = parseBriMidExcel(buf);
+
+                if (!parsedMids || parsedMids.length === 0) {
+                    throw new Error('File Excel Master MID BRI tidak memiliki data valid (Kolom MID & Outcode).');
+                }
+
+                const rowsToUpsert = parsedMids.map(item => ({
+                    mapping_type: 'bri_mid',
+                    key_code: item.mid_bri.toString().trim(),
+                    outcode_target: item.outcode.toString().trim().toUpperCase()
+                }));
+
+                const chunkSize = 500;
+                for (let i = 0; i < rowsToUpsert.length; i += chunkSize) {
+                    const chunk = rowsToUpsert.slice(i, i + chunkSize);
+                    const { error: upsertErr } = await safeSupabaseQuery(
+                        supabase.from('recon_master_mids').upsert(chunk, { onConflict: 'mapping_type,key_code' }),
+                        12000
+                    );
+                    if (upsertErr) {
+                        throw new Error(`Gagal menyimpan Master MID BRI ke Supabase: ${upsertErr.message}`);
+                    }
+                }
+
+                totalSaved += rowsToUpsert.length;
+                messages.push(`${rowsToUpsert.length} data Master MID BRI`);
+                setBriMidFile(null);
+            }
+
+            // 3. Process REFERENSI 4: Master MID BCA -> recon_master_mids
             if (bcaMidFile) {
                 const buf = await bcaMidFile.arrayBuffer();
                 const parsedMids = parseBcaMidExcel(buf);
