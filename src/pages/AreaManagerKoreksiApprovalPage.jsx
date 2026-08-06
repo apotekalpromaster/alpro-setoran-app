@@ -344,6 +344,19 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                                                 ))}
                                                                             </div>
                                                                         )}
+                                                                        {(totalOnlineBaru > 0 || totalOnlineAsli > 0) && (
+                                                                            <div className="mt-1.5 pt-1.5 border-t border-gray-200/60 font-bold text-purple-900">
+                                                                                Online: <strong>{formatRupiah(totalOnlineBaru)}</strong>
+                                                                                {deltaOnline !== 0 && (
+                                                                                    <span className={`text-[10px] ml-1 ${deltaOnline > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                                        ({deltaOnline > 0 ? '+' : ''}{formatRupiah(deltaOnline)})
+                                                                                    </span>
+                                                                                )}
+                                                                                {onlineDetailsBaru.map((det, dIdx) => (
+                                                                                    <div key={dIdx} className="text-[10px] text-purple-600 font-normal">{det}</div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
                                                                     </>
                                                                 )}
                                                             </td>

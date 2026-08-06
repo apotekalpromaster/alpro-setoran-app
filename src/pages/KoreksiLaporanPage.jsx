@@ -50,8 +50,13 @@ export default function KoreksiLaporanPage() {
     // Checkbox Section Toggles (User chooses what to edit)
     const [toggleTunai, setToggleTunai] = useState(false);
     const [toggleNonTunai, setToggleNonTunai] = useState(false);
+    const [toggleOnline, setToggleOnline] = useState(false);
     const [toggleMeta, setToggleMeta] = useState(false);
     const [toggleBukti, setToggleBukti] = useState(false);
+
+    const [newOnlineHalodoc, setNewOnlineHalodoc] = useState('');
+    const [newOnlineTiktok, setNewOnlineTiktok] = useState('');
+    const [newOnlineTokopedia, setNewOnlineTokopedia] = useState('');
 
     // Editable form states
     const [newJual, setNewJual] = useState('');
@@ -107,6 +112,10 @@ export default function KoreksiLaporanPage() {
                 setNewBriQris(formatRupiah(report.bri_qris || 0));
                 setNewBankTransfer(formatRupiah(report.bank_transfer || 0));
 
+                setNewOnlineHalodoc(formatRupiah(report.online_halodoc || 0));
+                setNewOnlineTiktok(formatRupiah(report.online_tiktok || 0));
+                setNewOnlineTokopedia(formatRupiah(report.online_tokopedia || 0));
+
                 setNewTanggalJual(report.tanggal_jual || '');
                 setNewTanggalSetor(report.tanggal_setor || '');
                 setNewJenisPelaporan(report.jenis_pelaporan || '');
@@ -114,6 +123,7 @@ export default function KoreksiLaporanPage() {
                 // Reset toggles to false
                 setToggleTunai(false);
                 setToggleNonTunai(false);
+                setToggleOnline(false);
                 setToggleMeta(false);
                 setToggleBukti(false);
                 setStagedFiles([null, null, null, null, null]);
@@ -128,8 +138,9 @@ export default function KoreksiLaporanPage() {
         setNewJual(''); setNewSetoran(''); setNewPotongan('');
         setNewBcaDebit(''); setNewBcaKredit(''); setNewBcaQris('');
         setNewBriDebit(''); setNewBriKredit(''); setNewBriQris(''); setNewBankTransfer('');
+        setNewOnlineHalodoc(''); setNewOnlineTiktok(''); setNewOnlineTokopedia('');
         setNewTanggalJual(''); setNewTanggalSetor(''); setNewJenisPelaporan('');
-        setToggleTunai(false); setToggleNonTunai(false); setToggleMeta(false); setToggleBukti(false);
+        setToggleTunai(false); setToggleNonTunai(false); setToggleOnline(false); setToggleMeta(false); setToggleBukti(false);
         setStagedFiles([null, null, null, null, null]);
     };
 
@@ -275,8 +286,8 @@ export default function KoreksiLaporanPage() {
         }
 
         if (requestType === 'edit') {
-            if (!toggleTunai && !toggleNonTunai && !toggleMeta && !toggleBukti) {
-                setError('Harap centang minimal 1 bagian data yang ingin dikoreksi (Penjualan Tunai, Non-Tunai, Tanggal/Jenis, atau Foto Bukti).');
+            if (!toggleTunai && !toggleNonTunai && !toggleOnline && !toggleMeta && !toggleBukti) {
+                setError('Harap centang minimal 1 bagian data yang ingin dikoreksi (Penjualan Tunai, Non-Tunai, Penjualan Online, Tanggal/Jenis, atau Foto Bukti).');
                 return;
             }
         }
@@ -296,6 +307,11 @@ export default function KoreksiLaporanPage() {
             let finalBriKr = selectedReport.bri_kredit || 0;
             let finalBriQr = selectedReport.bri_qris || 0;
             let finalTrf = selectedReport.bank_transfer || 0;
+
+            let finalOnlineHalodoc = selectedReport.online_halodoc || 0;
+            let finalOnlineTiktok = selectedReport.online_tiktok || 0;
+            let finalOnlineTokopedia = selectedReport.online_tokopedia || 0;
+            let finalTotalOnline = selectedReport.total_online || 0;
 
             let finalTglJual = selectedReport.tanggal_jual;
             let finalTglSetor = selectedReport.tanggal_setor;
@@ -318,6 +334,13 @@ export default function KoreksiLaporanPage() {
                     finalBriKr = parseRupiah(newBriKredit);
                     finalBriQr = parseRupiah(newBriQris);
                     finalTrf = parseRupiah(newBankTransfer);
+                }
+
+                if (toggleOnline) {
+                    finalOnlineHalodoc = parseRupiah(newOnlineHalodoc);
+                    finalOnlineTiktok = parseRupiah(newOnlineTiktok);
+                    finalOnlineTokopedia = parseRupiah(newOnlineTokopedia);
+                    finalTotalOnline = finalOnlineHalodoc + finalOnlineTiktok + finalOnlineTokopedia;
                 }
 
                 if (toggleMeta) {
@@ -366,6 +389,10 @@ export default function KoreksiLaporanPage() {
                     bri_kredit_baru: requestType === 'delete' ? 0 : finalBriKr,
                     bri_qris_baru: requestType === 'delete' ? 0 : finalBriQr,
                     bank_transfer_baru: requestType === 'delete' ? 0 : finalTrf,
+                    online_halodoc_baru: requestType === 'delete' ? 0 : (toggleOnline ? finalOnlineHalodoc : null),
+                    online_tiktok_baru: requestType === 'delete' ? 0 : (toggleOnline ? finalOnlineTiktok : null),
+                    online_tokopedia_baru: requestType === 'delete' ? 0 : (toggleOnline ? finalOnlineTokopedia : null),
+                    total_online_baru: requestType === 'delete' ? 0 : (toggleOnline ? finalTotalOnline : null),
                     tanggal_jual_baru: requestType === 'edit' ? finalTglJual : null,
                     tanggal_setor_baru: requestType === 'edit' ? finalTglSetor : null,
                     jenis_pelaporan_baru: requestType === 'edit' ? finalJenis : 'HAPUS_DATA',
@@ -638,7 +665,68 @@ export default function KoreksiLaporanPage() {
                                                 )}
                                             </div>
 
-                                            {/* SECTION 3: TANGGAL & JENIS PELAPORAN */}
+                                            {/* SECTION 3: KOREKSI PENJUALAN ONLINE */}
+                                            <div className={`p-4 rounded-xl border transition-all ${toggleOnline ? 'bg-white border-purple-300 shadow-sm ring-1 ring-purple-100' : 'bg-gray-50/70 border-gray-200 opacity-80'}`}>
+                                                <label className="flex items-center gap-2.5 cursor-pointer pb-3 border-b border-gray-200">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={toggleOnline}
+                                                        onChange={(e) => setToggleOnline(e.target.checked)}
+                                                        className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                                    />
+                                                    <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide flex items-center gap-1.5">
+                                                        <span className="material-symbols-outlined text-purple-600 text-base">storefront</span>
+                                                        3. Koreksi Penjualan Online (Marketplace &amp; E-Commerce)
+                                                    </span>
+                                                    {!toggleOnline && (
+                                                        <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
+                                                            Data lama tetap dipertahankan
+                                                        </span>
+                                                    )}
+                                                </label>
+
+                                                {toggleOnline ? (
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 animate-fade-in">
+                                                        <div>
+                                                            <label className="block text-[11px] font-bold text-gray-600 mb-1">Halodoc Baru</label>
+                                                            <input
+                                                                type="text"
+                                                                value={newOnlineHalodoc}
+                                                                onChange={(e) => setNewOnlineHalodoc(formatRupiah(parseRupiah(e.target.value)))}
+                                                                className="form-input w-full py-2 px-3 text-xs font-bold font-mono"
+                                                                placeholder="Rp 0"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[11px] font-bold text-gray-600 mb-1">TikTok Shop Baru</label>
+                                                            <input
+                                                                type="text"
+                                                                value={newOnlineTiktok}
+                                                                onChange={(e) => setNewOnlineTiktok(formatRupiah(parseRupiah(e.target.value)))}
+                                                                className="form-input w-full py-2 px-3 text-xs font-bold font-mono"
+                                                                placeholder="Rp 0"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[11px] font-bold text-gray-600 mb-1">Tokopedia Baru</label>
+                                                            <input
+                                                                type="text"
+                                                                value={newOnlineTokopedia}
+                                                                onChange={(e) => setNewOnlineTokopedia(formatRupiah(parseRupiah(e.target.value)))}
+                                                                className="form-input w-full py-2 px-3 text-xs font-bold font-mono"
+                                                                placeholder="Rp 0"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="pt-3 text-xs text-gray-500 font-mono flex items-center justify-between">
+                                                        <span>Total Online Saat Ini:</span>
+                                                        <span className="font-bold text-purple-800">{formatRupiah(selectedReport?.total_online || 0)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* SECTION 4: TANGGAL & JENIS PELAPORAN */}
                                             <div className={`p-4 rounded-xl border transition-all ${toggleMeta ? 'bg-white border-purple-300 shadow-sm ring-1 ring-purple-100' : 'bg-gray-50/70 border-gray-200 opacity-80'}`}>
                                                 <label className="flex items-center gap-2.5 cursor-pointer pb-3 border-b border-gray-200">
                                                     <input
@@ -649,7 +737,7 @@ export default function KoreksiLaporanPage() {
                                                     />
                                                     <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide flex items-center gap-1.5">
                                                         <span className="material-symbols-outlined text-purple-600 text-base">calendar_month</span>
-                                                        3. Koreksi Tanggal & Jenis Pelaporan
+                                                        4. Koreksi Tanggal & Jenis Pelaporan
                                                     </span>
                                                     {!toggleMeta && (
                                                         <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
