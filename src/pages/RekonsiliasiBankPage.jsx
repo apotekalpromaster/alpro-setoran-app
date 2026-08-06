@@ -36,7 +36,6 @@ export default function RekonsiliasiBankPage() {
     const [storeProfiles, setStoreProfiles] = useState([]);
 
     // File Upload States - Tab 2 (Unggah Data Harian)
-    const [fileXilnex, setFileXilnex] = useState(null);
     const [fileBri, setFileBri] = useState(null);
     const [fileBca, setFileBca] = useState(null);
 
@@ -64,7 +63,7 @@ export default function RekonsiliasiBankPage() {
 
     // Phase 1 Stub: Handler Unggah Data Harian (Siap diisi logika baru)
     const handleUploadDailyFiles = async () => {
-        if (!fileXilnex && !fileBri && !fileBca) {
+        if (!fileBri && !fileBca) {
             setError('Pilih minimal 1 file harian untuk diproses.');
             return;
         }
@@ -412,26 +411,13 @@ export default function RekonsiliasiBankPage() {
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center space-y-3">
                             <h3 className="text-lg font-bold text-gray-800">📤 Unggah Data Rekonsiliasi Harian</h3>
                             <p className="text-xs text-gray-500 max-w-xl mx-auto">
-                                Unggah file Excel Penjualan Xilnex (Ref 1), Mutasi BRI (Ref 5), dan Mutasi BCA (Ref 6).
-                                Sistem akan mencocokkan nominal penjualan tunai &amp; non-tunai secara presisi per Sub-Grup.
+                                Unggah file Excel Mutasi BCA (Ref 6) dan Mutasi BRI (Ref 5). Data Sales Xilnex akan diambil otomatis dari data POS yang sudah diunggah di sistem.
                             </p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
-                                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">1. File Sales Xilnex (Ref 1)</div>
-                                <p className="text-[11px] text-gray-400">Excel Cash &amp; Card Automation (Kolom F &amp; G)</p>
-                                <input
-                                    type="file"
-                                    accept=".xlsx,.xls"
-                                    onChange={e => setFileXilnex(e.target.files[0])}
-                                    className="w-full text-xs p-2 border border-gray-200 rounded-lg"
-                                />
-                                {fileXilnex && <p className="text-xs font-semibold text-emerald-600">✓ {fileXilnex.name}</p>}
-                            </div>
-
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
-                                <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">2. Mutasi BCA (Ref 6)</div>
+                                <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">1. Mutasi BCA (Ref 6)</div>
                                 <p className="text-[11px] text-gray-400">Excel Mutasi BCA PKU (KR OTOMATIS, KARTU KREDIT)</p>
                                 <input
                                     type="file"
@@ -443,7 +429,7 @@ export default function RekonsiliasiBankPage() {
                             </div>
 
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
-                                <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider">3. Mutasi BRI (Ref 5)</div>
+                                <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider">2. Mutasi BRI (Ref 5)</div>
                                 <p className="text-[11px] text-gray-400">Excel Mutasi BRI PKU (OffUs, OnUs, QRIS)</p>
                                 <input
                                     type="file"
