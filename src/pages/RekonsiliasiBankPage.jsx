@@ -92,8 +92,8 @@ export default function RekonsiliasiBankPage() {
             if (fileBca) {
                 // Fetch Master MIDs to build mid -> outcode map
                 const { data: masterData, error: masterErr } = await safeSupabaseQuery(
-                    supabase.from('recon_master_mids').select('key_code, outcode_target'),
-                    6000
+                    supabase.from('recon_master_mids').select('key_code, outcode_target').range(0, 4999),
+                    60000
                 );
 
                 const masterMidMap = {};
@@ -119,7 +119,7 @@ export default function RekonsiliasiBankPage() {
                     const chunk = rowsToUpsert.slice(i, i + chunkSize);
                     const { error: upsertErr } = await safeSupabaseQuery(
                         supabase.from('recon_bank_mutations_bca').upsert(chunk, { onConflict: 'tanggal_mutasi,keterangan,jumlah,db_cr' }),
-                        15000
+                        60000
                     );
                     if (upsertErr) {
                         throw new Error(`Gagal menyimpan Mutasi BCA ke Supabase: ${upsertErr.message}`);
@@ -180,7 +180,7 @@ export default function RekonsiliasiBankPage() {
                     const chunk = rowsToUpsert.slice(i, i + chunkSize);
                     const { error: upsertErr } = await safeSupabaseQuery(
                         supabase.from('recon_master_mids').upsert(chunk, { onConflict: 'mapping_type,key_code' }),
-                        12000
+                        60000
                     );
                     if (upsertErr) {
                         throw new Error(`Gagal menyimpan Deposit Card ke Supabase: ${upsertErr.message}`);
@@ -213,7 +213,7 @@ export default function RekonsiliasiBankPage() {
                     const chunk = rowsToUpsert.slice(i, i + chunkSize);
                     const { error: upsertErr } = await safeSupabaseQuery(
                         supabase.from('recon_master_mids').upsert(chunk, { onConflict: 'mapping_type,key_code' }),
-                        12000
+                        60000
                     );
                     if (upsertErr) {
                         throw new Error(`Gagal menyimpan Master MID BRI ke Supabase: ${upsertErr.message}`);
@@ -246,7 +246,7 @@ export default function RekonsiliasiBankPage() {
                     const chunk = rowsToUpsert.slice(i, i + chunkSize);
                     const { error: upsertErr } = await safeSupabaseQuery(
                         supabase.from('recon_master_mids').upsert(chunk, { onConflict: 'mapping_type,key_code' }),
-                        12000
+                        60000
                     );
                     if (upsertErr) {
                         throw new Error(`Gagal menyimpan Master MID BCA ke Supabase: ${upsertErr.message}`);
