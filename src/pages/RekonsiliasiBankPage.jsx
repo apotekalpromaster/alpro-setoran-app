@@ -5,6 +5,17 @@ import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
 import { parseDepositCardExcel, parseBriMidExcel, parseBcaMidExcel } from '../services/reconciliationParser';
 
+// Helper to eliminate duplicate key_codes within a single batch to prevent PostgreSQL "ON CONFLICT DO UPDATE cannot affect row a second time"
+const deduplicateRows = (rows) => {
+    const map = new Map();
+    (rows || []).forEach(row => {
+        if (row && row.key_code) {
+            map.set(`${row.mapping_type}_${row.key_code}`, row);
+        }
+    });
+    return Array.from(map.values());
+};
+
 export default function RekonsiliasiBankPage() {
     const { profile } = useAuth();
     const [activeTab, setActiveTab] = useState('tabel');
@@ -73,10 +84,10 @@ export default function RekonsiliasiBankPage() {
         }
     };
 
-    // Handler Kelola Master Mapping: Logika Penyimpanan Deposit Card BCA ke Supabase (recon_master_mids)
+    // Handler Kelola Master Mapping: Logika Penyimpanan Deposit Card, MID BRI, MID BCA ke Supabase (recon_master_mids)
     const handleUploadMasterFiles = async () => {
         if (!depositCardFile && !briMidFile && !bcaMidFile && !pkuCabangFile) {
-            setError('Pilih minimal 1 file master untuk diunggah (misal: REFERENSI 2 Deposit Card BCA).');
+            setError('Pilih minimal 1 file master untuk diunggah (misal: REFERENSI 3 Master MID BRI).');
             return;
         }
 
@@ -97,11 +108,12 @@ export default function RekonsiliasiBankPage() {
                     throw new Error('File Excel Deposit Card BCA tidak memiliki data valid (Kolom A Deposit Card & Kolom C Outcode).');
                 }
 
-                const rowsToUpsert = parsedCards.map(item => ({
+                const rawRows = parsedCards.map(item => ({
                     mapping_type: 'deposit_card',
                     key_code: item.bca_deposit_card.toString().trim(),
                     outcode_target: item.outcode.toString().trim().toUpperCase()
                 }));
+                const rowsToUpsert = deduplicateRows(rawRows);
 
                 const chunkSize = 500;
                 for (let i = 0; i < rowsToUpsert.length; i += chunkSize) {
@@ -129,11 +141,12 @@ export default function RekonsiliasiBankPage() {
                     throw new Error('File Excel Master MID BRI tidak memiliki data valid (Kolom MID & Outcode).');
                 }
 
-                const rowsToUpsert = parsedMids.map(item => ({
+                const rawRows = parsedMids.map(item => ({
                     mapping_type: 'bri_mid',
                     key_code: item.mid_bri.toString().trim(),
                     outcode_target: item.outcode.toString().trim().toUpperCase()
                 }));
+                const rowsToUpsert = deduplicateRows(rawRows);
 
                 const chunkSize = 500;
                 for (let i = 0; i < rowsToUpsert.length; i += chunkSize) {
@@ -161,11 +174,12 @@ export default function RekonsiliasiBankPage() {
                     throw new Error('File Excel Master MID BCA tidak memiliki data valid (Kolom MID & Outcode).');
                 }
 
-                const rowsToUpsert = parsedMids.map(item => ({
+                const rawRows = parsedMids.map(item => ({
                     mapping_type: 'bca_mid',
                     key_code: item.mid_bca.toString().trim(),
                     outcode_target: item.outcode.toString().trim().toUpperCase()
                 }));
+                const rowsToUpsert = deduplicateRows(rawRows);
 
                 const chunkSize = 500;
                 for (let i = 0; i < rowsToUpsert.length; i += chunkSize) {
