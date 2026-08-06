@@ -252,24 +252,43 @@ export function parseBriMidExcel(arrayBuffer) {
 export function parseBcaMidExcel(arrayBuffer) {
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });
+    if (workbook.SheetNames.length === 0) return [];
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
+    if (rawRows.length === 0) return [];
+
+    let headerIdx = 0;
+    let colMid = 1;
+    let colOutcode = 2;
+
+    for (let r = 0; r < Math.min(10, rawRows.length); r++) {
+        const row = rawRows[r];
+        if (!row) continue;
+        const midIdx = row.findIndex(cell => cell && cell.toString().toUpperCase().trim() === 'MID');
+        const outcodeIdx = row.findIndex(cell => cell && (cell.toString().toUpperCase().trim() === 'OUTCODE' || cell.toString().toUpperCase().trim().includes('KODE TOKO')));
+
+        if (midIdx !== -1 && outcodeIdx !== -1) {
+            headerIdx = r;
+            colMid = midIdx;
+            colOutcode = outcodeIdx;
+            break;
+        }
+    }
+
     const mappings = [];
-    for (let i = 2; i < rawRows.length; i++) {
+    for (let i = headerIdx + 1; i < rawRows.length; i++) {
         const row = rawRows[i];
         if (!row) continue;
-        const storeName = (row[1] || '').toString().trim();
-        const mid = (row[2] || '').toString().trim();
-        const outcode = (row[3] || '').toString().trim();
+        const mid = (row[colMid] || '').toString().trim();
+        const outcode = (row[colOutcode] || '').toString().trim();
 
         if (mid && outcode) {
             const cleanMid = mid.replace(/^0+/, '');
             mappings.push({
                 mid_bca: cleanMid,
                 raw_mid_bca: mid,
-                outcode: outcode.toUpperCase(),
-                store_name: storeName
+                outcode: outcode.toUpperCase()
             });
         }
     }

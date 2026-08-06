@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
-import { parseDepositCardExcel } from '../services/reconciliationParser';
+import { parseDepositCardExcel, parseBcaMidExcel } from '../services/reconciliationParser';
 
 export default function RekonsiliasiBankPage() {
     const { profile } = useAuth();
@@ -118,6 +118,38 @@ export default function RekonsiliasiBankPage() {
                 totalSaved += rowsToUpsert.length;
                 messages.push(`${rowsToUpsert.length} data Deposit Card BCA`);
                 setDepositCardFile(null);
+            }
+
+            // 2. Process REFERENSI 4: Master MID BCA -> recon_master_mids
+            if (bcaMidFile) {
+                const buf = await bcaMidFile.arrayBuffer();
+                const parsedMids = parseBcaMidExcel(buf);
+
+                if (!parsedMids || parsedMids.length === 0) {
+                    throw new Error('File Excel Master MID BCA tidak memiliki data valid (Kolom MID & Outcode).');
+                }
+
+                const rowsToUpsert = parsedMids.map(item => ({
+                    mapping_type: 'bca_mid',
+                    key_code: item.mid_bca.toString().trim(),
+                    outcode_target: item.outcode.toString().trim().toUpperCase()
+                }));
+
+                const chunkSize = 500;
+                for (let i = 0; i < rowsToUpsert.length; i += chunkSize) {
+                    const chunk = rowsToUpsert.slice(i, i + chunkSize);
+                    const { error: upsertErr } = await safeSupabaseQuery(
+                        supabase.from('recon_master_mids').upsert(chunk, { onConflict: 'mapping_type,key_code' }),
+                        12000
+                    );
+                    if (upsertErr) {
+                        throw new Error(`Gagal menyimpan Master MID BCA ke Supabase: ${upsertErr.message}`);
+                    }
+                }
+
+                totalSaved += rowsToUpsert.length;
+                messages.push(`${rowsToUpsert.length} data Master MID BCA`);
+                setBcaMidFile(null);
             }
 
             if (messages.length > 0) {
