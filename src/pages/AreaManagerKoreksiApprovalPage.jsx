@@ -38,6 +38,21 @@ export default function AreaManagerKoreksiApprovalPage() {
         setLoading(true);
         setError('');
         try {
+            // 1. Fetch profiles of outlets in this AM's area
+            const { data: outletData } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('area_manager', profile.username);
+
+            const outletIds = (outletData || []).map(o => o.id);
+
+            if (outletIds.length === 0) {
+                setRequests([]);
+                setLoading(false);
+                return;
+            }
+
+            // 2. Fetch all koreksi_requests belonging to these outlets
             let query = supabase
                 .from('koreksi_requests')
                 .select(`
@@ -52,6 +67,10 @@ export default function AreaManagerKoreksiApprovalPage() {
                     bri_kredit_baru,
                     bri_qris_baru,
                     bank_transfer_baru,
+                    online_halodoc_baru,
+                    online_tiktok_baru,
+                    online_tokopedia_baru,
+                    total_online_baru,
                     penjelasan_koreksi,
                     status,
                     created_at,
@@ -62,13 +81,15 @@ export default function AreaManagerKoreksiApprovalPage() {
                     tanggal_setor_baru,
                     catatan_admin,
                     bukti_urls_baru,
-                    profiles!koreksi_requests_requested_by_fkey!inner (
+                    profiles!koreksi_requests_requested_by_fkey (
+                        id,
                         username,
                         role,
                         area_manager
                     ),
-                    laporan (
+                    laporan!inner (
                         id,
+                        user_id,
                         tanggal_jual,
                         jenis_pelaporan,
                         nominal_jual,
@@ -81,10 +102,18 @@ export default function AreaManagerKoreksiApprovalPage() {
                         bri_kredit,
                         bri_qris,
                         bank_transfer,
-                        total_non_tunai
+                        total_non_tunai,
+                        online_halodoc,
+                        online_tiktok,
+                        online_tokopedia,
+                        total_online,
+                        profiles:user_id (
+                            username,
+                            kode_toko
+                        )
                     )
                 `)
-                .eq('profiles.area_manager', profile.username)
+                .in('laporan.user_id', outletIds)
                 .order('created_at', { ascending: false });
 
             if (statusFilter !== 'All') {
@@ -245,7 +274,8 @@ export default function AreaManagerKoreksiApprovalPage() {
                                         const lap = item.laporan;
                                         if (!lap) return null;
 
-                                        const branch = item.profiles?.username || '-';
+                                        const branchName = lap.profiles?.username || item.profiles?.username || '-';
+                                        const isAMDirect = item.requested_by === profile?.id || item.profiles?.role === 'AreaManager';
                                         
                                         // Calculate differences
                                         const deltaJual = item.nominal_jual_baru - lap.nominal_jual;
@@ -258,15 +288,15 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                     {new Date(item.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                 </td>
                                                 <td className="py-4 px-6">
-                                                    <div className="font-bold text-gray-900">{branch}</div>
+                                                    <div className="font-bold text-gray-900">{branchName}</div>
                                                     <div className="flex items-center gap-1.5 mt-1">
                                                         <span className="text-[11px] font-semibold text-gray-500">PIC: {item.profiles?.username || '-'}</span>
                                                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase ${
-                                                            item.profiles?.role === 'AreaManager'
+                                                            isAMDirect
                                                                 ? 'bg-purple-100 text-purple-800 border border-purple-200'
                                                                 : 'bg-gray-100 text-gray-700 border border-gray-200'
                                                         }`}>
-                                                            {item.profiles?.role === 'AreaManager' ? 'Area Manager' : 'Staf Toko'}
+                                                            {isAMDirect ? 'Koreksi Langsung AM' : 'Staf Toko'}
                                                         </span>
                                                     </div>
                                                 </td>
