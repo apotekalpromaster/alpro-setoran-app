@@ -13,6 +13,25 @@ function formatDate(d) {
     return d ? new Date(d).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '-';
 }
 
+
+function base64ToFile(base64Data, fileName, mimeType) {
+    if (!base64Data) return null;
+    try {
+        const arr = base64Data.split(',');
+        const mime = mimeType || (arr[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+        const bstr = atob(arr[1] || arr[0]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new File([u8arr], fileName || 'bukti.jpg', { type: mime });
+    } catch (e) {
+        console.error('base64ToFile error:', e);
+        return null;
+    }
+}
+
 export default function RingkasanPage() {
     const { profile } = useAuth();
     const { formData, resetForm } = useFormWizard();
@@ -72,24 +91,42 @@ export default function RingkasanPage() {
         setError('');
 
         try {
-            // 1. Upload staged files to Google Drive in parallel for speed & resilience
+            // 1. Upload staged files to Google Drive with Base64 conversion & resilience
             let buktiUrls = [...(formData.buktiUrls || [])];
             if (formData.buktiFiles?.length > 0) {
-                const filesToUpload = formData.buktiFiles.filter(item => item && item.file);
+                const filesToUpload = formData.buktiFiles
+                    .map(item => {
+                        if (!item) return null;
+                        if (item.file instanceof File) return item.file;
+                        if (item.base64) return base64ToFile(item.base64, item.name, item.type);
+                        return null;
+                    })
+                    .filter(Boolean);
+
                 if (filesToUpload.length > 0) {
-                    setUploadStatus(`Mengunggah ${filesToUpload.length} lampiran foto...`);
+                    setUploadStatus(`Mengunggah ${filesToUpload.length} lampiran foto ke Drive...`);
                     try {
-                        const uploadPromises = filesToUpload.map(item => uploadToDrive(item.file));
+                        const uploadPromises = filesToUpload.map(fileObj => uploadToDrive(fileObj));
                         const uploadedUrls = await Promise.all(uploadPromises);
                         uploadedUrls.forEach(url => {
                             if (url) buktiUrls.push(url);
                         });
                     } catch (driveErr) {
-                        throw new Error(`Gagal saat mengunggah lampiran foto: ${driveErr.message}. Silakan coba beberapa saat lagi.`);
+                        throw new Error(`Gagal saat mengunggah lampiran foto: ${driveErr.message}. Silakan periksa koneksi dan coba lagi.`);
                     }
                 }
-                setUploadStatus('Menyimpan data laporan...');
             }
+
+            // MANDATORY VALIDATION GUARD: Stop submission if photos are required but empty
+            const isNonFin = NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan);
+            const isSingleProof = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(formData.jenisPelaporan);
+            const minExpected = isSingleProof ? 1 : 3;
+
+            if (!isNonFin && buktiUrls.length === 0) {
+                throw new Error(`Lampiran foto bukti setoran wajib diunggah (minimal ${minExpected} foto). Silakan kembali ke Langkah 2 untuk memilih foto bukti.`);
+            }
+
+            setUploadStatus('Menyimpan data laporan...');
 
             // 2. Insert each date row into Supabase `laporan` with auto-retry resilience
             const rows = allDates.map((date, i) => ({
