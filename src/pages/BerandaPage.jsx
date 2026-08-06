@@ -105,11 +105,12 @@ export default function BerandaPage() {
                 );
                 setRejectedKoreksi(rejData || []);
 
-                // Calculate duplicate dates for primary reports
+                // Calculate duplicate dates for active primary reports (excluding archived/deleted)
                 const counts = {};
                 allReports.forEach(r => {
+                    const isArchived = r.isArchived || r.status === 'Archived' || r.jenis_pelaporan === 'DIHAPUS / DIBATALKAN' || r.jenis_pelaporan === 'HAPUS_DATA';
                     const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-                    if (isPrimary && r.tanggal_jual) {
+                    if (isPrimary && r.tanggal_jual && !isArchived) {
                         counts[r.tanggal_jual] = (counts[r.tanggal_jual] || 0) + 1;
                     }
                 });

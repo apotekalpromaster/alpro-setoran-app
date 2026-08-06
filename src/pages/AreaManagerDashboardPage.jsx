@@ -378,8 +378,9 @@ export default function AreaManagerDashboardPage() {
     const duplicateOutletDates = useMemo(() => {
         const counts = {};
         reports.forEach(r => {
+            const isArchived = r.isArchived || r.status === 'Archived' || r.jenis_pelaporan === 'HAPUS_DATA';
             const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            if (isPrimary) {
+            if (isPrimary && !isArchived) {
                 const key = r.username + '_' + r.tanggal_jual;
                 counts[key] = (counts[key] || 0) + 1;
             }

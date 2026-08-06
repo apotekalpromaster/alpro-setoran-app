@@ -136,8 +136,9 @@ export default function RiwayatPage() {
     const duplicateDates = useMemo(() => {
         const counts = {};
         reports.forEach(r => {
+            const isArchived = r.isArchived || r.status === 'Archived' || r.jenis_pelaporan === 'DIHAPUS / DIBATALKAN' || r.jenis_pelaporan === 'HAPUS_DATA';
             const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
-            if (isPrimary) {
+            if (isPrimary && !isArchived) {
                 counts[r.tanggal_jual] = (counts[r.tanggal_jual] || 0) + 1;
             }
         });
@@ -304,7 +305,8 @@ export default function RiwayatPage() {
         let totalGrandSales = 0;
 
         filteredReports.forEach((r) => {
-            if (!r.isUnreported) {
+            const isArchived = r.isArchived || r.status === 'Archived' || r.jenis_pelaporan === 'DIHAPUS / DIBATALKAN' || r.jenis_pelaporan === 'HAPUS_DATA';
+            if (!r.isUnreported && !isArchived) {
                 const tunai = Number(r.nominal_jual || 0);
                 const pot = Number(r.potongan || 0);
                 const setor = Number(r.nominal_setoran || 0);
