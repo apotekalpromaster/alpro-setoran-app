@@ -146,7 +146,7 @@ export function isPrimaryReport(jenis) {
  * Reduces 5-15MB smartphone camera photos down to ~250-400KB in milliseconds.
  * Prevents mobile memory crashes and eliminates Google Drive / Supabase upload timeouts.
  */
-export async function compressImage(file, maxWidth = 1280, quality = 0.75) {
+export async function compressImage(file, maxWidth = 1600, quality = 0.85) {
     if (!file || typeof window === 'undefined' || !file.type?.startsWith('image/')) {
         return file;
     }

@@ -188,12 +188,21 @@ export default function DetailSetoranPage() {
     };
 
     // --- Validate & go to summary ---
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setGlobalError('');
         setIsSubmitting(true);
 
         try {
+            // Guard: Wait briefly if any file is still uploading in background
+            const stillUploading = stagedFiles.some(item => item && item.uploading);
+            if (stillUploading) {
+                let waitCount = 0;
+                while (stagedFiles.some(item => item && item.uploading) && waitCount < 10) {
+                    await new Promise(r => setTimeout(r, 500));
+                    waitCount++;
+                }
+            }
             const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
 
             if (isSingleProofType) {
