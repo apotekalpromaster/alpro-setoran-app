@@ -479,14 +479,22 @@ Mohon segera buka aplikasi untuk melakukan verifikasi dan persetujuan:
 Terima kasih,
 Sistem Pelaporan Setoran Harian Apotek Alpro`;
 
-                            await supabase.functions.invoke('send-email', {
+                            await supabase.functions.invoke('send-koreksi-notification', {
                                 body: {
                                     to: amProfile.email,
+                                    cc: profile?.email || undefined,
                                     subject: emailSubject,
-                                    text: emailBodyText,
-                                    html: emailBodyText.replace(/\n/g, '<br/>')
+                                    cabang: profile?.username || '-',
+                                    kodeToko: profile?.kode_toko || '-',
+                                    pelaporEmail: profile?.email || '-',
+                                    jenisKoreksi: isDelete ? 'Permohonan Hapus Total Laporan' : 'Koreksi Sebagian Data',
+                                    tanggalSales: formattedDate,
+                                    jenisPelaporan: selectedReport.jenis_pelaporan || '-',
+                                    alasan: explanation.trim(),
+                                    rincianPerubahan: changesSummary.join('\n'),
+                                    waktuPengajuan: new Date().toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })
                                 }
-                            }).catch(err => console.warn('Invoke send-email Edge Function warning:', err.message));
+                            }).catch(err => console.warn('Invoke send-koreksi-notification Edge Function warning:', err.message));
                         }
                     } catch (e) {
                         console.warn('Auto-email AM notification background error:', e.message);
