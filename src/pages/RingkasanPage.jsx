@@ -109,13 +109,14 @@ export default function RingkasanPage() {
                     .filter(Boolean);
 
                 if (filesToUpload.length > 0) {
-                    setUploadStatus(`Mengunggah ${filesToUpload.length} lampiran foto ke Drive...`);
                     try {
-                        const uploadPromises = filesToUpload.map(fileObj => uploadToDrive(fileObj));
-                        const uploadedUrls = await Promise.all(uploadPromises);
-                        uploadedUrls.forEach(url => {
+                        for (let fIdx = 0; fIdx < filesToUpload.length; fIdx++) {
+                            setUploadStatus(`Mengunggah foto bukti (${fIdx + 1}/${filesToUpload.length})...`);
+                            const fileObj = filesToUpload[fIdx];
+                            const compressed = await compressImage(fileObj);
+                            const url = await uploadToDrive(compressed);
                             if (url) buktiUrls.push(url);
-                        });
+                        }
                     } catch (driveErr) {
                         throw new Error(`Gagal saat mengunggah lampiran foto: ${driveErr.message}. Silakan periksa koneksi dan coba lagi.`);
                     }
@@ -172,7 +173,7 @@ export default function RingkasanPage() {
                 try {
                     const { error: insertError } = await safeSupabaseQuery(
                         supabase.from('laporan').insert(rows),
-                        10000
+                        35000
                     );
                     if (insertError) throw insertError;
                     insertSuccess = true;
