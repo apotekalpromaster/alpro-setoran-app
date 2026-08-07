@@ -91,7 +91,6 @@ export default function RingkasanPage() {
           ];
 
     const handleKirim = async () => {
-        if (!window.confirm('Kirim laporan sales sekarang?')) return;
         setIsSubmitting(true);
         setError('');
 
