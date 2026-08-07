@@ -850,7 +850,7 @@ export default function KoreksiLaporanPage() {
                                                 )}
                                             </div>
 
-                                            {/* SECTION 4: GANTI FOTO BUKTI */}
+                                            {/* SECTION 5: GANTI FOTO BUKTI */}
                                             <div className={`p-4 rounded-xl border transition-all ${toggleBukti ? 'bg-white border-orange-300 shadow-sm ring-1 ring-orange-100' : 'bg-gray-50/70 border-gray-200 opacity-80'}`}>
                                                 <label className="flex items-center gap-2.5 cursor-pointer pb-3 border-b border-gray-200">
                                                     <input
@@ -861,7 +861,7 @@ export default function KoreksiLaporanPage() {
                                                     />
                                                     <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide flex items-center gap-1.5">
                                                         <span className="material-symbols-outlined text-orange-600 text-base">photo_camera</span>
-                                                        4. Ubah / Ganti Foto Bukti Setoran
+                                                        5. Ubah / Ganti Foto Bukti Setoran
                                                     </span>
                                                     {!toggleBukti && (
                                                         <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
