@@ -12,19 +12,7 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,
-        lock: typeof navigator !== 'undefined' && navigator.locks
-            ? async (name, acquireTimeout, fn) => {
-                  try {
-                      return await fn();
-                  } catch (e) {
-                      if (e.name === 'AbortError' || (e.message && e.message.includes('Lock broken'))) {
-                          console.warn('Web Locks API abort bypassed safely:', e.message);
-                          return await fn();
-                      }
-                      throw e;
-                  }
-              }
-            : undefined,
+        lock: false,
     }
 });
 
