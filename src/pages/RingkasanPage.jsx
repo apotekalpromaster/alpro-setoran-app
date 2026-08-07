@@ -33,7 +33,7 @@ function base64ToFile(base64Data, fileName, mimeType) {
 }
 
 export default function RingkasanPage() {
-    const { profile } = useAuth();
+    const { user, profile, accessToken } = useAuth();
     const { formData, resetForm } = useFormWizard();
     const navigate = useNavigate();
 
