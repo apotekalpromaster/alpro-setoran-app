@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFormWizard } from '../context/FormWizardContext';
-import { parseRupiah, formatRupiah, validateSetoranData, NON_FINANCIAL_TYPES } from '../lib/validators';
+import { parseRupiah, formatRupiah, validateSetoranData, NON_FINANCIAL_TYPES, compressImage } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
 import { supabase } from '../services/supabaseClient';
 
@@ -110,8 +110,9 @@ export default function DetailSetoranPage() {
         return [...base, ...Array(5 - base.length).fill(null)].slice(0, 5);
     });
 
-    const handleFileSlotChange = (slotIdx, file) => {
-        if (!file) return;
+    const handleFileSlotChange = async (slotIdx, rawFile) => {
+        if (!rawFile) return;
+        const file = await compressImage(rawFile);
         const isImage = file.type.startsWith('image/');
         const reader = new FileReader();
         reader.onload = (e) => {

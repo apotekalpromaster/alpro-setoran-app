@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFormWizard } from '../context/FormWizardContext';
-import { parseRupiah, formatRupiah, NON_FINANCIAL_TYPES } from '../lib/validators';
+import { parseRupiah, formatRupiah, NON_FINANCIAL_TYPES, compressImage } from '../lib/validators';
 import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import { uploadToDrive } from '../services/driveService';
 import UserLayout from '../components/UserLayout';
