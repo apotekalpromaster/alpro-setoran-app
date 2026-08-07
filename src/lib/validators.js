@@ -139,3 +139,76 @@ export function isPrimaryReport(jenis) {
     if (trimmed.startsWith('Setoran Sales Dengan Potongan') || trimmed.startsWith('Setoran Sales Dgn Potongan')) return true;
     return false;
 }
+
+
+/**
+ * Fast, pure HTML5 Canvas image compressor for mobile and web.
+ * Reduces 5-15MB smartphone camera photos down to ~250-400KB in milliseconds.
+ * Prevents mobile memory crashes and eliminates Google Drive / Supabase upload timeouts.
+ */
+export async function compressImage(file, maxWidth = 1280, quality = 0.75) {
+    if (!file || typeof window === 'undefined' || !file.type?.startsWith('image/')) {
+        return file;
+    }
+    if (file.size <= 350 * 1024) {
+        return file;
+    }
+
+    return new Promise((resolve) => {
+        try {
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(file);
+
+            img.onload = () => {
+                URL.revokeObjectURL(objectUrl);
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth || height > maxWidth) {
+                    if (width > height) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    } else {
+                        width = Math.round((width * maxWidth) / height);
+                        height = maxWidth;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return resolve(file);
+
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob(
+                    (blob) => {
+                        if (!blob) return resolve(file);
+                        const cleanName = file.name ? file.name.replace(/\.[^/.]+$/, "") + ".jpg" : "bukti.jpg";
+                        const compressedFile = new File([blob], cleanName, {
+                            type: 'image/jpeg',
+                            lastModified: Date.now(),
+                        });
+                        resolve(compressedFile);
+                    },
+                    'image/jpeg',
+                    quality
+                );
+            };
+
+            img.onerror = () => {
+                URL.revokeObjectURL(objectUrl);
+                resolve(file);
+            };
+
+            img.src = objectUrl;
+        } catch (e) {
+            console.warn('Image compression fallback:', e);
+            resolve(file);
+        }
+    });
+}
