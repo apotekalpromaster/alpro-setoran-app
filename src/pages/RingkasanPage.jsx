@@ -99,27 +99,26 @@ export default function RingkasanPage() {
             // 1. Upload staged files to Google Drive with Base64 conversion & resilience
             let buktiUrls = [...(formData.buktiUrls || [])];
             if (formData.buktiFiles?.length > 0) {
-                const filesToUpload = formData.buktiFiles
-                    .map(item => {
-                        if (!item) return null;
-                        if (item.file instanceof File) return item.file;
-                        if (item.base64) return base64ToFile(item.base64, item.name, item.type);
-                        return null;
-                    })
-                    .filter(Boolean);
-
-                if (filesToUpload.length > 0) {
-                    try {
-                        for (let fIdx = 0; fIdx < filesToUpload.length; fIdx++) {
-                            setUploadStatus(`Mengunggah foto bukti (${fIdx + 1}/${filesToUpload.length})...`);
-                            const fileObj = filesToUpload[fIdx];
-                            const compressed = await compressImage(fileObj);
-                            const url = await uploadToDrive(compressed);
-                            if (url) buktiUrls.push(url);
+                const validSlots = formData.buktiFiles.filter(Boolean);
+                try {
+                    for (let fIdx = 0; fIdx < validSlots.length; fIdx++) {
+                        const item = validSlots[fIdx];
+                        if (item.driveUrl) {
+                            // 🚀 ALREADY EAGER-UPLOADED IN STEP 2 BACKGROUND! (INSTANT 0-SECOND LOAD)
+                            buktiUrls.push(item.driveUrl);
+                        } else {
+                            // Fallback for any photo that hasn't finished eager background upload yet
+                            setUploadStatus(`Mengunggah foto bukti (${fIdx + 1}/${validSlots.length})...`);
+                            const fileObj = item.file instanceof File ? item.file : (item.base64 ? base64ToFile(item.base64, item.name, item.type) : null);
+                            if (fileObj) {
+                                const compressed = await compressImage(fileObj);
+                                const url = await uploadToDrive(compressed);
+                                if (url) buktiUrls.push(url);
+                            }
                         }
-                    } catch (driveErr) {
-                        throw new Error(`Gagal saat mengunggah lampiran foto: ${driveErr.message}. Silakan periksa koneksi dan coba lagi.`);
                     }
+                } catch (driveErr) {
+                    throw new Error(`Gagal saat mengunggah lampiran foto: ${driveErr.message}. Silakan periksa koneksi dan coba lagi.`);
                 }
             }
 
