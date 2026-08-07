@@ -115,7 +115,7 @@ export default function RingkasanPage() {
 
             setUploadStatus('Menyimpan data laporan...');
 
-            // 2. Fetch Supabase REST credentials & User ID safely with a 1.5s timeout guard
+            // 2. Fetch Supabase REST credentials & User ID with Triple Failsafe JWT Token Resolution
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -123,15 +123,40 @@ export default function RingkasanPage() {
             let userId = profile?.id || null;
 
             try {
-                const sessionPromise = supabase.auth.getSession();
-                const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 1500));
-                const sessionRes = await Promise.race([sessionPromise, timeoutPromise]);
-                if (sessionRes?.data?.session) {
-                    token = sessionRes.data.session.access_token || supabaseAnonKey;
-                    userId = sessionRes.data.session.user?.id || profile?.id;
+                const { data: sessionData } = await supabase.auth.getSession();
+                if (sessionData?.session?.access_token) {
+                    token = sessionData.session.access_token;
+                    userId = sessionData.session.user?.id || profile?.id;
+                } else {
+                    const { data: refreshData } = await supabase.auth.refreshSession();
+                    if (refreshData?.session?.access_token) {
+                        token = refreshData.session.access_token;
+                        userId = refreshData.session.user?.id || profile?.id;
+                    }
                 }
             } catch (e) {
-                console.warn('Fast session fetch fallback:', e);
+                console.warn('Session token fetch warning:', e.message);
+            }
+
+            // Fallback search in localStorage if SDK session object was unattached
+            if (token === supabaseAnonKey && typeof localStorage !== 'undefined') {
+                try {
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        if (key && key.includes('-auth-token')) {
+                            const parsed = JSON.parse(localStorage.getItem(key));
+                            if (parsed?.access_token) {
+                                token = parsed.access_token;
+                                if (parsed?.user?.id) userId = parsed.user.id;
+                                break;
+                            }
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            if (token === supabaseAnonKey) {
+                throw new Error('Sesi autentikasi Anda telah berakhir. Silakan login ulang untuk melanjutkan.');
             }
 
             // 3. Build lightweight database rows (< 1 KB payload size for 0.3s sub-second insert)
