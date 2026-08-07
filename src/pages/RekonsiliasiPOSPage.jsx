@@ -90,6 +90,12 @@ export default function RekonsiliasiPOSPage() {
                         nominal_jual,
                         nominal_setoran,
                         potongan,
+                        total_non_tunai,
+                        total_online,
+                        bca_debit, bca_kredit, bca_qris,
+                        bri_debit, bri_kredit, bri_qris,
+                        bank_transfer,
+                        online_halodoc, online_tiktok, online_tokopedia,
                         profiles!laporan_user_id_fkey!inner ( username )
                     `)
                     .gte('tanggal_jual', start)
@@ -99,7 +105,12 @@ export default function RekonsiliasiPOSPage() {
             const posData = await fetchAllPaginated(
                 supabase
                     .from('pos_sales_data')
-                    .select('kode_cabang, tanggal_jual, sales_pos')
+                    .select(`
+                        kode_cabang, tanggal_jual, sales_pos,
+                        card_bca_amex, card_bca_bca_card, card_bca_debit_lain, card_bca_debit_sama, card_bca_jcb, card_bca_master, card_bca_others, card_bca_qris, card_bca_unionpay, card_bca_visa,
+                        card_bri_amex, card_bri_bca_card, card_bri_debit_lain, card_bri_debit_sama, card_bri_jcb, card_bri_master, card_bri_others, card_bri_qris, card_bri_unionpay, card_bri_visa,
+                        online_halodoc, online_tiktok, online_tokopedia
+                    `)
                     .gte('tanggal_jual', start)
                     .lte('tanggal_jual', end)
             );
@@ -114,7 +125,11 @@ export default function RekonsiliasiPOSPage() {
                         reportSales: 0,
                         reportSetoran: 0,
                         reportPotongan: 0,
+                        reportNonTunai: 0,
+                        reportOnline: 0,
                         posSales: 0,
+                        posNonTunai: 0,
+                        posOnline: 0,
                         hasReport: false,
                         hasPOS: false
                     };
@@ -126,15 +141,28 @@ export default function RekonsiliasiPOSPage() {
                 const branch = r.profiles?.username;
                 if (!branch) return;
                 const entry = getEntry(branch, r.tanggal_jual);
+                const rNonTunai = Number(r.bca_debit || 0) + Number(r.bca_kredit || 0) + Number(r.bca_qris || 0) +
+                                  Number(r.bri_debit || 0) + Number(r.bri_kredit || 0) + Number(r.bri_qris || 0) +
+                                  Number(r.bank_transfer || 0) || Number(r.total_non_tunai || 0);
+                const rOnline = Number(r.total_online || 0) || (Number(r.online_halodoc || 0) + Number(r.online_tiktok || 0) + Number(r.online_tokopedia || 0));
+
                 entry.reportSales += Number(r.nominal_jual || 0);
                 entry.reportSetoran += Number(r.nominal_setoran || 0);
                 entry.reportPotongan += Number(r.potongan || 0);
+                entry.reportNonTunai += rNonTunai;
+                entry.reportOnline += rOnline;
                 entry.hasReport = true;
             });
 
             posData.forEach(p => {
                 const entry = getEntry(p.kode_cabang, p.tanggal_jual);
-                entry.posSales = Number(p.sales_pos || 0);
+                const pNonTunai = (Number(p.card_bca_amex || 0) + Number(p.card_bca_bca_card || 0) + Number(p.card_bca_debit_lain || 0) + Number(p.card_bca_debit_sama || 0) + Number(p.card_bca_jcb || 0) + Number(p.card_bca_master || 0) + Number(p.card_bca_others || 0) + Number(p.card_bca_qris || 0) + Number(p.card_bca_unionpay || 0) + Number(p.card_bca_visa || 0)) +
+                                  (Number(p.card_bri_amex || 0) + Number(p.card_bri_bca_card || 0) + Number(p.card_bri_debit_lain || 0) + Number(p.card_bri_debit_sama || 0) + Number(p.card_bri_jcb || 0) + Number(p.card_bri_master || 0) + Number(p.card_bri_others || 0) + Number(p.card_bri_qris || 0) + Number(p.card_bri_unionpay || 0) + Number(p.card_bri_visa || 0));
+                const pOnline = Number(p.online_halodoc || 0) + Number(p.online_tiktok || 0) + Number(p.online_tokopedia || 0);
+
+                entry.posSales += Number(p.sales_pos || 0);
+                entry.posNonTunai += pNonTunai;
+                entry.posOnline += pOnline;
                 entry.hasPOS = true;
             });
 
@@ -166,9 +194,34 @@ export default function RekonsiliasiPOSPage() {
                     status2 = 'Selisih';
                 }
 
-                // Legacy status for stats summary card (use status1 as primary)
+                // Selisih Non-Tunai: POS Non-Tunai vs Toko Non-Tunai
+                const deltaNonTunai = entry.posNonTunai - entry.reportNonTunai;
+                let statusNonTunai = 'Cocok';
+                if (!entry.hasReport && entry.hasPOS) {
+                    statusNonTunai = 'BelumLapor';
+                } else if (!entry.hasPOS && entry.hasReport) {
+                    statusNonTunai = 'BelumPOS';
+                } else if (!entry.hasReport && !entry.hasPOS) {
+                    statusNonTunai = 'KurangData';
+                } else if (deltaNonTunai !== 0) {
+                    statusNonTunai = 'Selisih';
+                }
+
+                // Selisih Online: POS Online vs Toko Online
+                const deltaOnline = entry.posOnline - entry.reportOnline;
+                let statusOnline = 'Cocok';
+                if (!entry.hasReport && entry.hasPOS) {
+                    statusOnline = 'BelumLapor';
+                } else if (!entry.hasPOS && entry.hasReport) {
+                    statusOnline = 'BelumPOS';
+                } else if (!entry.hasReport && !entry.hasPOS) {
+                    statusOnline = 'KurangData';
+                } else if (deltaOnline !== 0) {
+                    statusOnline = 'Selisih';
+                }
+
                 const status = status1;
-                return { ...entry, delta1, status1, delta2, status2, setoranPlusPotongan, status };
+                return { ...entry, delta1, status1, delta2, status2, setoranPlusPotongan, status, deltaNonTunai, statusNonTunai, deltaOnline, statusOnline };
             });
 
             merged.sort((a, b) => {
@@ -225,21 +278,29 @@ export default function RekonsiliasiPOSPage() {
             acc.reportSetoran += item.reportSetoran || 0;
             acc.reportPotongan += item.reportPotongan || 0;
             acc.setoranPlusPotongan += item.setoranPlusPotongan || 0;
+            acc.posNonTunai += item.posNonTunai || 0;
+            acc.reportNonTunai += item.reportNonTunai || 0;
+            acc.posOnline += item.posOnline || 0;
+            acc.reportOnline += item.reportOnline || 0;
             return acc;
-        }, { posSales: 0, reportSales: 0, reportSetoran: 0, reportPotongan: 0, setoranPlusPotongan: 0 });
+        }, { posSales: 0, reportSales: 0, reportSetoran: 0, reportPotongan: 0, setoranPlusPotongan: 0, posNonTunai: 0, reportNonTunai: 0, posOnline: 0, reportOnline: 0 });
 
         const delta1 = totals.posSales - totals.reportSales;
         const delta2 = totals.posSales - totals.setoranPlusPotongan;
+        const deltaNonTunai = totals.posNonTunai - totals.reportNonTunai;
+        const deltaOnline = totals.posOnline - totals.reportOnline;
 
-        return { ...totals, delta1, delta2 };
+        return { ...totals, delta1, delta2, deltaNonTunai, deltaOnline };
     }, [filteredReconData]);
 
     const downloadCSV = () => {
         if (!filteredReconData.length) return;
-        const header = 'Tanggal Jual,Nama Cabang,Sales Xilnex,Sales Manual,Potongan,Nominal Setoran,Selisih 1,Status 1,Selisih 2,Status 2\n';
+        const header = 'Tanggal Jual,Nama Cabang,Sales Tunai Xilnex,Sales Tunai Toko,Potongan,Setoran Bank,Selisih 1,Status 1,Selisih 2,Status 2,Xilnex Non-Tunai,Toko Non-Tunai,Selisih Non-Tunai,Status Non-Tunai,Xilnex Online,Toko Online,Selisih Online,Status Online\n';
         const body = filteredReconData.map((item) => {
             const s1Lbl = { Cocok: 'Cocok', Selisih: 'Selisih', BelumLapor: 'Belum Lapor', BelumPOS: 'POS Kosong' }[item.status1] || '-';
             const s2Lbl = { Cocok: 'Cocok', Selisih: 'Selisih', BelumLapor: 'Belum Lapor', BelumPOS: 'POS Kosong' }[item.status2] || '-';
+            const sNtLbl = { Cocok: 'Cocok', Selisih: 'Selisih', BelumLapor: 'Belum Lapor', BelumPOS: 'POS Kosong' }[item.statusNonTunai] || '-';
+            const sOnLbl = { Cocok: 'Cocok', Selisih: 'Selisih', BelumLapor: 'Belum Lapor', BelumPOS: 'POS Kosong' }[item.statusOnline] || '-';
             return [
                 item.date,
                 `"${item.branch}"`,
@@ -250,7 +311,15 @@ export default function RekonsiliasiPOSPage() {
                 item.delta1,
                 `"${s1Lbl}"`,
                 item.delta2,
-                `"${s2Lbl}"`
+                `"${s2Lbl}"`,
+                item.hasPOS ? item.posNonTunai : '',
+                item.hasReport ? item.reportNonTunai : '',
+                item.deltaNonTunai,
+                `"${sNtLbl}"`,
+                item.hasPOS ? item.posOnline : '',
+                item.hasReport ? item.reportOnline : '',
+                item.deltaOnline,
+                `"${sOnLbl}"`
             ].join(',');
         }).join('\n');
 
@@ -760,10 +829,12 @@ const handleFileChange = (e) => {
                                                 <tr>
                                                     <th className="py-3 px-4 whitespace-nowrap bg-gray-100 sticky top-0 z-20 border-b border-gray-200 text-gray-700" rowSpan="2">Tanggal Jual</th>
                                                     <th className="py-3 px-4 whitespace-nowrap bg-gray-100 sticky top-0 z-20 border-b border-gray-200 text-gray-700" rowSpan="2">Nama Cabang</th>
-                                                    <th className="py-3 px-4 text-right whitespace-nowrap bg-blue-100 text-blue-900 sticky top-0 z-20 border-b border-gray-200 font-bold" rowSpan="2">Sales Xilnex</th>
-                                                    <th className="py-3 px-4 text-center text-purple-900 bg-purple-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="3">Data Laporan Manual</th>
+                                                    <th className="py-3 px-4 text-right whitespace-nowrap bg-blue-100 text-blue-900 sticky top-0 z-20 border-b border-gray-200 font-bold" rowSpan="2">Sales Tunai Xilnex</th>
+                                                    <th className="py-3 px-4 text-center text-purple-900 bg-purple-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="3">Data Laporan Tunai Manual</th>
                                                     <th className="py-3 px-4 text-center text-red-900 bg-red-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="2">Selisih POS vs Sales Manual</th>
                                                     <th className="py-3 px-4 text-center text-orange-900 bg-orange-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="2">Selisih POS vs Setoran+Potongan</th>
+                                                    <th className="py-3 px-4 text-center text-indigo-900 bg-indigo-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="4">Rekonsiliasi Sales Non-Tunai (EDC)</th>
+                                                    <th className="py-3 px-4 text-center text-emerald-900 bg-emerald-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="4">Rekonsiliasi Sales Online</th>
                                                 </tr>
                                                 <tr className="border-b-2 border-gray-300">
                                                     <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-800 sticky top-[38px] z-20 border-b border-gray-200">Sales Manual</th>
@@ -773,16 +844,24 @@ const handleFileChange = (e) => {
                                                     <th className="py-2 px-4 text-center whitespace-nowrap bg-red-50 text-red-800 sticky top-[38px] z-20 border-b border-gray-200">Status 1</th>
                                                     <th className="py-2 px-4 text-right whitespace-nowrap bg-orange-50 text-orange-800 sticky top-[38px] z-20 border-b border-gray-200">Selisih 2</th>
                                                     <th className="py-2 px-4 text-center whitespace-nowrap bg-orange-50 text-orange-800 sticky top-[38px] z-20 border-b border-gray-200">Status 2</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-indigo-50 text-indigo-900 sticky top-[38px] z-20 border-b border-gray-200">Xilnex Non-Tunai</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-indigo-50 text-indigo-900 sticky top-[38px] z-20 border-b border-gray-200">Toko Non-Tunai</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-indigo-50 text-indigo-900 sticky top-[38px] z-20 border-b border-gray-200">Selisih Non-Tunai</th>
+                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-indigo-50 text-indigo-900 sticky top-[38px] z-20 border-b border-gray-200">Status Non-Tunai</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-emerald-50 text-emerald-900 sticky top-[38px] z-20 border-b border-gray-200">Xilnex Online</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-emerald-50 text-emerald-900 sticky top-[38px] z-20 border-b border-gray-200">Toko Online</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-emerald-50 text-emerald-900 sticky top-[38px] z-20 border-b border-gray-200">Selisih Online</th>
+                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-emerald-50 text-emerald-900 sticky top-[38px] z-20 border-b border-gray-200">Status Online</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
                                                 {filteredReconData.length === 0 ? (
-                                                    <tr><td colSpan="10" className="py-10 text-center text-gray-400">Tidak ada data rekonsiliasi yang cocok dengan kriteria filter.</td></tr>
+                                                    <tr><td colSpan="18" className="py-10 text-center text-gray-400">Tidak ada data rekonsiliasi yang cocok dengan kriteria filter.</td></tr>
                                                 ) : (
                                                     paginatedReconData.map((item, idx) => {
-                                                        const rowCls2 = (item.status1 === "Selisih" || item.status2 === "Selisih") ? "bg-red-50/30" : item.status1 === "BelumLapor" ? "bg-yellow-50/20" : "";
+                                                        const rowCls2 = (item.status1 === "Selisih" || item.status2 === "Selisih" || item.statusNonTunai === "Selisih" || item.statusOnline === "Selisih") ? "bg-red-50/30" : item.status1 === "BelumLapor" ? "bg-yellow-50/20" : "";
                                                         const B = (s, theme) => {
-                                                            const col = s === "Cocok" ? "bg-green-50 text-green-700 border-green-200" : s === "Selisih" ? (theme === "orange" ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-red-50 text-red-700 border-red-200") : s === "BelumLapor" ? "bg-yellow-50 text-yellow-700 border-yellow-200" : "bg-gray-100 text-gray-600 border-gray-300";
+                                                            const col = s === "Cocok" ? "bg-green-50 text-green-700 border-green-200" : s === "Selisih" ? (theme === "orange" ? "bg-orange-50 text-orange-700 border-orange-200" : theme === "indigo" ? "bg-indigo-50 text-indigo-700 border-indigo-200" : theme === "emerald" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200") : s === "BelumLapor" ? "bg-yellow-50 text-yellow-700 border-yellow-200" : "bg-gray-100 text-gray-600 border-gray-300";
                                                             const lbl = {Cocok:"Cocok",Selisih:"Selisih",BelumLapor:"Belum Lapor",BelumPOS:"POS Kosong"}[s] || "-";
                                                             return <span className={"px-2 py-0.5 text-[10px] font-bold rounded-full border " + col}>{lbl}</span>;
                                                         };
@@ -799,6 +878,14 @@ const handleFileChange = (e) => {
                                                                 <td className="py-2.5 px-4 text-center bg-red-50/20">{B(item.status1,"red")}</td>
                                                                 <td className="py-2.5 px-4 text-right font-mono text-xs bg-orange-50/20">{D(item.delta2)}</td>
                                                                 <td className="py-2.5 px-4 text-center bg-orange-50/20">{B(item.status2,"orange")}</td>
+                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-indigo-50/20">{item.hasPOS ? formatRupiah(item.posNonTunai) : <span className="text-gray-300">-</span>}</td>
+                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-indigo-50/20">{item.hasReport ? formatRupiah(item.reportNonTunai) : <span className="text-gray-300">-</span>}</td>
+                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-indigo-50/20">{D(item.deltaNonTunai)}</td>
+                                                                <td className="py-2.5 px-4 text-center bg-indigo-50/20">{B(item.statusNonTunai,"indigo")}</td>
+                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-emerald-50/20">{item.hasPOS ? formatRupiah(item.posOnline) : <span className="text-gray-300">-</span>}</td>
+                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-emerald-50/20">{item.hasReport ? formatRupiah(item.reportOnline) : <span className="text-gray-300">-</span>}</td>
+                                                                <td className="py-2.5 px-4 text-right font-mono text-xs bg-emerald-50/20">{D(item.deltaOnline)}</td>
+                                                                <td className="py-2.5 px-4 text-center bg-emerald-50/20">{B(item.statusOnline,"emerald")}</td>
                                                             </tr>
                                                         );
                                                     })
@@ -815,6 +902,14 @@ const handleFileChange = (e) => {
                                                     <td className="py-3 px-4 bg-red-100"></td>
                                                     <td className="py-3 px-4 text-right font-mono bg-orange-100"><span className={grandTotals.delta2 < 0 ? "text-red-700" : grandTotals.delta2 > 0 ? "text-blue-700" : "text-gray-500"}>{grandTotals.delta2 !== 0 ? (grandTotals.delta2 > 0 ? "+" : "") + formatRupiah(grandTotals.delta2) : "Rp 0"}</span></td>
                                                     <td className="py-3 px-4 bg-orange-100"></td>
+                                                    <td className="py-3 px-4 text-right font-mono bg-indigo-100">{formatRupiah(grandTotals.posNonTunai)}</td>
+                                                    <td className="py-3 px-4 text-right font-mono bg-indigo-100">{formatRupiah(grandTotals.reportNonTunai)}</td>
+                                                    <td className="py-3 px-4 text-right font-mono bg-indigo-100"><span className={grandTotals.deltaNonTunai < 0 ? "text-red-700" : grandTotals.deltaNonTunai > 0 ? "text-blue-700" : "text-gray-500"}>{grandTotals.deltaNonTunai !== 0 ? (grandTotals.deltaNonTunai > 0 ? "+" : "") + formatRupiah(grandTotals.deltaNonTunai) : "Rp 0"}</span></td>
+                                                    <td className="py-3 px-4 bg-indigo-100"></td>
+                                                    <td className="py-3 px-4 text-right font-mono bg-emerald-100">{formatRupiah(grandTotals.posOnline)}</td>
+                                                    <td className="py-3 px-4 text-right font-mono bg-emerald-100">{formatRupiah(grandTotals.reportOnline)}</td>
+                                                    <td className="py-3 px-4 text-right font-mono bg-emerald-100"><span className={grandTotals.deltaOnline < 0 ? "text-red-700" : grandTotals.deltaOnline > 0 ? "text-blue-700" : "text-gray-500"}>{grandTotals.deltaOnline !== 0 ? (grandTotals.deltaOnline > 0 ? "+" : "") + formatRupiah(grandTotals.deltaOnline) : "Rp 0"}</span></td>
+                                                    <td className="py-3 px-4 bg-emerald-100"></td>
                                                 </tr>
                                             </tfoot>
                                         </table>
