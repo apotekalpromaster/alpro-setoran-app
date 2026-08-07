@@ -34,7 +34,7 @@ export function NotificationProvider({ children }) {
                 query = query.eq('kode_toko', storeCode);
             }
 
-            const { data, error } = await safeSupabaseQuery(query, 5000);
+            const { data, error } = await query;
             if (error) {
                 console.warn('Gagal memuat notifikasi:', error.message);
                 return;
