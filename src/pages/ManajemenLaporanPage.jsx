@@ -77,6 +77,7 @@ export default function ManajemenLaporanPage() {
                         nominal_setoran,
                         potongan,
                         total_non_tunai,
+                        total_online, online_halodoc, online_tiktok, online_tokopedia,
                         bca_debit, bca_kredit, bca_qris,
                         bri_debit, bri_kredit, bri_qris,
                         bank_transfer,
@@ -171,7 +172,8 @@ export default function ManajemenLaporanPage() {
                         .select(`
                         kode_cabang, tanggal_jual, sales_pos,
                         card_bca_amex, card_bca_bca_card, card_bca_debit_lain, card_bca_debit_sama, card_bca_jcb, card_bca_master, card_bca_others, card_bca_qris, card_bca_unionpay, card_bca_visa,
-                        card_bri_amex, card_bri_bca_card, card_bri_debit_lain, card_bri_debit_sama, card_bri_jcb, card_bri_master, card_bri_others, card_bri_qris, card_bri_unionpay, card_bri_visa
+                        card_bri_amex, card_bri_bca_card, card_bri_debit_lain, card_bri_debit_sama, card_bri_jcb, card_bri_master, card_bri_others, card_bri_qris, card_bri_unionpay, card_bri_visa,
+                        online_halodoc, online_tiktok, online_tokopedia
                     `)
                         .in('kode_cabang', searchKeys)
                         .in('tanggal_jual', allDates)
@@ -182,9 +184,11 @@ export default function ManajemenLaporanPage() {
                     posRows.forEach(item => {
                         const edcSum = (Number(item.card_bca_amex || 0) + Number(item.card_bca_bca_card || 0) + Number(item.card_bca_debit_lain || 0) + Number(item.card_bca_debit_sama || 0) + Number(item.card_bca_jcb || 0) + Number(item.card_bca_master || 0) + Number(item.card_bca_others || 0) + Number(item.card_bca_qris || 0) + Number(item.card_bca_unionpay || 0) + Number(item.card_bca_visa || 0)) +
                                        (Number(item.card_bri_amex || 0) + Number(item.card_bri_bca_card || 0) + Number(item.card_bri_debit_lain || 0) + Number(item.card_bri_debit_sama || 0) + Number(item.card_bri_jcb || 0) + Number(item.card_bri_master || 0) + Number(item.card_bri_others || 0) + Number(item.card_bri_qris || 0) + Number(item.card_bri_unionpay || 0) + Number(item.card_bri_visa || 0));
+                        const onlineSum = Number(item.online_halodoc || 0) + Number(item.online_tiktok || 0) + Number(item.online_tokopedia || 0);
                         posSalesMap[item.kode_cabang + '_' + item.tanggal_jual] = {
                             posSales: Number(item.sales_pos || 0),
-                            posNonTunai: edcSum
+                            posNonTunai: edcSum,
+                            posOnline: onlineSum
                         };
                     });
 
@@ -205,19 +209,25 @@ export default function ManajemenLaporanPage() {
                 const posEntry = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
                 const posVal = typeof posEntry === 'object' ? posEntry.posSales : posEntry;
                 const posNonTunai = typeof posEntry === 'object' ? posEntry.posNonTunai : undefined;
+                const posOnline = typeof posEntry === 'object' ? posEntry.posOnline : undefined;
 
                 const totalNonTunai = Number(row.bca_debit || 0) + Number(row.bca_kredit || 0) + Number(row.bca_qris || 0) +
                                       Number(row.bri_debit || 0) + Number(row.bri_kredit || 0) + Number(row.bri_qris || 0) +
                                       Number(row.bank_transfer || 0) || Number(row.total_non_tunai || 0);
 
+                const totalOnline = Number(row.total_online || 0) || 
+                                    (Number(row.online_halodoc || 0) + Number(row.online_tiktok || 0) + Number(row.online_tokopedia || 0));
+
                 return {
                     ...row,
                     total_non_tunai: totalNonTunai,
+                    total_online: totalOnline,
                     username: uName,
                     kode_toko: kToko,
                     email: row.profiles?.email || '',
                     posVal,
                     posNonTunai,
+                    posOnline,
                 };
             });
 
@@ -244,6 +254,7 @@ export default function ManajemenLaporanPage() {
                             const posEntry = posSalesMap[codeKey] !== undefined ? posSalesMap[codeKey] : posSalesMap[nameKey];
                             const posVal = typeof posEntry === 'object' ? posEntry.posSales : posEntry;
                             const posNonTunai = typeof posEntry === 'object' ? posEntry.posNonTunai : undefined;
+                            const posOnline = typeof posEntry === 'object' ? posEntry.posOnline : undefined;
 
                             unreportedList.push({
                                 id: 'unreported_' + p.id + '_' + dateStr,
@@ -255,11 +266,15 @@ export default function ManajemenLaporanPage() {
                                 nominal_jual: 0,
                                 potongan: 0,
                                 nominal_setoran: 0,
+                                total_non_tunai: 0,
+                                total_online: 0,
                                 username: p.username,
                                 kode_toko: p.kode_toko,
                                 email: '',
                                 isUnreported: true,
                                 posVal,
+                                posNonTunai,
+                                posOnline,
                             });
                         }
                     });
@@ -324,14 +339,16 @@ export default function ManajemenLaporanPage() {
         );
     }, [filtered, currentPage]);
 
-    // Grand Totals (FIXED: added totalNonTunai, totalPosNonTunai, & totalSelisihNonTunai)
+    // Grand Totals (FIXED: added Online Sales accumulators & totals)
     const totals = useMemo(() => {
         let totalSales = 0;
         let totalPotongan = 0;
         let totalSetor = 0;
         let totalNonTunai = 0;
+        let totalOnline = 0;
         let totalPosSales = 0;
         let totalPosNonTunai = 0;
+        let totalPosOnline = 0;
         const seenOutletDates = new Set();
 
         filtered.forEach((r) => {
@@ -342,6 +359,7 @@ export default function ManajemenLaporanPage() {
             totalPotongan += Number(r.potongan || 0);
             totalSetor += Number(r.nominal_setoran || 0);
             totalNonTunai += Number(r.total_non_tunai || 0);
+            totalOnline += Number(r.total_online || 0);
 
             const posValAll = r.posVal;
             const posVal = isValidTypeForPOS ? posValAll : undefined;
@@ -352,6 +370,9 @@ export default function ManajemenLaporanPage() {
                 if (r.posNonTunai !== undefined && r.posNonTunai !== null) {
                     totalPosNonTunai += Number(r.posNonTunai || 0);
                 }
+                if (r.posOnline !== undefined && r.posOnline !== null) {
+                    totalPosOnline += Number(r.posOnline || 0);
+                }
                 seenOutletDates.add(uniqKey);
             }
         });
@@ -359,18 +380,22 @@ export default function ManajemenLaporanPage() {
         const totalSelisih1 = totalSales - totalPosSales;
         const totalSelisih2 = (totalPotongan + totalSetor) - totalPosSales;
         const totalSelisihNonTunai = totalNonTunai - totalPosNonTunai;
-        const hasAnyPosForTotals = totalPosSales > 0 || totalPosNonTunai > 0;
+        const totalSelisihOnline = totalOnline - totalPosOnline;
+        const hasAnyPosForTotals = totalPosSales > 0 || totalPosNonTunai > 0 || totalPosOnline > 0;
 
         return { 
             totalSales, 
             totalPotongan, 
             totalSetor, 
             totalNonTunai, 
+            totalOnline,
             totalPosSales, 
             totalPosNonTunai, 
+            totalPosOnline,
             totalSelisih1, 
             totalSelisih2, 
             totalSelisihNonTunai, 
+            totalSelisihOnline,
             hasAnyPosForTotals 
         };
     }, [filtered]);
@@ -378,7 +403,7 @@ export default function ManajemenLaporanPage() {
     // CSV export
     const downloadCSV = () => {
         if (!filtered.length) return;
-        const header = 'Nama Apotek,Tgl Setor,Tgl Jual,Waktu Kirim,Jenis,Metode,Deposit Card,KCP,Data Sales (Xilnex),Nominal Sales,Potongan,Nominal Setor,Selisih 1 (VS Nominal),Selisih 2 (VS Setor)\n';
+        const header = 'Nama Apotek,Tgl Setor,Tgl Jual,Waktu Kirim,Jenis,Metode,Deposit Card,KCP,Data Sales (Xilnex),Nominal Sales,Potongan,Nominal Setor,Selisih 1 (VS Nominal),Selisih 2 (VS Setor),Sales Non-Tunai (Xilnex),Total Non-Tunai Toko,Selisih Non-Tunai,Sales Online (Xilnex),Total Online Toko,Selisih Online\n';
         const body = filtered.map((r) => {
             const posValAll = r.posVal;
             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
@@ -387,8 +412,13 @@ export default function ManajemenLaporanPage() {
             const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
             const hasPOSAll = posValAll !== undefined && posValAll !== null;
 
+            const posNonTunaiVal = isValidTypeForPOS ? r.posNonTunai : undefined;
+            const posOnlineVal = isValidTypeForPOS ? r.posOnline : undefined;
+
             const s1 = hasPOS1 ? (r.nominal_jual || 0) - posVal1 : '';
             const s2 = hasPOSAll ? ((r.potongan || 0) + (r.nominal_setoran || 0)) - posValAll : '';
+            const sNonTunai = posNonTunaiVal !== undefined && posNonTunaiVal !== null ? (r.total_non_tunai || 0) - posNonTunaiVal : '';
+            const sOnline = posOnlineVal !== undefined && posOnlineVal !== null ? (r.total_online || 0) - posOnlineVal : '';
 
             return [
                 `"${r.username}"`,
@@ -404,7 +434,13 @@ export default function ManajemenLaporanPage() {
                 r.potongan || 0,
                 r.nominal_setoran || 0,
                 s1,
-                s2
+                s2,
+                posNonTunaiVal !== undefined ? posNonTunaiVal : '',
+                r.total_non_tunai || 0,
+                sNonTunai,
+                posOnlineVal !== undefined ? posOnlineVal : '',
+                r.total_online || 0,
+                sOnline
             ].join(',');
         }).join('\n');
         
@@ -684,7 +720,7 @@ export default function ManajemenLaporanPage() {
                         ) : (
                             <>
                                 <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[1650px] border-collapse">
+                                <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[2050px] border-collapse">
                                     <colgroup>
                                         <col style={{ width: '160px' }} />
                                         <col style={{ width: '90px' }} />
@@ -694,6 +730,9 @@ export default function ManajemenLaporanPage() {
                                         <col style={{ width: '110px' }} />
                                         <col style={{ width: '105px' }} />
                                         <col style={{ width: '115px' }} />
+                                        <col style={{ width: '125px' }} />
+                                        <col style={{ width: '125px' }} />
+                                        <col style={{ width: '135px' }} />
                                         <col style={{ width: '125px' }} />
                                         <col style={{ width: '125px' }} />
                                         <col style={{ width: '135px' }} />
@@ -716,6 +755,9 @@ export default function ManajemenLaporanPage() {
                                             <th className="px-3 py-3 text-right bg-purple-50 text-purple-900 font-bold sticky top-0 z-20 border-b border-gray-200">Sales Non-Tunai (Xilnex)</th>
                                             <th className="px-3 py-3 text-right bg-blue-50/50 text-blue-900 font-bold sticky top-0 z-20 border-b border-gray-200">Total Non-Tunai Toko</th>
                                             <th className="px-3 py-3 text-center bg-indigo-50 text-indigo-900 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Non-Tunai</th>
+                                            <th className="px-3 py-3 text-right bg-emerald-50 text-emerald-900 font-bold sticky top-0 z-20 border-b border-gray-200">Sales Online (Xilnex)</th>
+                                            <th className="px-3 py-3 text-right bg-teal-50 text-teal-900 font-bold sticky top-0 z-20 border-b border-gray-200">Total Online Toko</th>
+                                            <th className="px-3 py-3 text-center bg-emerald-50/50 text-emerald-950 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Online</th>
                                             <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
                                         </tr>
                                     </thead>
@@ -727,17 +769,21 @@ export default function ManajemenLaporanPage() {
                                             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Belum Dilaporkan'].includes(row.jenis_pelaporan);
                                             const posValAll = row.posVal;
                                             const posNonTunaiAll = row.posNonTunai;
+                                            const posOnlineAll = row.posOnline;
 
                                             const posVal1 = isValidTypeForPOS ? posValAll : undefined;
                                             const posNonTunaiVal = isValidTypeForPOS ? posNonTunaiAll : undefined;
+                                            const posOnlineVal = isValidTypeForPOS ? posOnlineAll : undefined;
 
                                             const hasPOS1 = posVal1 !== undefined && posVal1 !== null;
                                             const hasPOSAll = posValAll !== undefined && posValAll !== null;
                                             const hasPOSNonTunai = posNonTunaiVal !== undefined && posNonTunaiVal !== null;
+                                            const hasPOSOnline = posOnlineVal !== undefined && posOnlineVal !== null;
 
                                             const s1 = hasPOS1 ? (row.nominal_jual || 0) - posVal1 : null;
                                             const s2 = hasPOSAll ? ((row.potongan || 0) + (row.nominal_setoran || 0)) - posValAll : null;
                                             const sNonTunai = hasPOSNonTunai ? (row.total_non_tunai || 0) - posNonTunaiVal : null;
+                                            const sOnline = hasPOSOnline ? (row.total_online || 0) - posOnlineVal : null;
 
                                             return (
                                                 <tr key={row.id} className={'hover:bg-gray-50/50 transition-colors group ' + (row.isUnreported ? 'bg-amber-50/15 italic text-gray-500' : (isAnomali ? 'bg-red-50/30' : ''))}>
@@ -780,6 +826,13 @@ export default function ManajemenLaporanPage() {
                                                     <td className="px-3 py-3 text-right font-bold text-blue-800 font-mono text-xs bg-blue-50/20">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.total_non_tunai || 0)}</td>
                                                     <td className="px-3 py-3 text-center font-mono text-xs bg-indigo-50/20">
                                                         {selisihChipNew(sNonTunai)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right text-emerald-950 font-mono text-xs bg-emerald-50/30 font-bold">
+                                                        {posOnlineVal !== undefined ? formatRupiah(posOnlineVal) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-bold text-teal-800 font-mono text-xs bg-teal-50/20">{row.isUnreported ? <span className="text-gray-300">-</span> : formatRupiah(row.total_online || 0)}</td>
+                                                    <td className="px-3 py-3 text-center font-mono text-xs bg-emerald-50/20">
+                                                        {selisihChipNew(sOnline)}
                                                     </td>
                                                     <td className="px-3 py-3 text-center">
                                                         {row.isUnreported ? (
@@ -829,6 +882,15 @@ export default function ManajemenLaporanPage() {
                                             </td>
                                             <td className="px-3 py-3 text-center font-extrabold font-mono bg-indigo-200/50">
                                                 {totals.hasAnyPosForTotals ? selisihChipNew(totals.totalSelisihNonTunai) : <span className="text-gray-300">-</span>}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-emerald-950 font-mono bg-emerald-200/60">
+                                                {formatRupiah(totals.totalPosOnline)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-teal-900 font-mono bg-teal-200/40">
+                                                {formatRupiah(totals.totalOnline)}
+                                            </td>
+                                            <td className="px-3 py-3 text-center font-extrabold font-mono bg-emerald-200/50">
+                                                {totals.hasAnyPosForTotals ? selisihChipNew(totals.totalSelisihOnline) : <span className="text-gray-300">-</span>}
                                             </td>
                                             <td className="px-3 py-3 bg-orange-100"></td>
                                         </tr>
