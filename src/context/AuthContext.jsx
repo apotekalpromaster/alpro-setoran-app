@@ -159,6 +159,11 @@ export function AuthProvider({ children }) {
     const signIn = async (email, password) => {
         setLoading(true);
         const res = await supabase.auth.signInWithPassword({ email, password });
+        if (res.data?.session?.access_token) {
+            const tokenStr = res.data.session.access_token;
+            setAccessToken(tokenStr);
+            try { localStorage.setItem('alpro_cached_token', JSON.stringify(tokenStr)); } catch (e) {}
+        }
         if (!res.data?.user) {
             setLoading(false);
             setAuthReady(true);

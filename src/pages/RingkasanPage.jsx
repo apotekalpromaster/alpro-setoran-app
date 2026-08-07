@@ -33,7 +33,7 @@ function base64ToFile(base64Data, fileName, mimeType) {
 }
 
 export default function RingkasanPage() {
-    const { profile } = useAuth();
+    const { user, profile, accessToken } = useAuth();
     const { formData, resetForm } = useFormWizard();
     const navigate = useNavigate();
 
@@ -113,33 +113,14 @@ export default function RingkasanPage() {
                 throw new Error(`Lampiran foto bukti setoran wajib diunggah (minimal ${minExpected} foto). Silakan kembali ke Langkah 2 untuk memilih foto bukti.`);
             }
 
-            setUploadStatus('Menyimpan data laporan...');
+            // Step 1/3: Real-time Synchronous Auth Verification (0ms)
+            setUploadStatus('1/3 Memverifikasi otentikasi sesi...');
 
-            // 2. Fetch Supabase REST credentials & User ID with Triple Failsafe JWT Token Resolution
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-            let token = supabaseAnonKey;
-            let userId = profile?.id || null;
-
-            try {
-                const { data: sessionData } = await supabase.auth.getSession();
-                if (sessionData?.session?.access_token) {
-                    token = sessionData.session.access_token;
-                    userId = sessionData.session.user?.id || profile?.id;
-                } else {
-                    const { data: refreshData } = await supabase.auth.refreshSession();
-                    if (refreshData?.session?.access_token) {
-                        token = refreshData.session.access_token;
-                        userId = refreshData.session.user?.id || profile?.id;
-                    }
-                }
-            } catch (e) {
-                console.warn('Session token fetch warning:', e.message);
-            }
-
-            // Fallback search in localStorage if SDK session object was unattached
-            if (token === supabaseAnonKey && typeof localStorage !== 'undefined') {
+            let token = accessToken || null;
+            if (!token && typeof localStorage !== 'undefined') {
                 try {
                     for (let i = 0; i < localStorage.length; i++) {
                         const key = localStorage.key(i);
@@ -147,7 +128,6 @@ export default function RingkasanPage() {
                             const parsed = JSON.parse(localStorage.getItem(key));
                             if (parsed?.access_token) {
                                 token = parsed.access_token;
-                                if (parsed?.user?.id) userId = parsed.user.id;
                                 break;
                             }
                         }
@@ -155,11 +135,15 @@ export default function RingkasanPage() {
                 } catch (e) {}
             }
 
-            if (token === supabaseAnonKey) {
+            const userId = user?.id || profile?.id;
+
+            if (!token || !userId) {
                 throw new Error('Sesi autentikasi Anda telah berakhir. Silakan login ulang untuk melanjutkan.');
             }
 
-            // 3. Build lightweight database rows (< 1 KB payload size for 0.3s sub-second insert)
+            // Step 2/3: Real-time Payload Construction
+            setUploadStatus('2/3 Menyusun data setoran harian...');
+
             const rows = allDates.map((date, i) => ({
                 user_id: userId,
                 tanggal_jual: date,
@@ -192,8 +176,10 @@ export default function RingkasanPage() {
                 total_online: i === 0 ? (totalOnline || 0) : 0,
             }));
 
-            // 🚀 Direct Native Browser HTTP POST fetch bypassing ALL SDK Thenable queues
-            const restRes = await fetch(`${supabaseUrl}/rest/v1/laporan`, {
+            // Step 3/3: Real-time Direct Server Transmission with 12s Hard Safety Timeout
+            setUploadStatus('3/3 Mengirim data ke server database...');
+
+            const fetchPromise = fetch(`${supabaseUrl}/rest/v1/laporan`, {
                 method: 'POST',
                 headers: {
                     'apikey': supabaseAnonKey,
@@ -203,6 +189,12 @@ export default function RingkasanPage() {
                 },
                 body: JSON.stringify(rows)
             });
+
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Koneksi pengiriman laporan melebihi batas waktu (12 detik). Silakan klik "Kirim Lapor Sales" untuk mencoba kembali.')), 12000)
+            );
+
+            const restRes = await Promise.race([fetchPromise, timeoutPromise]);
 
             const resData = await restRes.json().catch(() => null);
 
@@ -301,6 +293,25 @@ export default function RingkasanPage() {
 
     return (
         <UserLayout title="Lapor Sales Toko" activeRoute="/setoran">
+            {/* Visual Real-Time Progress & Safety Timeout Overlay */}
+            {isSubmitting && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center text-center space-y-4 animate-in fade-in zoom-in duration-200">
+                        <div className="relative flex items-center justify-center">
+                            <div className="w-16 h-16 rounded-full border-4 border-amber-100 border-t-amber-500 animate-spin" />
+                            <span className="material-symbols-outlined text-amber-500 absolute text-2xl">cloud_upload</span>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-gray-900 text-base mb-1">Memproses Laporan Sales</h3>
+                            <p className="text-xs text-amber-600 font-bold animate-pulse">{uploadStatus || '1/3 Memverifikasi data...'}</p>
+                        </div>
+                        <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                            <div className="bg-amber-500 h-full animate-pulse transition-all duration-300 w-3/4" />
+                        </div>
+                        <p className="text-[10px] text-gray-400">Batas waktu otomatis 12 detik. Jangan tutup halaman.</p>
+                    </div>
+                </div>
+            )}
             <div className="max-w-4xl mx-auto">
                 {/* Progress Bar */}
                 <div className="mb-8">
