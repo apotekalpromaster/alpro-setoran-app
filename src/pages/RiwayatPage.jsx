@@ -137,7 +137,7 @@ export default function RiwayatPage() {
         const counts = {};
         reports.forEach(r => {
             const isArchived = r.isArchived || r.status === 'Archived' || r.jenis_pelaporan === 'DIHAPUS / DIBATALKAN' || r.jenis_pelaporan === 'HAPUS_DATA';
-            const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan);
             if (isPrimary && !isArchived) {
                 counts[r.tanggal_jual] = (counts[r.tanggal_jual] || 0) + 1;
             }
@@ -208,13 +208,13 @@ export default function RiwayatPage() {
             return matchSearch && matchMethode && matchDate && matchJenis;
         });
 
-        const showSales = activeFilters.jenis.length === 0 || activeFilters.jenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(j));
+        const showSales = activeFilters.jenis.length === 0 || activeFilters.jenis.some(j => ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(j));
 
         // Build a Set of reported dates for O(1) lookup (SEDANG-1 optimization)
         const reportedPrimaryDatesSet = new Set(
             reports.filter(r =>
                 !r.isArchived &&
-                ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan)
             ).map(r => r.tanggal_jual)
         );
 

@@ -122,3 +122,20 @@ export function validateSetoranData(data) {
         }
     }
 }
+
+
+export const PRIMARY_REPORT_TYPES = [
+    'Setoran Harian',
+    'Setoran 3x Seminggu',
+    'Setoran Sales Dengan Potongan Penjualan',
+    'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)',
+    'Setoran Sales Dgn Potongan (Top Up Petty Cash)'
+];
+
+export function isPrimaryReport(jenis) {
+    if (!jenis || typeof jenis !== 'string') return false;
+    const trimmed = jenis.trim();
+    if (PRIMARY_REPORT_TYPES.includes(trimmed)) return true;
+    if (trimmed.startsWith('Setoran Sales Dengan Potongan') || trimmed.startsWith('Setoran Sales Dgn Potongan')) return true;
+    return false;
+}

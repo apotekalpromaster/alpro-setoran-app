@@ -232,7 +232,7 @@ export default function ManajemenLaporanPage() {
             });
 
             // Generate unreported placeholders
-            const showSales = !jenisFilter || ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(jenisFilter);
+            const showSales = !jenisFilter || ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(jenisFilter);
             let unreportedList = [];
 
             if (showSales && activeProfiles.length > 0 && dateList.length > 0) {
@@ -245,7 +245,7 @@ export default function ManajemenLaporanPage() {
                         const hasPrimaryReport = allData.some(r => 
                             r.user_id === p.id && 
                             r.tanggal_jual === dateStr &&
-                            ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                            ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan)
                         );
 
                         if (!hasPrimaryReport) {
@@ -300,7 +300,7 @@ export default function ManajemenLaporanPage() {
     const duplicateOutletDates = useMemo(() => {
         const counts = {};
         rows.forEach(r => {
-            const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan);
             if (isPrimary && !r.isUnreported) {
                 const key = r.username + '_' + r.tanggal_jual;
                 counts[key] = (counts[key] || 0) + 1;
@@ -406,7 +406,7 @@ export default function ManajemenLaporanPage() {
         const header = 'Nama Apotek,Tgl Setor,Tgl Jual,Waktu Kirim,Jenis,Metode,Deposit Card,KCP,Data Sales (Xilnex),Nominal Sales,Potongan,Nominal Setor,Selisih 1 (VS Nominal),Selisih 2 (VS Setor),Sales Non-Tunai (Xilnex),Total Non-Tunai Toko,Selisih Non-Tunai,Sales Online (Xilnex),Total Online Toko,Selisih Online\n';
         const body = filtered.map((r) => {
             const posValAll = r.posVal;
-            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan);
             const posVal1 = isValidTypeForPOS ? posValAll : undefined;
 
             const hasPOS1 = posVal1 !== undefined && posVal1 !== null;

@@ -49,7 +49,7 @@ export default function BerandaPage() {
                 const primaryReports = allReports.filter(r => 
                     r.status !== 'Archived' &&
                     r.jenis_pelaporan !== 'DIHAPUS / DIBATALKAN' &&
-                    ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                    ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan)
                 );
                 if (primaryReports.length > 0) {
                     setLastReportDate(primaryReports[0].tanggal_jual);
@@ -80,7 +80,7 @@ export default function BerandaPage() {
                         r.tanggal_jual === date && 
                         r.status !== 'Archived' &&
                         r.jenis_pelaporan !== 'DIHAPUS / DIBATALKAN' &&
-                        ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                        ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan)
                     );
                     if (!hasReport) {
                         const formatted = new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
@@ -109,7 +109,7 @@ export default function BerandaPage() {
                 const counts = {};
                 allReports.forEach(r => {
                     const isArchived = r.isArchived || r.status === 'Archived' || r.jenis_pelaporan === 'DIHAPUS / DIBATALKAN' || r.jenis_pelaporan === 'HAPUS_DATA';
-                    const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+                    const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan);
                     if (isPrimary && r.tanggal_jual && !isArchived) {
                         counts[r.tanggal_jual] = (counts[r.tanggal_jual] || 0) + 1;
                     }

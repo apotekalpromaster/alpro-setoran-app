@@ -299,7 +299,7 @@ export default function AreaManagerDashboardPage() {
             dates.forEach(date => {
                 const hasReport = outletReports.some(r => 
                     r.tanggal_jual === date && 
-                    ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                    ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan)
                 );
                 if (!hasReport) {
                     const formatted = new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
@@ -341,7 +341,7 @@ export default function AreaManagerDashboardPage() {
             dates.forEach(date => {
                 const hasReport = outletReports.some(r => 
                     r.tanggal_jual === date && 
-                    ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                    ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan)
                 );
                 if (!hasReport) {
                     missing.push(date);
@@ -379,7 +379,7 @@ export default function AreaManagerDashboardPage() {
         const counts = {};
         reports.forEach(r => {
             const isArchived = r.isArchived || r.status === 'Archived' || r.jenis_pelaporan === 'HAPUS_DATA';
-            const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan);
+            const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan);
             if (isPrimary && !isArchived) {
                 const key = r.username + '_' + r.tanggal_jual;
                 counts[key] = (counts[key] || 0) + 1;
@@ -486,7 +486,7 @@ export default function AreaManagerDashboardPage() {
                         const hasPrimaryReport = reports.some(r => 
                             r.user_id === o.id && 
                             r.tanggal_jual === dateStr &&
-                            ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'].includes(r.jenis_pelaporan)
+                            ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan)
                         );
 
                         if (!hasPrimaryReport) {
