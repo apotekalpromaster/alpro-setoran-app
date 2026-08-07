@@ -412,82 +412,75 @@ export default function KoreksiLaporanPage() {
                     p_admin_id: profile.id
                 });
                 if (rpcErr) throw rpcErr;
-            } else if (profile?.area_manager) {
+            } else {
                 // Trigger Auto-Email Notification to Area Manager in Background
                 (async () => {
                     try {
-                        const { data: amProfile } = await supabase
-                            .from('profiles')
-                            .select('email, username')
-                            .eq('username', profile.area_manager)
-                            .eq('role', 'AreaManager')
-                            .maybeSingle();
+                        let targetAmEmail = null;
+                        let targetAmName = profile?.area_manager || 'Area Manager';
 
-                        if (amProfile?.email) {
-                            const isDelete = requestType === 'delete';
-                            const tglSales = selectedReport.tanggal_jual;
-                            const formattedDate = new Date(tglSales).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+                        if (profile?.area_manager) {
+                            const { data: amProfile } = await supabase
+                                .from('profiles')
+                                .select('email, username')
+                                .eq('username', profile.area_manager)
+                                .maybeSingle();
 
-                            let changesSummary = [];
-                            if (isDelete) {
-                                changesSummary.push('⚠️ PERMOHONAN PENGARSIPAN / PENGHAPUSAN PERMANEN LAPORAN SALES');
-                            } else {
-                                if (toggleTunai) {
-                                    changesSummary.push(`• Sales Tunai Kasir: ${formatRupiah(selectedReport.nominal_jual || 0)} ➔ ${formatRupiah(finalJual)}`);
-                                    changesSummary.push(`• Potongan Sales: ${formatRupiah(selectedReport.potongan || 0)} ➔ ${formatRupiah(finalPotongan)}`);
-                                    changesSummary.push(`• Setoran Tunai Bank: ${formatRupiah(selectedReport.nominal_setoran || 0)} ➔ ${formatRupiah(finalSetoran)}`);
-                                }
-                                if (toggleNonTunai) {
-                                    const totalNonTunaiBaru = finalBcaDb + finalBcaKr + finalBcaQr + finalBriDb + finalBriKr + finalBriQr + finalTrf;
-                                    changesSummary.push(`• Total Non-Tunai: ${formatRupiah(selectedReport.total_non_tunai || 0)} ➔ ${formatRupiah(totalNonTunaiBaru)}`);
-                                }
-                                if (toggleOnline) {
-                                    changesSummary.push(`• Total Online Sales: ${formatRupiah(selectedReport.total_online || 0)} ➔ ${formatRupiah(finalTotalOnline)}`);
-                                    changesSummary.push(`  (Halodoc: ${formatRupiah(finalOnlineHalodoc)}, TikTok: ${formatRupiah(finalOnlineTiktok)}, Tokopedia: ${formatRupiah(finalOnlineTokopedia)})`);
-                                }
-                                if (toggleMeta) {
-                                    changesSummary.push(`• Tanggal Sales: ${selectedReport.tanggal_jual} ➔ ${finalTglJual}`);
-                                    changesSummary.push(`• Jenis Pelaporan: ${selectedReport.jenis_pelaporan} ➔ ${finalJenis}`);
-                                }
+                            if (amProfile?.email) {
+                                targetAmEmail = amProfile.email;
+                                targetAmName = amProfile.username || targetAmName;
                             }
-
-                            const emailSubject = `[PERMOHONAN KOREKSI LAPORAN] ${profile?.username || 'Cabang'} (${profile?.kode_toko || '-'}) - Tanggal Sales: ${formattedDate}`;
-                            
-                            const emailBodyText = `Halo Bpk/Ibu ${amProfile.username || 'Area Manager'},
-
-Terdapat permohonan koreksi data laporan sales baru yang memerlukan peninjauan dan persetujuan Anda:
-
-📌 RINCIAN PERMOHONAN KOREKSI:
-• Nama Cabang / Toko : ${profile?.username || '-'} (${profile?.kode_toko || '-'})
-• Pelapor (Staf Toko) : ${profile?.username || '-'} (${profile?.email || '-'})
-• Jenis Koreksi      : ${isDelete ? 'Permohonan Hapus Total Laporan' : 'Koreksi Sebagian Data'}
-• Tanggal Sales      : ${formattedDate}
-• Jenis Pelaporan    : ${selectedReport.jenis_pelaporan || '-'}
-• Waktu Pengajuan    : ${new Date().toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })} WIB
-
-----------------------------------------------------------------------
-📋 ALASAN / PENJELASAN KOREKSI:
-"${explanation.trim()}"
-----------------------------------------------------------------------
-
-🔍 RINGKASAN PERUBAHAN DATA DIAJUKAN:
-${changesSummary.join('\n')}
-
-Mohon segera buka aplikasi untuk melakukan verifikasi dan persetujuan:
-👉 Buka Halaman Persetujuan Koreksi: https://alpro-setoran-uat.vercel.app/areamanager/koreksi-approval
-
-Terima kasih,
-Sistem Pelaporan Setoran Harian Apotek Alpro`;
-
-                            await supabase.functions.invoke('send-email', {
-                                body: {
-                                    to: amProfile.email,
-                                    subject: emailSubject,
-                                    text: emailBodyText,
-                                    html: emailBodyText.replace(/\n/g, '<br/>')
-                                }
-                            }).catch(err => console.warn('Invoke send-email Edge Function warning:', err.message));
                         }
+
+                        if (!targetAmEmail) {
+                            targetAmEmail = 'operation@apotekalpro.id';
+                        }
+
+                        const isDelete = requestType === 'delete';
+                        const tglSales = selectedReport.tanggal_jual;
+                        const formattedDate = new Date(tglSales).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+                        let changesSummary = [];
+                        if (isDelete) {
+                            changesSummary.push('⚠️ PERMOHONAN PENGARSIPAN / PENGHAPUSAN PERMANEN LAPORAN SALES');
+                        } else {
+                            if (toggleTunai) {
+                                changesSummary.push(`• Sales Tunai Kasir: ${formatRupiah(selectedReport.nominal_jual || 0)} ➔ ${formatRupiah(finalJual)}`);
+                                changesSummary.push(`• Potongan Sales: ${formatRupiah(selectedReport.potongan || 0)} ➔ ${formatRupiah(finalPotongan)}`);
+                                changesSummary.push(`• Setoran Tunai Bank: ${formatRupiah(selectedReport.nominal_setoran || 0)} ➔ ${formatRupiah(finalSetoran)}`);
+                            }
+                            if (toggleNonTunai) {
+                                const totalNonTunaiBaru = finalBcaDb + finalBcaKr + finalBcaQr + finalBriDb + finalBriKr + finalBriQr + finalTrf;
+                                changesSummary.push(`• Total Non-Tunai: ${formatRupiah(selectedReport.total_non_tunai || 0)} ➔ ${formatRupiah(totalNonTunaiBaru)}`);
+                            }
+                            if (toggleOnline) {
+                                changesSummary.push(`• Total Online Sales: ${formatRupiah(selectedReport.total_online || 0)} ➔ ${formatRupiah(finalTotalOnline)}`);
+                                changesSummary.push(`  (Halodoc: ${formatRupiah(finalOnlineHalodoc)}, TikTok: ${formatRupiah(finalOnlineTiktok)}, Tokopedia: ${formatRupiah(finalOnlineTokopedia)})`);
+                            }
+                            if (toggleMeta) {
+                                changesSummary.push(`• Tanggal Sales: ${selectedReport.tanggal_jual} ➔ ${finalTglJual}`);
+                                changesSummary.push(`• Jenis Pelaporan: ${selectedReport.jenis_pelaporan} ➔ ${finalJenis}`);
+                            }
+                        }
+
+                        const emailSubject = `[PERMOHONAN KOREKSI LAPORAN] ${profile?.username || 'Cabang'} (${profile?.kode_toko || '-'}) - Tanggal Sales: ${formattedDate}`;
+
+                        await supabase.functions.invoke('send-koreksi-notification', {
+                            body: {
+                                to: targetAmEmail,
+                                cc: profile?.email || undefined,
+                                subject: emailSubject,
+                                cabang: profile?.username || '-',
+                                kodeToko: profile?.kode_toko || '-',
+                                pelaporEmail: profile?.email || '-',
+                                jenisKoreksi: isDelete ? 'Permohonan Hapus Total Laporan' : 'Koreksi Sebagian Data',
+                                tanggalSales: formattedDate,
+                                jenisPelaporan: selectedReport.jenis_pelaporan || '-',
+                                alasan: explanation.trim(),
+                                rincianPerubahan: changesSummary.join('\n'),
+                                waktuPengajuan: new Date().toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' }) + ' WIB'
+                            }
+                        }).catch(err => console.warn('Invoke send-koreksi-notification Edge Function warning:', err.message));
                     } catch (e) {
                         console.warn('Auto-email AM notification background error:', e.message);
                     }
