@@ -97,7 +97,7 @@ export default function RiwayatPage() {
                 .order('tanggal_jual', { ascending: false })
                 .limit(5000);
 
-            const { data, error: fetchErr } = await safeSupabaseQuery(query, 6000);
+            const { data, error: fetchErr } = await safeSupabaseQuery(query, 30000);
 
             if (!isMounted.current) return;
             if (fetchErr) throw fetchErr;

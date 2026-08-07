@@ -26,7 +26,7 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
  * @param {number} timeoutMs - Max wait time in milliseconds (default: 6000ms)
  * @returns {Promise} Resolves with Supabase query response or throws timeout error
  */
-export async function safeSupabaseQuery(queryPromise, timeoutMs = 6000) {
+export async function safeSupabaseQuery(queryPromise, timeoutMs = 30000) {
     let timer;
     const timeoutPromise = new Promise((_, reject) => {
         timer = setTimeout(() => {
