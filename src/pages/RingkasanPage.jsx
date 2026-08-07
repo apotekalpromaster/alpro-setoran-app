@@ -115,9 +115,17 @@ export default function RingkasanPage() {
 
             setUploadStatus('Menyimpan data laporan...');
 
-            // 2. Build lightweight database rows (< 1 KB payload size for 50ms instant insert)
+            // 2. Fetch Supabase REST credentials & User ID safely
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token || supabaseAnonKey;
+            const userId = session?.user?.id || profile?.id;
+
+            // 3. Build lightweight database rows (< 1 KB payload size for 0.3s sub-second insert)
             const rows = allDates.map((date, i) => ({
-                user_id: profile?.id,
+                user_id: userId,
                 tanggal_jual: date,
                 tanggal_setor: formData.tanggalSetoran || null,
                 jenis_pelaporan: formData.jenisPelaporan,
@@ -148,19 +156,30 @@ export default function RingkasanPage() {
                 total_online: i === 0 ? (totalOnline || 0) : 0,
             }));
 
-            // 🚀 Execute 50ms ultra-fast insert into Supabase Postgres database
-            const { data: insertedRows, error: insertError } = await safeSupabaseQuery(
-                supabase.from('laporan').insert(rows).select('id'),
-                12000
-            );
+            // 🚀 Direct Native Browser HTTP POST fetch bypassing ALL SDK Thenable queues
+            const restRes = await fetch(`${supabaseUrl}/rest/v1/laporan`, {
+                method: 'POST',
+                headers: {
+                    'apikey': supabaseAnonKey,
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify(rows)
+            });
 
-            if (insertError) {
-                throw new Error(insertError.message || 'Gagal menyimpan laporan ke database.');
+            const resData = await restRes.json().catch(() => null);
+
+            if (!restRes.ok) {
+                console.error('Direct REST error:', resData);
+                const msg = resData?.message || resData?.error || `Gagal menyimpan laporan (HTTP ${restRes.status}).`;
+                throw new Error(msg);
             }
 
-            const insertedIds = Array.isArray(insertedRows) ? insertedRows.map(r => r.id) : [];
+            const insertedRows = Array.isArray(resData) ? resData : [];
+            const insertedIds = insertedRows.map(r => r.id).filter(Boolean);
 
-            // 3. Background Async Worker for Photo Sync (Does NOT block user submission!)
+            // 4. Background Async Worker for Photo Sync (Does NOT block user submission!)
             if (validStagedFiles.length > 0 && insertedIds.length > 0) {
                 (async () => {
                     try {
@@ -176,7 +195,15 @@ export default function RingkasanPage() {
                             }
                         }
                         if (finalUrls.length > initialBuktiUrls.length) {
-                            await supabase.from('laporan').update({ bukti_urls: finalUrls }).in('id', insertedIds);
+                            await fetch(`${supabaseUrl}/rest/v1/laporan?id=in.(${insertedIds.join(',')})`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'apikey': supabaseAnonKey,
+                                    'Authorization': `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ bukti_urls: finalUrls })
+                            });
                         }
                     } catch (bgErr) {
                         console.warn('Background photo upload worker warning:', bgErr.message);
