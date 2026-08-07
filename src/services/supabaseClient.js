@@ -12,7 +12,9 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,
-        lock: false,
+        lock: async (name, acquireTimeout, fn) => {
+            return await fn();
+        },
     }
 });
 
