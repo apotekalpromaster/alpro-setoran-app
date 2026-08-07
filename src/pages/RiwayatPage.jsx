@@ -326,9 +326,16 @@ export default function RiwayatPage() {
 
                 const grandSales = tunai + nonTunai + totalOnlineRow;
 
-                totalSalesTunai += tunai;
+                const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan);
+                if (isPrimary) {
+                    totalSalesTunai += tunai;
+                }
+
+                if (r.jenis_pelaporan !== 'Pengembalian Petty Cash') {
+                    totalSetorTunai += setor;
+                }
+
                 totalPotongan += pot;
-                totalSetorTunai += setor;
                 totalBcaDebit += bcaDb;
                 totalBcaKredit += bcaKr;
                 totalBcaQris += bcaQr;
