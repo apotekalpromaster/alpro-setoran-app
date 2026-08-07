@@ -5,6 +5,7 @@ import { useFormWizard } from '../context/FormWizardContext';
 import { parseRupiah, formatRupiah, validateSetoranData, NON_FINANCIAL_TYPES, compressImage } from '../lib/validators';
 import UserLayout from '../components/UserLayout';
 import { supabase } from '../services/supabaseClient';
+import { uploadToDrive } from '../services/driveService';
 
 const STEP_INFO = ['1. Informasi Sales & Metode', '2. Input Nominal & Bukti', '3. Periksa & Kirim'];
 
@@ -112,25 +113,64 @@ export default function DetailSetoranPage() {
 
     const handleFileSlotChange = async (slotIdx, rawFile) => {
         if (!rawFile) return;
-        const file = await compressImage(rawFile);
-        const isImage = file.type.startsWith('image/');
+        const compressed = await compressImage(rawFile);
+        const isImage = compressed.type.startsWith('image/');
+
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             const base64Data = e.target.result;
-            const updated = [...stagedFiles];
-            updated[slotIdx] = {
+            const initialSlot = {
                 slotIdx,
-                file,
-                name: file.name,
-                type: file.type,
+                file: compressed,
+                name: compressed.name,
+                type: compressed.type,
                 base64: base64Data,
                 preview: isImage ? base64Data : null,
-                isImage: isImage
+                isImage: isImage,
+                uploading: true,
+                driveUrl: null,
+                uploadError: null
             };
-            setStagedFiles(updated);
-            updateField({ buktiFiles: updated });
+
+            setStagedFiles(prev => {
+                const updated = [...prev];
+                updated[slotIdx] = initialSlot;
+                updateField({ buktiFiles: updated });
+                return updated;
+            });
+
+            // Trigger eager background upload to Google Drive immediately
+            try {
+                const driveUrl = await uploadToDrive(compressed);
+                setStagedFiles(prev => {
+                    const updated = [...prev];
+                    if (updated[slotIdx]) {
+                        updated[slotIdx] = {
+                            ...updated[slotIdx],
+                            uploading: false,
+                            driveUrl: driveUrl
+                        };
+                        updateField({ buktiFiles: updated });
+                    }
+                    return updated;
+                });
+            } catch (err) {
+                console.warn('Background Drive upload failed, will fallback to Step 3:', err);
+                setStagedFiles(prev => {
+                    const updated = [...prev];
+                    if (updated[slotIdx]) {
+                        updated[slotIdx] = {
+                            ...updated[slotIdx],
+                            uploading: false,
+                            uploadError: err.message
+                        };
+                        updateField({ buktiFiles: updated });
+                    }
+                    return updated;
+                });
+            }
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(compressed);
     };
 
     const handleRemoveSlotFile = (slotIdx) => {
@@ -685,9 +725,19 @@ function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis, onPrevi
                                         )}
                                         <div className="min-w-0 flex-1">
                                             <span className="block font-bold text-gray-900 truncate max-w-[220px]" title={sf.name}>{sf.name}</span>
-                                            <span className="text-[10px] text-green-600 font-bold flex items-center gap-1 mt-0.5 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 w-fit">
-                                                <span className="material-symbols-outlined text-[11px]">check_circle</span> Siap Diupload
-                                            </span>
+                                            {sf.uploading ? (
+                                                <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1 mt-0.5 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 w-fit animate-pulse">
+                                                    <span className="material-symbols-outlined text-[11px] animate-spin">sync</span> Mengunggah ke Drive...
+                                                </span>
+                                            ) : sf.driveUrl ? (
+                                                <span className="text-[10px] text-green-700 font-bold flex items-center gap-1 mt-0.5 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 w-fit">
+                                                    <span className="material-symbols-outlined text-[11px]">cloud_done</span> Terunggah ke Drive
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1 mt-0.5 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 w-fit">
+                                                    <span className="material-symbols-outlined text-[11px]">check_circle</span> Siap Diunggah
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 ) : (
