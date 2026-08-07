@@ -17,9 +17,11 @@ function getCachedItem(key) {
 export function AuthProvider({ children }) {
     const initialUser = getCachedItem(USER_CACHE_KEY);
     const initialProfile = getCachedItem(PROFILE_CACHE_KEY);
+    const initialToken = getCachedItem('alpro_cached_token');
 
     const [user, setUser] = useState(initialUser);
     const [profile, setProfile] = useState(initialProfile);
+    const [accessToken, setAccessToken] = useState(initialToken);
     const [loading, setLoading] = useState(false);
     // If BOTH cached items exist, mark authReady true immediately to prevent loading flicker
     const [authReady, setAuthReady] = useState(!!initialUser && !!initialProfile);
@@ -173,7 +175,7 @@ export function AuthProvider({ children }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, profile, loading, authReady, signIn, signOut, fetchProfile }}>
+        <AuthContext.Provider value={{ user, profile, accessToken, loading, authReady, signIn, signOut, fetchProfile }}>
             {children}
         </AuthContext.Provider>
     );
