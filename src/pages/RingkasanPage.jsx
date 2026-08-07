@@ -115,13 +115,24 @@ export default function RingkasanPage() {
 
             setUploadStatus('Menyimpan data laporan...');
 
-            // 2. Fetch Supabase REST credentials & User ID safely
+            // 2. Fetch Supabase REST credentials & User ID safely with a 1.5s timeout guard
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-            const { data: { session } } = await supabase.auth.getSession();
-            const token = session?.access_token || supabaseAnonKey;
-            const userId = session?.user?.id || profile?.id;
+            let token = supabaseAnonKey;
+            let userId = profile?.id || null;
+
+            try {
+                const sessionPromise = supabase.auth.getSession();
+                const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 1500));
+                const sessionRes = await Promise.race([sessionPromise, timeoutPromise]);
+                if (sessionRes?.data?.session) {
+                    token = sessionRes.data.session.access_token || supabaseAnonKey;
+                    userId = sessionRes.data.session.user?.id || profile?.id;
+                }
+            } catch (e) {
+                console.warn('Fast session fetch fallback:', e);
+            }
 
             // 3. Build lightweight database rows (< 1 KB payload size for 0.3s sub-second insert)
             const rows = allDates.map((date, i) => ({
