@@ -219,38 +219,27 @@ export default function DetailSetoranPage() {
 
                 // Wait if background upload is still in progress
                 let waitMs = 0;
-                while (item.uploading && waitMs < 25000) {
+                while (item.uploading && waitMs < 20000) {
                     await new Promise(r => setTimeout(r, 500));
                     waitMs += 500;
                 }
 
                 // If still missing driveUrl, upload right now in Step 2!
                 if (!item.driveUrl && item.file) {
-                    try {
-                        const compressed = await compressImage(item.file);
-                        const driveUrl = await uploadToDrive(compressed);
-                        if (driveUrl) {
-                            updatedSlots[i] = {
-                                name: item.name,
-                                type: item.type,
-                                uploading: false,
-                                driveUrl: driveUrl
-                            };
-                        }
-                    } catch (e) {
-                        console.warn('Step 2 photo upload warning:', e.message);
+                    const compressed = await compressImage(item.file);
+                    const driveUrl = await uploadToDrive(compressed);
+                    if (driveUrl) {
+                        updatedSlots[i] = {
+                            ...updatedSlots[i],
+                            uploading: false,
+                            driveUrl: driveUrl
+                        };
                     }
                 }
             }
 
-            const validDriveUrls = updatedSlots.map(s => s?.driveUrl).filter(Boolean);
-            const lightweightSlots = updatedSlots.map(s => s ? { name: s.name, type: s.type, driveUrl: s.driveUrl } : null);
-
             setStagedFiles(updatedSlots);
-            updateField({
-                buktiFiles: lightweightSlots,
-                buktiUrls: validDriveUrls
-            });
+            updateField({ buktiFiles: updatedSlots });
 
             // Combine form data for validation
             const combined = {

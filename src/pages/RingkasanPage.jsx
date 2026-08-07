@@ -212,7 +212,40 @@ export default function RingkasanPage() {
                 throw new Error(msg);
             }
 
-            // Step 3 is 100% Pure Lightweight Text Transmission (< 0.5 KB). Zero photo processing loops!
+            const insertedRows = Array.isArray(resData) ? resData : [];
+            const insertedIds = insertedRows.map(r => r.id).filter(Boolean);
+
+            // 4. Background Async Worker for Photo Sync (Does NOT block user submission!)
+            if (validStagedFiles.length > 0 && insertedIds.length > 0) {
+                (async () => {
+                    try {
+                        let finalUrls = [...initialBuktiUrls];
+                        for (let fIdx = 0; fIdx < validStagedFiles.length; fIdx++) {
+                            const item = validStagedFiles[fIdx];
+                            if (item?.driveUrl) continue;
+                            const fileObj = item.file instanceof File ? item.file : (item.base64 ? base64ToFile(item.base64, item.name, item.type) : null);
+                            if (fileObj) {
+                                const compressed = await compressImage(fileObj);
+                                const url = await uploadToDrive(compressed);
+                                if (url && !finalUrls.includes(url)) finalUrls.push(url);
+                            }
+                        }
+                        if (finalUrls.length > initialBuktiUrls.length) {
+                            await fetch(`${supabaseUrl}/rest/v1/laporan?id=in.(${insertedIds.join(',')})`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'apikey': supabaseAnonKey,
+                                    'Authorization': `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ bukti_urls: finalUrls })
+                            });
+                        }
+                    } catch (bgErr) {
+                        console.warn('Background photo upload worker warning:', bgErr.message);
+                    }
+                })();
+            }
 
             // 3. Trigger critical alert email if needed (Asynchronous / Background)
             const isCriticalIssue =
