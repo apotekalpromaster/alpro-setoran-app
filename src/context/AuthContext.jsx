@@ -32,19 +32,35 @@ export function AuthProvider({ children }) {
         if (isFetchingProfile.current) return null;
         isFetchingProfile.current = true;
         try {
+            let profileData = null;
+
+            // 1. Try direct query
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
-                .single();
+                .maybeSingle();
 
-            if (error) throw error;
-            setProfile(data);
-            try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data)); } catch (e) {}
-            return data;
+            if (data) {
+                profileData = data;
+            } else {
+                // 2. Fallback to RPC get_profile_by_user_id (Security Definer)
+                const { data: rpcData } = await supabase
+                    .rpc('get_profile_by_user_id', { p_user_id: userId });
+                if (Array.isArray(rpcData) && rpcData.length > 0) {
+                    profileData = rpcData[0];
+                } else if (rpcData && typeof rpcData === 'object') {
+                    profileData = rpcData;
+                }
+            }
+
+            if (profileData) {
+                setProfile(profileData);
+                try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profileData)); } catch (e) {}
+                return profileData;
+            }
         } catch (error) {
             console.error('Error fetching profile:', error.message);
-            return null;
         } finally {
             isFetchingProfile.current = false;
             setLoading(false);
