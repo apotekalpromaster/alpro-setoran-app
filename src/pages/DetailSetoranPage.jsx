@@ -194,15 +194,6 @@ export default function DetailSetoranPage() {
         setIsSubmitting(true);
 
         try {
-            // Guard: Wait briefly if any file is still uploading in background
-            const stillUploading = stagedFiles.some(item => item && item.uploading);
-            if (stillUploading) {
-                let waitCount = 0;
-                while (stagedFiles.some(item => item && item.uploading) && waitCount < 10) {
-                    await new Promise(r => setTimeout(r, 500));
-                    waitCount++;
-                }
-            }
             const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
 
             if (isSingleProofType) {
@@ -220,10 +211,41 @@ export default function DetailSetoranPage() {
                 }
             }
 
+            // Step 2 Pre-Upload Mandatory Guard: Ensure ALL selected files have valid driveUrl BEFORE navigating
+            let updatedSlots = [...stagedFiles];
+            for (let i = 0; i < updatedSlots.length; i++) {
+                const item = updatedSlots[i];
+                if (!item) continue;
+
+                // Wait if background upload is still in progress
+                let waitMs = 0;
+                while (item.uploading && waitMs < 20000) {
+                    await new Promise(r => setTimeout(r, 500));
+                    waitMs += 500;
+                }
+
+                // If still missing driveUrl, upload right now in Step 2!
+                if (!item.driveUrl && item.file) {
+                    const compressed = await compressImage(item.file);
+                    const driveUrl = await uploadToDrive(compressed);
+                    if (driveUrl) {
+                        updatedSlots[i] = {
+                            ...updatedSlots[i],
+                            uploading: false,
+                            driveUrl: driveUrl
+                        };
+                    }
+                }
+            }
+
+            setStagedFiles(updatedSlots);
+            updateField({ buktiFiles: updatedSlots });
+
             // Combine form data for validation
             const combined = {
                 ...formData,
                 username: profile?.username || '',
+                buktiFiles: updatedSlots
             };
             validateSetoranData(combined);
             navigate('/setoran/ringkasan');
