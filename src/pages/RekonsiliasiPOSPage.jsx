@@ -5,6 +5,18 @@ import { formatRupiah } from '../lib/validators';
 import AdminLayout from '../components/AdminLayout';
 import * as XLSX from 'xlsx';
 
+const PRIMARY_SALES_TYPES = [
+    'Setoran Harian',
+    'Setoran 3x Seminggu',
+    'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)',
+    'Setoran Sales Dengan Potongan Penjualan' // Support legacy label
+];
+
+const VALID_SETORAN_TYPES = [
+    ...PRIMARY_SALES_TYPES,
+    'Setoran Uang Pecahan Kecil'
+];
+
 export default function RekonsiliasiPOSPage() {
     const { profile } = useAuth();
     
@@ -87,6 +99,7 @@ export default function RekonsiliasiPOSPage() {
                     .from('laporan')
                     .select(`
                         tanggal_jual,
+                        jenis_pelaporan,
                         nominal_jual,
                         nominal_setoran,
                         potongan,
@@ -141,17 +154,31 @@ export default function RekonsiliasiPOSPage() {
                 const branch = r.profiles?.username;
                 if (!branch) return;
                 const entry = getEntry(branch, r.tanggal_jual);
-                const rNonTunai = Number(r.bca_debit || 0) + Number(r.bca_kredit || 0) + Number(r.bca_qris || 0) +
-                                  Number(r.bri_debit || 0) + Number(r.bri_kredit || 0) + Number(r.bri_qris || 0) +
-                                  Number(r.bank_transfer || 0) || Number(r.total_non_tunai || 0);
-                const rOnline = Number(r.total_online || 0) || (Number(r.online_halodoc || 0) + Number(r.online_tiktok || 0) + Number(r.online_tokopedia || 0));
+                const jenis = r.jenis_pelaporan || '';
 
-                entry.reportSales += Number(r.nominal_jual || 0);
-                entry.reportSetoran += Number(r.nominal_setoran || 0);
-                entry.reportPotongan += Number(r.potongan || 0);
-                entry.reportNonTunai += rNonTunai;
-                entry.reportOnline += rOnline;
-                entry.hasReport = true;
+                const isPrimarySales = PRIMARY_SALES_TYPES.includes(jenis);
+                const isValidSetoran = VALID_SETORAN_TYPES.includes(jenis);
+
+                if (isPrimarySales) {
+                    entry.reportSales += Number(r.nominal_jual || 0);
+                    entry.reportPotongan += Number(r.potongan || 0);
+
+                    const rNonTunai = Number(r.bca_debit || 0) + Number(r.bca_kredit || 0) + Number(r.bca_qris || 0) +
+                                      Number(r.bri_debit || 0) + Number(r.bri_kredit || 0) + Number(r.bri_qris || 0) +
+                                      Number(r.bank_transfer || 0) || Number(r.total_non_tunai || 0);
+                    const rOnline = Number(r.total_online || 0) || (Number(r.online_halodoc || 0) + Number(r.online_tiktok || 0) + Number(r.online_tokopedia || 0));
+
+                    entry.reportNonTunai += rNonTunai;
+                    entry.reportOnline += rOnline;
+                }
+
+                if (isValidSetoran) {
+                    entry.reportSetoran += Number(r.nominal_setoran || 0);
+                }
+
+                if (isPrimarySales || isValidSetoran) {
+                    entry.hasReport = true;
+                }
             });
 
             posData.forEach(p => {
@@ -830,20 +857,20 @@ const handleFileChange = (e) => {
                                                     <th className="py-3 px-4 whitespace-nowrap bg-gray-100 sticky top-0 z-20 border-b border-gray-200 text-gray-700" rowSpan="2">Tanggal Jual</th>
                                                     <th className="py-3 px-4 whitespace-nowrap bg-gray-100 sticky top-0 z-20 border-b border-gray-200 text-gray-700" rowSpan="2">Nama Cabang</th>
                                                     <th className="py-3 px-4 text-right whitespace-nowrap bg-blue-100 text-blue-900 sticky top-0 z-20 border-b border-gray-200 font-bold" rowSpan="2">Sales Tunai Xilnex</th>
-                                                    <th className="py-3 px-4 text-center text-purple-900 bg-purple-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="3">Data Laporan Tunai Manual</th>
-                                                    <th className="py-3 px-4 text-center text-red-900 bg-red-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="2">Selisih POS vs Sales Manual</th>
+                                                    <th className="py-3 px-4 text-center text-purple-900 bg-purple-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="3">Data Laporan Tunai Toko</th>
+                                                    <th className="py-3 px-4 text-center text-red-900 bg-red-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="2">Selisih POS vs Sales Toko</th>
                                                     <th className="py-3 px-4 text-center text-orange-900 bg-orange-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="2">Selisih POS vs Setoran+Potongan</th>
                                                     <th className="py-3 px-4 text-center text-indigo-900 bg-indigo-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="4">Rekonsiliasi Sales Non-Tunai (EDC)</th>
                                                     <th className="py-3 px-4 text-center text-emerald-900 bg-emerald-100 sticky top-0 z-20 border-b border-gray-200 font-bold" colSpan="4">Rekonsiliasi Sales Online</th>
                                                 </tr>
                                                 <tr className="border-b-2 border-gray-300">
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-800 sticky top-[38px] z-20 border-b border-gray-200">Sales Manual</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-800 sticky top-[38px] z-20 border-b border-gray-200">Sales Tunai Toko</th>
                                                     <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-800 sticky top-[38px] z-20 border-b border-gray-200">Potongan</th>
                                                     <th className="py-2 px-4 text-right whitespace-nowrap bg-purple-50 text-purple-800 sticky top-[38px] z-20 border-b border-gray-200">Nominal Setoran</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-red-50 text-red-800 sticky top-[38px] z-20 border-b border-gray-200">Selisih 1</th>
-                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-red-50 text-red-800 sticky top-[38px] z-20 border-b border-gray-200">Status 1</th>
-                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-orange-50 text-orange-800 sticky top-[38px] z-20 border-b border-gray-200">Selisih 2</th>
-                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-orange-50 text-orange-800 sticky top-[38px] z-20 border-b border-gray-200">Status 2</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-red-50 text-red-800 sticky top-[38px] z-20 border-b border-gray-200">Selisih Sales</th>
+                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-red-50 text-red-800 sticky top-[38px] z-20 border-b border-gray-200">Status Sales</th>
+                                                    <th className="py-2 px-4 text-right whitespace-nowrap bg-orange-50 text-orange-800 sticky top-[38px] z-20 border-b border-gray-200">Selisih Setoran</th>
+                                                    <th className="py-2 px-4 text-center whitespace-nowrap bg-orange-50 text-orange-800 sticky top-[38px] z-20 border-b border-gray-200">Status Setoran</th>
                                                     <th className="py-2 px-4 text-right whitespace-nowrap bg-indigo-50 text-indigo-900 sticky top-[38px] z-20 border-b border-gray-200">Xilnex Non-Tunai</th>
                                                     <th className="py-2 px-4 text-right whitespace-nowrap bg-indigo-50 text-indigo-900 sticky top-[38px] z-20 border-b border-gray-200">Toko Non-Tunai</th>
                                                     <th className="py-2 px-4 text-right whitespace-nowrap bg-indigo-50 text-indigo-900 sticky top-[38px] z-20 border-b border-gray-200">Selisih Non-Tunai</th>
@@ -918,7 +945,7 @@ const handleFileChange = (e) => {
                                     {/* Pagination Controls */}
                                     <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3">
                                         <span className="text-xs text-gray-600 font-semibold">
-                                            Menampilkan {itemsPerPage > 0 ? `${Math.min((currentPage - 1) * itemsPerPage + 1, filteredReconData.length)} - ${Math.min(currentPage * itemsPerPage, filteredReconData.length)}` : filteredReconData.length} dari <strong className="text-gray-800 font-extrabold">${filteredReconData.length}</strong> total baris
+                                            Menampilkan {itemsPerPage > 0 ? `${Math.min((currentPage - 1) * itemsPerPage + 1, filteredReconData.length)} - ${Math.min(currentPage * itemsPerPage, filteredReconData.length)}` : filteredReconData.length} dari <strong className="text-gray-800 font-extrabold">{filteredReconData.length}</strong> total baris
                                         </span>
 
                                         {totalPages > 1 && (
