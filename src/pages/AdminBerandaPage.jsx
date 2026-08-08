@@ -49,7 +49,7 @@ export default function AdminBerandaPage() {
 
     const [chartData, setChartData] = useState(null);
     const [fraudAnomalies, setFraudAnomalies] = useState([]);
-    const [anomalyCollapsed, setAnomalyCollapsed] = useState(false);
+    const [anomalyCollapsed, setAnomalyCollapsed] = useState(true);
     const [customStartDate, setCustomStartDate] = useState(() => {
         const d = new Date();
         d.setDate(d.getDate() - 7);
@@ -372,9 +372,15 @@ export default function AdminBerandaPage() {
             {fraudAnomalies.length > 0 && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-6 space-y-3">
                     <div className="flex items-center justify-between text-red-700">
-                        <div className="flex items-center gap-3">
+                        <div 
+                            onClick={() => setAnomalyCollapsed(p => !p)}
+                            className="flex items-center gap-2 cursor-pointer select-none flex-1"
+                        >
                             <span className="material-symbols-outlined text-red-500 text-2xl">warning</span>
                             <h4 className="font-bold text-sm">Peringatan: Terdeteksi Anomali Penjualan Tanpa Setoran Utama</h4>
+                            <span className="bg-red-100 text-red-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-red-200 ml-1">
+                                {fraudAnomalies.length} Toko
+                            </span>
                         </div>
                         <button
                             type="button"
@@ -405,15 +411,16 @@ export default function AdminBerandaPage() {
             )}
 
             {/* Filter Bar */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-2 text-gray-600">
-                    <span className="material-symbols-outlined">filter_alt</span><span className="font-semibold text-sm">Filter Periode:</span>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-gray-700 font-bold text-sm">
+                    <span className="material-symbols-outlined text-primary-500">filter_alt</span>
+                    <span>Filter Periode Data:</span>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
                     <select
                         value={filterPeriod}
                         onChange={(e) => setFilterPeriod(e.target.value)}
-                        className="form-input py-2 pl-3 pr-8 text-sm border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 cursor-pointer font-semibold text-gray-700"
+                        className="form-input py-2 px-3 text-xs border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 cursor-pointer font-bold text-gray-700 bg-gray-50 h-9"
                         disabled={loading}
                     >
                         <option value="today">Hari Ini</option>
@@ -425,27 +432,33 @@ export default function AdminBerandaPage() {
                     </select>
 
                     {filterPeriod === 'custom' && (
-                        <div className="flex flex-wrap items-center gap-2">
-                            <input
-                                type="date"
-                                value={customStartDate}
-                                onChange={(e) => setCustomStartDate(e.target.value)}
-                                className="form-input py-1.5 px-3 text-xs"
-                                disabled={loading}
-                            />
-                            <span className="text-gray-400 text-xs">s/d</span>
-                            <input
-                                type="date"
-                                value={customEndDate}
-                                onChange={(e) => setCustomEndDate(e.target.value)}
-                                className="form-input py-1.5 px-3 text-xs"
-                                disabled={loading}
-                            />
+                        <div className="flex flex-wrap items-center gap-2 bg-gray-50 p-1.5 rounded-xl border border-gray-200">
+                            <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-2xs">
+                                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Dari:</span>
+                                <input
+                                    type="date"
+                                    value={customStartDate}
+                                    onChange={(e) => setCustomStartDate(e.target.value)}
+                                    className="text-xs font-bold text-gray-800 border-0 p-0 focus:ring-0 cursor-pointer bg-transparent"
+                                    disabled={loading}
+                                />
+                            </div>
+                            <span className="text-xs font-bold text-gray-400 px-0.5">s/d</span>
+                            <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-2xs">
+                                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Sampai:</span>
+                                <input
+                                    type="date"
+                                    value={customEndDate}
+                                    onChange={(e) => setCustomEndDate(e.target.value)}
+                                    className="text-xs font-bold text-gray-800 border-0 p-0 focus:ring-0 cursor-pointer bg-transparent"
+                                    disabled={loading}
+                                />
+                            </div>
                             <button
                                 type="button"
                                 onClick={fetchDashboardData}
                                 disabled={loading}
-                                className="bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                                className="bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs h-8 px-4 rounded-lg transition-colors flex items-center justify-center gap-1 shadow-xs cursor-pointer ml-1"
                             >
                                 <span className="material-symbols-outlined text-sm">search</span> Terapkan
                             </button>
