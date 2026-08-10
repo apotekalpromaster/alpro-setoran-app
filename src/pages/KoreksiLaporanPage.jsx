@@ -420,26 +420,58 @@ export default function KoreksiLaporanPage() {
                         let targetAmName = profile?.area_manager || 'Area Manager';
 
                         if (profile?.area_manager) {
-                            const amNameTrimmed = String(profile.area_manager).trim();
-                            const { data: amProfile } = await supabase
+                            const amName = String(profile.area_manager).trim();
+                            
+                            // TIER 1: Exact / ILIKE username match
+                            const { data: t1 } = await supabase
                                 .from('profiles')
                                 .select('email, username')
-                                .ilike('username', amNameTrimmed)
+                                .ilike('username', amName)
                                 .maybeSingle();
 
-                            if (amProfile?.email) {
-                                targetAmEmail = amProfile.email;
-                                targetAmName = amProfile.username || targetAmName;
+                            if (t1?.email) {
+                                targetAmEmail = t1.email;
+                                targetAmName = t1.username || amName;
                             } else {
-                                const { data: amRoleProfiles } = await supabase
+                                // TIER 2: Search among role = 'AreaManager' profiles
+                                const { data: amList } = await supabase
                                     .from('profiles')
                                     .select('email, username')
-                                    .eq('role', 'AreaManager')
-                                    .ilike('username', amNameTrimmed);
+                                    .ilike('role', '%Area%');
 
-                                if (Array.isArray(amRoleProfiles) && amRoleProfiles.length > 0 && amRoleProfiles[0].email) {
-                                    targetAmEmail = amRoleProfiles[0].email;
-                                    targetAmName = amRoleProfiles[0].username || targetAmName;
+                                if (Array.isArray(amList) && amList.length > 0) {
+                                    const words = amName.toLowerCase().split(/\s+/).filter(w => w.length >= 3 && !['dan', 'br', 'bin'].includes(w));
+                                    const matchedAm = amList.find(p => p.email && words.some(w => (p.username || '').toLowerCase().includes(w) || (p.email || '').toLowerCase().includes(w)));
+                                    if (matchedAm) {
+                                        targetAmEmail = matchedAm.email;
+                                        targetAmName = matchedAm.username || amName;
+                                    }
+                                }
+
+                                // TIER 3: First word partial match
+                                if (!targetAmEmail) {
+                                    const firstWord = amName.split(/\s+/)[0]?.trim();
+                                    if (firstWord && firstWord.length >= 3) {
+                                        const { data: t3 } = await supabase
+                                            .from('profiles')
+                                            .select('email, username')
+                                            .or(`username.ilike.%${firstWord}%,email.ilike.%${firstWord.toLowerCase()}%`)
+                                            .maybeSingle();
+                                        if (t3?.email) {
+                                            targetAmEmail = t3.email;
+                                            targetAmName = t3.username || amName;
+                                        }
+                                    }
+                                }
+
+                                // TIER 4: Corporate email construction
+                                if (!targetAmEmail) {
+                                    const words = amName.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+                                    if (words.length >= 2) {
+                                        targetAmEmail = `${words[0]}.${words[words.length - 1]}@apotekalpro.id`;
+                                    } else if (words.length === 1) {
+                                        targetAmEmail = `${words[0]}@apotekalpro.id`;
+                                    }
                                 }
                             }
                         }

@@ -25,6 +25,102 @@ interface KoreksiNotificationPayload {
   waktuPengajuan?: string;
 }
 
+// 4-Tier Server-Side AM Email Resolver
+async function resolveAreaManagerEmail(supabaseAdmin: any, amNameRaw?: string, pelaporEmail?: string, cabangName?: string): Promise<{ email: string; name: string } | null> {
+  let amName = (amNameRaw || '').trim();
+
+  // 0. If no amName provided, try fetching from store profile via pelaporEmail or cabangName
+  if (!amName && pelaporEmail) {
+    const { data: store } = await supabaseAdmin
+      .from('profiles')
+      .select('area_manager')
+      .eq('email', pelaporEmail)
+      .maybeSingle();
+    if (store?.area_manager) amName = store.area_manager.trim();
+  }
+
+  if (!amName && cabangName) {
+    const { data: store } = await supabaseAdmin
+      .from('profiles')
+      .select('area_manager')
+      .eq('username', cabangName)
+      .maybeSingle();
+    if (store?.area_manager) amName = store.area_manager.trim();
+  }
+
+  if (!amName) return null;
+
+  // TIER 1: Exact / ILIKE match on username
+  const { data: tier1 } = await supabaseAdmin
+    .from('profiles')
+    .select('email, username')
+    .ilike('username', amName)
+    .maybeSingle();
+
+  if (tier1?.email) {
+    return { email: tier1.email, name: tier1.username || amName };
+  }
+
+  // TIER 2: Search among role = 'AreaManager' profiles
+  const { data: amProfiles } = await supabaseAdmin
+    .from('profiles')
+    .select('email, username')
+    .ilike('role', '%Area%');
+
+  if (Array.isArray(amProfiles) && amProfiles.length > 0) {
+    const amWords = amName.toLowerCase().split(/\s+/).filter(w => w.length >= 3 && !['dan', 'dan/atau', 'br', 'bin', 'binti'].includes(w));
+    
+    for (const p of amProfiles) {
+      if (!p.email) continue;
+      const pUser = (p.username || '').toLowerCase();
+      const pEmail = (p.email || '').toLowerCase();
+
+      const matchWord = amWords.find(word => pUser.includes(word) || pEmail.includes(word));
+      if (matchWord) {
+        return { email: p.email, name: p.username || amName };
+      }
+    }
+  }
+
+  // TIER 3: Partial ILIKE match on first significant word of amName
+  const firstWord = amName.split(/\s+/)[0]?.trim();
+  if (firstWord && firstWord.length >= 3) {
+    const { data: tier3User } = await supabaseAdmin
+      .from('profiles')
+      .select('email, username')
+      .ilike('username', `%${firstWord}%`)
+      .maybeSingle();
+
+    if (tier3User?.email) {
+      return { email: tier3User.email, name: tier3User.username || amName };
+    }
+
+    const { data: tier3Email } = await supabaseAdmin
+      .from('profiles')
+      .select('email, username')
+      .ilike('email', `%${firstWord.toLowerCase()}%`)
+      .maybeSingle();
+
+    if (tier3Email?.email) {
+      return { email: tier3Email.email, name: tier3Email.username || amName };
+    }
+  }
+
+  // TIER 4: Corporate email construction: first_name.last_name@apotekalpro.id
+  const words = amName.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+  if (words.length > 0) {
+    let constructedEmail = '';
+    if (words.length >= 2) {
+      constructedEmail = `${words[0]}.${words[words.length - 1]}@apotekalpro.id`;
+    } else {
+      constructedEmail = `${words[0]}@apotekalpro.id`;
+    }
+    return { email: constructedEmail, name: amName };
+  }
+
+  return null;
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: CORS });
@@ -32,8 +128,8 @@ serve(async (req: Request) => {
   try {
     const payload = (await req.json()) as KoreksiNotificationPayload;
 
-    if (!payload?.to) {
-      return new Response(JSON.stringify({ error: 'Parameter "to" (email tujuan) wajib diisi.' }), {
+    if (!payload?.to && !payload?.pelaporEmail && !payload?.cabang) {
+      return new Response(JSON.stringify({ error: 'Parameter "to" / pelapor / cabang wajib diisi.' }), {
         status: 400,
         headers: { ...CORS, 'Content-Type': 'application/json' },
       });
@@ -53,48 +149,25 @@ serve(async (req: Request) => {
     const fromEmail = 'apotekalpro.master@gmail.com';
     let recipientEmail = payload.to;
 
-    // Server-Side Smart Resolution: If recipientEmail is operation fallback or missing, resolve directly from DB
+    // Server-Side Smart 4-Tier Resolution
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if ((!recipientEmail || recipientEmail === 'operation@apotekalpro.id') && supabaseUrl && serviceRoleKey) {
       try {
         const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-        let amName: string | null = null;
-
-        if (payload.pelaporEmail) {
-          const { data: outlet } = await supabaseAdmin
-            .from('profiles')
-            .select('area_manager')
-            .eq('email', payload.pelaporEmail)
-            .maybeSingle();
-          if (outlet?.area_manager) amName = outlet.area_manager;
-        }
-
-        if (!amName && payload.cabang) {
-          const { data: outlet } = await supabaseAdmin
-            .from('profiles')
-            .select('area_manager')
-            .eq('username', payload.cabang)
-            .maybeSingle();
-          if (outlet?.area_manager) amName = outlet.area_manager;
-        }
-
-        if (amName) {
-          const { data: amUser } = await supabaseAdmin
-            .from('profiles')
-            .select('email')
-            .ilike('username', amName.trim())
-            .maybeSingle();
-
-          if (amUser?.email) {
-            recipientEmail = amUser.email;
-            console.log(`[send-koreksi-notification] Smart resolved AM email for "${amName}": ${recipientEmail}`);
-          }
+        const resolved = await resolveAreaManagerEmail(supabaseAdmin, undefined, payload.pelaporEmail, payload.cabang);
+        if (resolved?.email) {
+          recipientEmail = resolved.email;
+          console.log(`[send-koreksi-notification] Smart 4-Tier Resolved AM Email: ${recipientEmail}`);
         }
       } catch (dbErr) {
         console.warn('[send-koreksi-notification] Smart resolution DB lookup warning:', dbErr);
       }
+    }
+
+    if (!recipientEmail) {
+      recipientEmail = 'operation@apotekalpro.id';
     }
 
     const ccEmails = payload.cc ? payload.cc : undefined;
@@ -167,7 +240,7 @@ serve(async (req: Request) => {
     console.log(`[send-koreksi-notification] Sent OK to: ${recipientEmail}`);
     transporter.close();
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, recipient: recipientEmail }), {
       status: 200,
       headers: { ...CORS, 'Content-Type': 'application/json' },
     });
