@@ -598,8 +598,8 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
 
             if (isSetoranTunai) {
                 grossAmount = parsedAmount;
-                jumlah = null;
-                adminFeeMdr = null;
+                jumlah = 0;
+                adminFeeMdr = 0;
 
                 // Extract tanggal_sales if clean DD/MM/YYYY or DDMMYYYY pattern found
                 const tunaiDateMatch = desc.match(/(?:0[1-9]|[12]\d|3[01])[\/\s\-]*?(0[1-9]|1[0-2])[\/\s\-]*?(20\d{2})/) || desc.match(/\b(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})\b/);
@@ -703,11 +703,11 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                 keterangan: keterangan,
                 kategori: kategori,
                 outcode: outcode ? outcode.toUpperCase() : 'UNMAPPED',
-                jumlah: jumlah,
-                admin_fee_mdr: adminFeeMdr,
-                gross_amount: grossAmount,
+                jumlah: (typeof jumlah === 'number' && !isNaN(jumlah)) ? jumlah : 0,
+                admin_fee_mdr: (typeof adminFeeMdr === 'number' && !isNaN(adminFeeMdr)) ? adminFeeMdr : 0,
+                gross_amount: (typeof grossAmount === 'number' && !isNaN(grossAmount)) ? grossAmount : 0,
                 mid_code: midCode || '',
-                db_cr: dbCr,
+                db_cr: dbCr || 'CR',
                 rekening_no: '1784455991',
                 source_file: fileName || 'BCA PKU Excel'
             });
