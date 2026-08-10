@@ -544,19 +544,60 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
 
     const records = [];
 
-    // Pre-build map of 4-digit store code to username (outcode) from storeProfiles
+    // Pre-build 2-way outcode indexing from storeProfiles & masterMidMap
     const storeCodeToOutcode = {};
-    const storeUsernameMap = {};
+    const knownOutcodesMap = {};
+    const knownOutcodesSet = new Set();
 
     (storeProfiles || []).forEach(p => {
+        if (!p) return;
+        
+        let outcodeCandidate = '';
+        if (p.kode_toko && p.kode_toko.includes('-')) {
+            const parts = p.kode_toko.split('-');
+            const numPart = parts[0].trim();
+            const outPart = parts[1].trim().toUpperCase();
+            
+            outcodeCandidate = outPart;
+            if (numPart) {
+                storeCodeToOutcode[numPart] = outPart;
+                storeCodeToOutcode[numPart.replace(/^0+/, '')] = outPart;
+            }
+        } else if (p.kode_toko) {
+            const codeMatch = p.kode_toko.toString().match(/\b(\d{1,4})\b/);
+            if (codeMatch) {
+                const numPart = codeMatch[1];
+                outcodeCandidate = p.username ? p.username.trim().toUpperCase() : numPart;
+                storeCodeToOutcode[numPart] = outcodeCandidate;
+                storeCodeToOutcode[numPart.replace(/^0+/, '')] = outcodeCandidate;
+            }
+        }
+
+        if (p.email && p.email.includes('.')) {
+            const emailPrefix = p.email.split('.')[0].trim().toUpperCase();
+            if (emailPrefix.length >= 5) {
+                knownOutcodesMap[emailPrefix] = outcodeCandidate || emailPrefix;
+                knownOutcodesSet.add(emailPrefix);
+            }
+        }
+
+        if (outcodeCandidate) {
+            knownOutcodesMap[outcodeCandidate] = outcodeCandidate;
+            knownOutcodesSet.add(outcodeCandidate);
+        }
         if (p.username) {
-            const outcode = p.username.toString().trim().toUpperCase();
-            storeUsernameMap[outcode] = outcode;
-            if (p.kode_toko) {
-                const codeMatch = p.kode_toko.toString().match(/\b(\d{4})\b/);
-                if (codeMatch) {
-                    storeCodeToOutcode[codeMatch[1]] = outcode;
-                }
+            const uUpper = p.username.toString().trim().toUpperCase();
+            knownOutcodesMap[uUpper] = outcodeCandidate || uUpper;
+            knownOutcodesSet.add(uUpper);
+        }
+    });
+
+    Object.values(masterMidMap || {}).forEach(out => {
+        if (out && typeof out === 'string') {
+            const cleanOut = out.trim().toUpperCase();
+            if (cleanOut.length >= 5 && cleanOut !== 'UNMAPPED') {
+                knownOutcodesMap[cleanOut] = cleanOut;
+                knownOutcodesSet.add(cleanOut);
             }
         }
     });
@@ -610,22 +651,37 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                     tanggalSales = `${yyyy}-${mm}-${dd}`;
                 }
 
-                // Strategy A: 4-digit store code in desc (e.g. SETORAN TUNAI 0003, D004, 0016, 0030, 0052, 3007)
-                const code4Match = desc.match(/\b[D]?(\d{4})\b/i);
-                if (code4Match && storeCodeToOutcode[code4Match[1]]) {
-                    outcode = storeCodeToOutcode[code4Match[1]];
-                } else {
-                    // Strategy B: Direct outcode snippet in desc (e.g. JKJBTM1, JKJSBZ1, JKJTLB1)
-                    const outcodeSnippetMatch = desc.match(/\b([A-Z]{2,6}[0-9]{1,2})\b/i);
-                    if (outcodeSnippetMatch) {
-                        const snippet = outcodeSnippetMatch[1].toUpperCase();
-                        if (storeUsernameMap[snippet]) {
-                            outcode = storeUsernameMap[snippet];
-                        } else if (masterMidMap[snippet]) {
-                            outcode = masterMidMap[snippet];
+                // 2-Way Outcode Matching Algorithm
+                // Priority 1: Direct Outcode Match (e.g. BTTSPR1, JKJSRD1, BTTSRF1, BTTSSU1, JBDPMR1, JKJSPC1, JKJSTT1, JKJSRR1, JKJTA21, JKJBSR1)
+                const descUpper = desc.toUpperCase();
+                let foundOutcode = '';
+
+                for (const candidateOutcode of knownOutcodesSet) {
+                    if (candidateOutcode && candidateOutcode.length >= 5) {
+                        const outRegex = new RegExp(`\\b${candidateOutcode}\\b`, 'i');
+                        if (outRegex.test(descUpper) || descUpper.includes(candidateOutcode)) {
+                            foundOutcode = knownOutcodesMap[candidateOutcode] || candidateOutcode;
+                            break;
                         }
                     }
                 }
+
+                if (foundOutcode) {
+                    outcode = foundOutcode;
+                } else {
+                    // Priority 2: Store Code Lookup (e.g. 2002, 2023, 0003, 0004, 0016, 0030, 0052, 3007)
+                    const storeCodeMatch = desc.match(/\b[D]?(\d{3,4})\b/i);
+                    if (storeCodeMatch) {
+                        const rawCode = storeCodeMatch[1];
+                        const cleanCode = rawCode.replace(/^0+/, '');
+                        if (storeCodeToOutcode[rawCode]) {
+                            outcode = storeCodeToOutcode[rawCode];
+                        } else if (storeCodeToOutcode[cleanCode]) {
+                            outcode = storeCodeToOutcode[cleanCode];
+                        }
+                    }
+                }
+                // If neither matched, outcode remains 'UNMAPPED' (never defaults to Kahfi Jagakarsa!)
             } else {
                 jumlah = parsedAmount;
 
