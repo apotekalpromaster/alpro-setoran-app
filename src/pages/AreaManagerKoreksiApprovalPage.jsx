@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
@@ -6,6 +7,12 @@ import UserLayout from '../components/UserLayout';
 
 export default function AreaManagerKoreksiApprovalPage() {
     const { profile } = useAuth();
+    const navigate = useNavigate();
+
+    const handleViewDetail = (laporanId) => {
+        if (!laporanId) return;
+        navigate(`/riwayat/${laporanId}`, { state: { from: '/areamanager/koreksi-approval' } });
+    };
     
     // UI states
     const [loading, setLoading] = useState(false);
@@ -406,38 +413,50 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                     {item.penjelasan_koreksi}
                                                 </td>
                                                 <td className="py-4 px-6 text-center">
-                                                    {item.status === 'Pending' ? (
-                                                        <div className="flex justify-center gap-1.5">
+                                                    <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5">
+                                                        {item.laporan?.id && (
                                                             <button
-                                                                onClick={() => handleApprove(item)}
-                                                                disabled={actionLoadingId !== ''}
-                                                                className="px-2.5 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg flex items-center gap-0.5"
+                                                                type="button"
+                                                                onClick={() => handleViewDetail(item.laporan.id)}
+                                                                className="px-2.5 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                                                                title="Lihat Rincian Laporan Asli & Foto Bukti"
                                                             >
-                                                                <span className="material-symbols-outlined text-sm">check</span> Setuju
+                                                                <span className="material-symbols-outlined text-sm">visibility</span> Detail
                                                             </button>
-                                                            <button
-                                                                onClick={() => handleOpenRejectModal(item)}
-                                                                disabled={actionLoadingId !== ''}
-                                                                className="px-2.5 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-0.5"
-                                                            >
-                                                                <span className="material-symbols-outlined text-sm">close</span> Tolak
-                                                            </button>
-                                                        </div>
-                                                    ) : item.status === 'Approved' ? (
-                                                        <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-green-50 text-green-700 border border-green-200 shadow-sm">Disetujui</span>
-                                                    ) : (
-                                                        <div className="relative group inline-block">
-                                                            <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-red-50 text-red-700 border border-red-200 shadow-sm cursor-help inline-flex items-center gap-1">
-                                                                <span className="material-symbols-outlined text-xs">info</span> Ditolak
-                                                            </span>
-                                                            <div className="absolute right-0 top-full mt-1.5 hidden group-hover:block z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-xl shadow-xl border border-gray-700 text-left animate-fade-in">
-                                                                <p className="font-bold text-red-400 mb-1 flex items-center gap-1">
-                                                                    <span className="material-symbols-outlined text-xs">cancel</span> Alasan Penolakan:
-                                                                </p>
-                                                                <p className="text-gray-200 italic leading-relaxed">"{item.catatan_admin || item.catatan || 'Tidak ada catatan spesifik.'}"</p>
+                                                        )}
+                                                        {item.status === 'Pending' ? (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleApprove(item)}
+                                                                    disabled={actionLoadingId !== ''}
+                                                                    className="px-2.5 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg flex items-center gap-0.5 cursor-pointer"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-sm">check</span> Setuju
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleOpenRejectModal(item)}
+                                                                    disabled={actionLoadingId !== ''}
+                                                                    className="px-2.5 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-0.5 cursor-pointer"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-sm">close</span> Tolak
+                                                                </button>
+                                                            </>
+                                                        ) : item.status === 'Approved' ? (
+                                                            <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-green-50 text-green-700 border border-green-200 shadow-sm">Disetujui</span>
+                                                        ) : (
+                                                            <div className="relative group inline-block">
+                                                                <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-red-50 text-red-700 border border-red-200 shadow-sm cursor-help inline-flex items-center gap-1">
+                                                                    <span className="material-symbols-outlined text-xs">info</span> Ditolak
+                                                                </span>
+                                                                <div className="absolute right-0 top-full mt-1.5 hidden group-hover:block z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-xl shadow-xl border border-gray-700 text-left animate-fade-in">
+                                                                    <p className="font-bold text-red-400 mb-1 flex items-center gap-1">
+                                                                        <span className="material-symbols-outlined text-xs">cancel</span> Alasan Penolakan:
+                                                                    </p>
+                                                                    <p className="text-gray-200 italic leading-relaxed">"{item.catatan_admin || item.catatan || 'Tidak ada catatan spesifik.'}"</p>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )}
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
