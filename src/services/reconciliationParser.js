@@ -67,7 +67,7 @@ function parseNumber(val) {
  * Format date value from Excel into YYYY-MM-DD
  */
 function parseExcelDate(rawVal) {
-    if (!rawVal) return '';
+    if (!rawVal && rawVal !== 0) return '';
     const strVal = rawVal.toString().trim();
 
     if (/^\d+(\.\d+)?$/.test(strVal)) {
@@ -81,12 +81,25 @@ function parseExcelDate(rawVal) {
     const isoMatch = strVal.match(/^(\d{4}-\d{2}-\d{2})/);
     if (isoMatch) return isoMatch[1];
 
+    const yyyymmddMatch = strVal.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (yyyymmddMatch) {
+        const year = yyyymmddMatch[1];
+        const month = yyyymmddMatch[2].padStart(2, '0');
+        const day = yyyymmddMatch[3].padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
     const ddmmyyyyMatch = strVal.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
     if (ddmmyyyyMatch) {
-        const day = ddmmyyyyMatch[1].padStart(2, '0');
-        const month = ddmmyyyyMatch[2].padStart(2, '0');
-        const year = ddmmyyyyMatch[3];
-        return `${year}-${month}-${day}`;
+        const dayNum = parseInt(ddmmyyyyMatch[1], 10);
+        const monthNum = parseInt(ddmmyyyyMatch[2], 10);
+        const yearNum = parseInt(ddmmyyyyMatch[3], 10);
+
+        if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12 && yearNum >= 2000) {
+            const day = ddmmyyyyMatch[1].padStart(2, '0');
+            const month = ddmmyyyyMatch[2].padStart(2, '0');
+            return `${yearNum}-${month}-${day}`;
+        }
     }
 
     const d = new Date(strVal);
