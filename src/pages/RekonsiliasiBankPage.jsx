@@ -34,6 +34,8 @@ export default function RekonsiliasiBankPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
+    const [progressStatus, setProgressStatus] = useState('');
+    const [progressPercent, setProgressPercent] = useState(0);
 
     const [startDate, setStartDate] = useState(() => {
         const d = new Date();
@@ -83,6 +85,8 @@ export default function RekonsiliasiBankPage() {
         setLoading(true);
         setError('');
         setSuccessMsg('');
+        setProgressStatus('Membaca file Excel yang diunggah...');
+        setProgressPercent(15);
 
         try {
             let totalSaved = 0;
@@ -90,7 +94,12 @@ export default function RekonsiliasiBankPage() {
 
             // 1. Process Mutasi BCA (Ref 6) -> recon_bank_mutations_bca
             if (fileBca) {
+                setProgressStatus(`Membaca file ${fileBca.name}...`);
+                setProgressPercent(25);
+
                 // Fetch Master MIDs to build mid -> outcode map
+                setProgressStatus('Memuat master data MID toko dari database...');
+                setProgressPercent(40);
                 const { data: masterData, error: masterErr } = await safeSupabaseQuery(
                     supabase.from('recon_master_mids').select('key_code, outcode_target').range(0, 4999),
                     60000
@@ -105,11 +114,13 @@ export default function RekonsiliasiBankPage() {
                     });
                 }
 
+                setProgressStatus('Mengekstrak data transaksi & mencocokkan outcode...');
+                setProgressPercent(60);
                 const buf = await fileBca.arrayBuffer();
-                const parsedRecords = parseBcaMutationExcelForSupabase(buf, masterMidMap, fileBca.name);
+                const parsedRecords = parseBcaMutationExcelForSupabase(buf, masterMidMap, fileBca.name, storeProfiles);
 
                 if (!parsedRecords || parsedRecords.length === 0) {
-                    throw new Error('File Excel Mutasi BCA tidak memiliki data transaksi KARTU KREDIT MID valid.');
+                    throw new Error('File Excel Mutasi BCA tidak memiliki data transaksi KARTU KREDIT, KR OTOMATIS, atau SETORAN TUNAI valid.');
                 }
 
                 const rowsToUpsert = deduplicateMutations(parsedRecords);
@@ -117,6 +128,12 @@ export default function RekonsiliasiBankPage() {
                 const chunkSize = 500;
                 for (let i = 0; i < rowsToUpsert.length; i += chunkSize) {
                     const chunk = rowsToUpsert.slice(i, i + chunkSize);
+                    const batchNum = Math.floor(i / chunkSize) + 1;
+                    const totalBatches = Math.ceil(rowsToUpsert.length / chunkSize);
+                    
+                    setProgressStatus(`Menyimpan ${rowsToUpsert.length} data mutasi BCA ke Supabase (Batch ${batchNum}/${totalBatches})...`);
+                    setProgressPercent(80 + Math.floor((batchNum / totalBatches) * 15));
+
                     const { error: upsertErr } = await safeSupabaseQuery(
                         supabase.from('recon_bank_mutations_bca').upsert(chunk, { onConflict: 'tanggal_mutasi,keterangan,jumlah,db_cr' }),
                         60000
@@ -127,9 +144,12 @@ export default function RekonsiliasiBankPage() {
                 }
 
                 totalSaved += rowsToUpsert.length;
-                messages.push(`${rowsToUpsert.length} data Mutasi BCA (KARTU KREDIT MID)`);
+                messages.push(`${rowsToUpsert.length} data Mutasi BCA (SETORAN TUNAI, KR OTOMATIS & KARTU KREDIT)`);
                 setFileBca(null);
             }
+
+            setProgressPercent(100);
+            setProgressStatus('✓ Selesai!');
 
             if (messages.length > 0) {
                 setSuccessMsg(`✓ Berhasil mengunggah & menyimpan ${messages.join(', ')} ke tabel Supabase (recon_bank_mutations_bca)!`);
@@ -140,7 +160,11 @@ export default function RekonsiliasiBankPage() {
             console.error('Error uploading daily files:', e);
             setError(e.message || 'Gagal memproses file Excel.');
         } finally {
-            setLoading(false);
+            setTimeout(() => {
+                setLoading(false);
+                setProgressPercent(0);
+                setProgressStatus('');
+            }, 600);
         }
     };
 
@@ -581,6 +605,37 @@ export default function RekonsiliasiBankPage() {
                     </div>
                 )}
             </div>
+            {/* Real-Time Progress Overlay Modal */}
+            {loading && (
+                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-emerald-100 flex flex-col items-center text-center animate-scale-up space-y-4">
+                        <div className="relative flex items-center justify-center">
+                            <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-inner">
+                                <span className="material-symbols-outlined text-3xl animate-spin">sync</span>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-800">Pemrosesan Data Rekonsiliasi</h3>
+                            <p className="text-xs text-emerald-700 font-semibold mt-2 leading-relaxed bg-emerald-50/90 px-3.5 py-2 rounded-xl border border-emerald-100/80 inline-block shadow-xs">
+                                {progressStatus || 'Mohon tunggu, sedang memproses file...'}
+                            </p>
+                        </div>
+                        
+                        {/* Progress bar */}
+                        <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-200/60 mt-1">
+                            <div 
+                                className="bg-emerald-600 h-2 rounded-full transition-all duration-300 ease-out shadow-sm"
+                                style={{ width: `${Math.min(100, Math.max(10, progressPercent))}%` }}
+                            />
+                        </div>
+                        
+                        <div className="flex items-center justify-between w-full text-[11px] text-slate-400 font-medium px-1 pt-1">
+                            <span className="font-bold text-emerald-600">{progressPercent}% Selesai</span>
+                            <span>Aplikasi Setoran Alpro</span>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AdminLayout>
     );
 }
