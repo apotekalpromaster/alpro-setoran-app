@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah, NON_FINANCIAL_TYPES, formatDriveImageUrl } from '../lib/validators';
@@ -30,9 +30,14 @@ export default function DetailRiwayatPage() {
     const [lightboxImg, setLightboxImg] = useState(null);
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const { profile } = useAuth();
 
     const handleBack = () => {
+        if (location.state?.from) {
+            navigate(location.state.from);
+            return;
+        }
         const role = (profile?.role || '').toLowerCase();
         if (role === 'areamanager') navigate('/areamanager/dashboard');
         else if (role === 'admin' || role === 'finance') navigate('/admin/laporan');
