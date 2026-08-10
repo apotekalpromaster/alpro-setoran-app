@@ -420,15 +420,27 @@ export default function KoreksiLaporanPage() {
                         let targetAmName = profile?.area_manager || 'Area Manager';
 
                         if (profile?.area_manager) {
+                            const amNameTrimmed = String(profile.area_manager).trim();
                             const { data: amProfile } = await supabase
                                 .from('profiles')
                                 .select('email, username')
-                                .eq('username', profile.area_manager)
+                                .ilike('username', amNameTrimmed)
                                 .maybeSingle();
 
                             if (amProfile?.email) {
                                 targetAmEmail = amProfile.email;
                                 targetAmName = amProfile.username || targetAmName;
+                            } else {
+                                const { data: amRoleProfiles } = await supabase
+                                    .from('profiles')
+                                    .select('email, username')
+                                    .eq('role', 'AreaManager')
+                                    .ilike('username', amNameTrimmed);
+
+                                if (Array.isArray(amRoleProfiles) && amRoleProfiles.length > 0 && amRoleProfiles[0].email) {
+                                    targetAmEmail = amRoleProfiles[0].email;
+                                    targetAmName = amRoleProfiles[0].username || targetAmName;
+                                }
                             }
                         }
 
