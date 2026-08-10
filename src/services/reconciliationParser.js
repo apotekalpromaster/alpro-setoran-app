@@ -555,10 +555,11 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
         if (!rawDate || !desc) continue;
 
         const isKartuKredit = desc.includes('KARTU KREDIT');
+        const isKrMid = desc.includes('KR OTOMATIS MID');
 
-        if (isKartuKredit) {
+        if (isKartuKredit || isKrMid) {
             const keterangan = desc;
-            const kategori = 'KARTU KREDIT MID';
+            const kategori = isKrMid ? 'KR OTOMATIS MID' : 'KARTU KREDIT MID';
             const tanggalMutasi = parseExcelDate(rawDate);
             const tanggalSales = null;
             const isDebit = rawAmountStr.toUpperCase().includes('DB');
@@ -566,34 +567,53 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
             const cleanAmountStr = rawAmountStr.replace(/[^0-9.-]/g, '');
             const jumlah = parseFloat(cleanAmountStr) || 0;
 
+            // Extract MID (Full & 7-digit snippet e.g. 885001473031 -> 1473031)
+            let fullMid = '';
             let midCode = '';
-            const midMatch = desc.match(/MID\s*:\s*0*([1-9]\d*)/i);
+
+            const midMatch = desc.match(/MID\s*:\s*([0-9]+)/i);
             if (midMatch) {
-                midCode = midMatch[1];
+                fullMid = midMatch[1];
+                midCode = fullMid.length >= 7 ? fullMid.slice(-7) : fullMid.replace(/^0+/, '');
             } else {
-                const rawMidMatch = desc.match(/MID\s*:\s*([0-9]+)/i);
-                if (rawMidMatch) {
-                    midCode = rawMidMatch[1].replace(/^0+/, '');
+                const rawDigitMatch = desc.match(/\b([0-9]{7,15})\b/);
+                if (rawDigitMatch) {
+                    fullMid = rawDigitMatch[1];
+                    midCode = fullMid.length >= 7 ? fullMid.slice(-7) : fullMid.replace(/^0+/, '');
                 }
             }
 
+            // Extract Gross Amount from TGH:
             let grossAmount = 0;
-            const tghMatch = desc.match(/TGH\s*:\s*0*([0-9]+(?:\.[0-9]+)?)/i);
+            const tghMatch = desc.match(/TGH\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
             if (tghMatch) {
                 grossAmount = parseFloat(tghMatch[1]) || 0;
             }
 
+            // Extract Admin Fee MDR from DDR: or ADM:
             let adminFeeMdr = 0;
-            const admMatch = desc.match(/ADM\s*:\s*0*([0-9]+(?:\.[0-9]+)?)/i);
-            if (admMatch) {
-                adminFeeMdr = parseFloat(admMatch[1]) || 0;
+            const ddrMatch = desc.match(/(?:DDR|ADM)\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
+            if (ddrMatch) {
+                adminFeeMdr = parseFloat(ddrMatch[1]) || 0;
             }
 
+            // Multi-tier lookup for outcode from masterMidMap
             let outcode = 'UNMAPPED';
+            const cleanFullMid = fullMid.replace(/^0+/, '');
+            const clean7Mid = midCode.replace(/^0+/, '');
+
             if (midCode && masterMidMap[midCode]) {
                 outcode = masterMidMap[midCode];
-            } else if (midCode && masterMidMap[midCode.padStart(7, '0')]) {
-                outcode = masterMidMap[midCode.padStart(7, '0')];
+            } else if (clean7Mid && masterMidMap[clean7Mid]) {
+                outcode = masterMidMap[clean7Mid];
+            } else if (clean7Mid && masterMidMap[clean7Mid.padStart(7, '0')]) {
+                outcode = masterMidMap[clean7Mid.padStart(7, '0')];
+            } else if (fullMid && masterMidMap[fullMid]) {
+                outcode = masterMidMap[fullMid];
+            } else if (cleanFullMid && masterMidMap[cleanFullMid]) {
+                outcode = masterMidMap[cleanFullMid];
+            } else {
+                outcode = resolveOutcodeFromMid(midCode || fullMid, desc, masterMidMap) || 'UNMAPPED';
             }
 
             records.push({
@@ -605,7 +625,7 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                 jumlah: jumlah,
                 admin_fee_mdr: adminFeeMdr,
                 gross_amount: grossAmount,
-                mid_code: midCode,
+                mid_code: midCode || fullMid,
                 db_cr: dbCr,
                 rekening_no: '1784455991',
                 source_file: fileName || 'BCA PKU Excel'
