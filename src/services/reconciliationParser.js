@@ -534,7 +534,7 @@ export function parseBcaMutationExcel(arrayBuffer, bcaMidMap = {}, masterMapping
 // ============================================================
 // PARSER MUTASI BCA FOR SUPABASE (recon_bank_mutations_bca)
 // ============================================================
-export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {}, fileName = '') {
+export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {}, fileName = '', storeProfiles = []) {
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, { type: 'array' });
     if (!workbook.SheetNames || workbook.SheetNames.length === 0) return [];
@@ -543,6 +543,23 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
     const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
     const records = [];
+
+    // Pre-build map of 4-digit store code to username (outcode) from storeProfiles
+    const storeCodeToOutcode = {};
+    const storeUsernameMap = {};
+
+    (storeProfiles || []).forEach(p => {
+        if (p.username) {
+            const outcode = p.username.toString().trim().toUpperCase();
+            storeUsernameMap[outcode] = outcode;
+            if (p.kode_toko) {
+                const codeMatch = p.kode_toko.toString().match(/\b(\d{4})\b/);
+                if (codeMatch) {
+                    storeCodeToOutcode[codeMatch[1]] = outcode;
+                }
+            }
+        }
+    });
 
     for (let i = 7; i < rawRows.length; i++) {
         const row = rawRows[i];
@@ -557,93 +574,127 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
         const isKartuKredit = desc.includes('KARTU KREDIT');
         const isKrMid = desc.includes('KR OTOMATIS MID');
         const isKrTanggal = desc.includes('KR OTOMATIS TANGGAL');
+        const isSetoranTunai = desc.includes('SETORAN TUNAI');
 
-        if (isKartuKredit || isKrMid || isKrTanggal) {
+        if (isKartuKredit || isKrMid || isKrTanggal || isSetoranTunai) {
             const keterangan = desc;
             let kategori = 'KARTU KREDIT MID';
-            if (isKrTanggal) kategori = 'KR OTOMATIS TANGGAL';
+            if (isSetoranTunai) kategori = 'SETORAN TUNAI';
+            else if (isKrTanggal) kategori = 'KR OTOMATIS TANGGAL';
             else if (isKrMid) kategori = 'KR OTOMATIS MID';
 
             const tanggalMutasi = parseExcelDate(rawDate);
-
-            // Extract tanggal_sales from DD/MM for KR OTOMATIS TANGGAL (e.g. KR OTOMATIS TANGGAL :01/07)
-            let tanggalSales = null;
-            if (isKrTanggal) {
-                const dateTagMatch = desc.match(/KR OTOMATIS TANGGAL\s*:\s*(\d{1,2})\/(\d{1,2})/i);
-                if (dateTagMatch) {
-                    const tagDay = dateTagMatch[1].padStart(2, '0');
-                    const tagMonth = dateTagMatch[2].padStart(2, '0');
-                    const mutYear = tanggalMutasi ? tanggalMutasi.split('-')[0] : new Date().getFullYear().toString();
-
-                    // Handle year rollover if sales month is 12 and mutation month is 01
-                    let salesYear = parseInt(mutYear, 10);
-                    if (tanggalMutasi) {
-                        const mutMonth = parseInt(tanggalMutasi.split('-')[1], 10);
-                        const sMonth = parseInt(tagMonth, 10);
-                        if (sMonth === 12 && mutMonth === 1) {
-                            salesYear -= 1;
-                        }
-                    }
-                    tanggalSales = `${salesYear}-${tagMonth}-${tagDay}`;
-                }
-            }
-
             const isDebit = rawAmountStr.toUpperCase().includes('DB');
             const dbCr = isDebit ? 'DB' : 'CR';
             const cleanAmountStr = rawAmountStr.replace(/[^0-9.-]/g, '');
-            const jumlah = parseFloat(cleanAmountStr) || 0;
+            const parsedAmount = parseFloat(cleanAmountStr) || 0;
 
-            // Extract MID (Full & 7-digit snippet e.g. 885004567803 -> 4567803)
-            let fullMid = '';
+            let tanggalSales = null;
             let midCode = '';
-
-            const midMatch = desc.match(/MID\s*:\s*([0-9]+)/i);
-            if (midMatch) {
-                fullMid = midMatch[1];
-                midCode = fullMid.length >= 7 ? fullMid.slice(-7) : fullMid.replace(/^0+/, '');
-            } else {
-                const rawDigitMatch = desc.match(/\b([0-9]{7,15})\b/);
-                if (rawDigitMatch) {
-                    fullMid = rawDigitMatch[1];
-                    midCode = fullMid.length >= 7 ? fullMid.slice(-7) : fullMid.replace(/^0+/, '');
-                }
-            }
-
-            // Extract Gross Amount from QR: or TGH:
-            let grossAmount = 0;
-            const qrMatch = desc.match(/QR\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
-            const tghMatch = desc.match(/TGH\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
-
-            if (qrMatch) {
-                grossAmount = parseFloat(qrMatch[1]) || 0;
-            } else if (tghMatch) {
-                grossAmount = parseFloat(tghMatch[1]) || 0;
-            }
-
-            // Extract Admin Fee MDR from DDR: or ADM:
-            let adminFeeMdr = 0;
-            const ddrMatch = desc.match(/(?:DDR|ADM)\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
-            if (ddrMatch) {
-                adminFeeMdr = parseFloat(ddrMatch[1]) || 0;
-            }
-
-            // Multi-tier lookup for outcode from masterMidMap
             let outcode = 'UNMAPPED';
-            const cleanFullMid = fullMid.replace(/^0+/, '');
-            const clean7Mid = midCode.replace(/^0+/, '');
+            let grossAmount = 0;
+            let adminFeeMdr = null;
+            let jumlah = null;
 
-            if (midCode && masterMidMap[midCode]) {
-                outcode = masterMidMap[midCode];
-            } else if (clean7Mid && masterMidMap[clean7Mid]) {
-                outcode = masterMidMap[clean7Mid];
-            } else if (clean7Mid && masterMidMap[clean7Mid.padStart(7, '0')]) {
-                outcode = masterMidMap[clean7Mid.padStart(7, '0')];
-            } else if (fullMid && masterMidMap[fullMid]) {
-                outcode = masterMidMap[fullMid];
-            } else if (cleanFullMid && masterMidMap[cleanFullMid]) {
-                outcode = masterMidMap[cleanFullMid];
+            if (isSetoranTunai) {
+                grossAmount = parsedAmount;
+                jumlah = null;
+                adminFeeMdr = null;
+
+                // Extract tanggal_sales if clean DD/MM/YYYY or DDMMYYYY pattern found
+                const tunaiDateMatch = desc.match(/(?:0[1-9]|[12]\d|3[01])[\/\s\-]*?(0[1-9]|1[0-2])[\/\s\-]*?(20\d{2})/) || desc.match(/\b(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})\b/);
+                if (tunaiDateMatch) {
+                    const dd = tunaiDateMatch[1].padStart(2, '0');
+                    const mm = tunaiDateMatch[2].padStart(2, '0');
+                    const yyyy = tunaiDateMatch[3];
+                    tanggalSales = `${yyyy}-${mm}-${dd}`;
+                }
+
+                // Strategy A: 4-digit store code in desc (e.g. SETORAN TUNAI 0003, D004, 0016, 0030, 0052, 3007)
+                const code4Match = desc.match(/\b[D]?(\d{4})\b/i);
+                if (code4Match && storeCodeToOutcode[code4Match[1]]) {
+                    outcode = storeCodeToOutcode[code4Match[1]];
+                } else {
+                    // Strategy B: Direct outcode snippet in desc (e.g. JKJBTM1, JKJSBZ1, JKJTLB1)
+                    const outcodeSnippetMatch = desc.match(/\b([A-Z]{2,6}[0-9]{1,2})\b/i);
+                    if (outcodeSnippetMatch) {
+                        const snippet = outcodeSnippetMatch[1].toUpperCase();
+                        if (storeUsernameMap[snippet]) {
+                            outcode = storeUsernameMap[snippet];
+                        } else if (masterMidMap[snippet]) {
+                            outcode = masterMidMap[snippet];
+                        }
+                    }
+                }
             } else {
-                outcode = resolveOutcodeFromMid(midCode || fullMid, desc, masterMidMap) || 'UNMAPPED';
+                jumlah = parsedAmount;
+
+                if (isKrTanggal) {
+                    const dateTagMatch = desc.match(/KR OTOMATIS TANGGAL\s*:\s*(\d{1,2})\/(\d{1,2})/i);
+                    if (dateTagMatch) {
+                        const tagDay = dateTagMatch[1].padStart(2, '0');
+                        const tagMonth = dateTagMatch[2].padStart(2, '0');
+                        const mutYear = tanggalMutasi ? tanggalMutasi.split('-')[0] : new Date().getFullYear().toString();
+
+                        let salesYear = parseInt(mutYear, 10);
+                        if (tanggalMutasi) {
+                            const mutMonth = parseInt(tanggalMutasi.split('-')[1], 10);
+                            const sMonth = parseInt(tagMonth, 10);
+                            if (sMonth === 12 && mutMonth === 1) {
+                                salesYear -= 1;
+                            }
+                        }
+                        tanggalSales = `${salesYear}-${tagMonth}-${tagDay}`;
+                    }
+                }
+
+                // Extract MID
+                let fullMid = '';
+                const midMatch = desc.match(/MID\s*:\s*([0-9]+)/i);
+                if (midMatch) {
+                    fullMid = midMatch[1];
+                    midCode = fullMid.length >= 7 ? fullMid.slice(-7) : fullMid.replace(/^0+/, '');
+                } else {
+                    const rawDigitMatch = desc.match(/\b([0-9]{7,15})\b/);
+                    if (rawDigitMatch) {
+                        fullMid = rawDigitMatch[1];
+                        midCode = fullMid.length >= 7 ? fullMid.slice(-7) : fullMid.replace(/^0+/, '');
+                    }
+                }
+
+                // Extract Gross Amount from QR: or TGH:
+                const qrMatch = desc.match(/QR\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
+                const tghMatch = desc.match(/TGH\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
+
+                if (qrMatch) {
+                    grossAmount = parseFloat(qrMatch[1]) || 0;
+                } else if (tghMatch) {
+                    grossAmount = parseFloat(tghMatch[1]) || 0;
+                }
+
+                // Extract Admin Fee MDR from DDR: or ADM:
+                const ddrMatch = desc.match(/(?:DDR|ADM)\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
+                if (ddrMatch) {
+                    adminFeeMdr = parseFloat(ddrMatch[1]) || 0;
+                }
+
+                // Multi-tier lookup for outcode from masterMidMap
+                const cleanFullMid = fullMid.replace(/^0+/, '');
+                const clean7Mid = midCode.replace(/^0+/, '');
+
+                if (midCode && masterMidMap[midCode]) {
+                    outcode = masterMidMap[midCode];
+                } else if (clean7Mid && masterMidMap[clean7Mid]) {
+                    outcode = masterMidMap[clean7Mid];
+                } else if (clean7Mid && masterMidMap[clean7Mid.padStart(7, '0')]) {
+                    outcode = masterMidMap[clean7Mid.padStart(7, '0')];
+                } else if (fullMid && masterMidMap[fullMid]) {
+                    outcode = masterMidMap[fullMid];
+                } else if (cleanFullMid && masterMidMap[cleanFullMid]) {
+                    outcode = masterMidMap[cleanFullMid];
+                } else {
+                    outcode = resolveOutcodeFromMid(midCode || fullMid, desc, masterMidMap) || 'UNMAPPED';
+                }
             }
 
             records.push({
@@ -655,7 +706,7 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                 jumlah: jumlah,
                 admin_fee_mdr: adminFeeMdr,
                 gross_amount: grossAmount,
-                mid_code: midCode || fullMid,
+                mid_code: midCode || '',
                 db_cr: dbCr,
                 rekening_no: '1784455991',
                 source_file: fileName || 'BCA PKU Excel'
