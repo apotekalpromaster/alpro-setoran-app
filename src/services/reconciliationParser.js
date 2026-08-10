@@ -556,18 +556,44 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
 
         const isKartuKredit = desc.includes('KARTU KREDIT');
         const isKrMid = desc.includes('KR OTOMATIS MID');
+        const isKrTanggal = desc.includes('KR OTOMATIS TANGGAL');
 
-        if (isKartuKredit || isKrMid) {
+        if (isKartuKredit || isKrMid || isKrTanggal) {
             const keterangan = desc;
-            const kategori = isKrMid ? 'KR OTOMATIS MID' : 'KARTU KREDIT MID';
+            let kategori = 'KARTU KREDIT MID';
+            if (isKrTanggal) kategori = 'KR OTOMATIS TANGGAL';
+            else if (isKrMid) kategori = 'KR OTOMATIS MID';
+
             const tanggalMutasi = parseExcelDate(rawDate);
-            const tanggalSales = null;
+
+            // Extract tanggal_sales from DD/MM for KR OTOMATIS TANGGAL (e.g. KR OTOMATIS TANGGAL :01/07)
+            let tanggalSales = null;
+            if (isKrTanggal) {
+                const dateTagMatch = desc.match(/KR OTOMATIS TANGGAL\s*:\s*(\d{1,2})\/(\d{1,2})/i);
+                if (dateTagMatch) {
+                    const tagDay = dateTagMatch[1].padStart(2, '0');
+                    const tagMonth = dateTagMatch[2].padStart(2, '0');
+                    const mutYear = tanggalMutasi ? tanggalMutasi.split('-')[0] : new Date().getFullYear().toString();
+
+                    // Handle year rollover if sales month is 12 and mutation month is 01
+                    let salesYear = parseInt(mutYear, 10);
+                    if (tanggalMutasi) {
+                        const mutMonth = parseInt(tanggalMutasi.split('-')[1], 10);
+                        const sMonth = parseInt(tagMonth, 10);
+                        if (sMonth === 12 && mutMonth === 1) {
+                            salesYear -= 1;
+                        }
+                    }
+                    tanggalSales = `${salesYear}-${tagMonth}-${tagDay}`;
+                }
+            }
+
             const isDebit = rawAmountStr.toUpperCase().includes('DB');
             const dbCr = isDebit ? 'DB' : 'CR';
             const cleanAmountStr = rawAmountStr.replace(/[^0-9.-]/g, '');
             const jumlah = parseFloat(cleanAmountStr) || 0;
 
-            // Extract MID (Full & 7-digit snippet e.g. 885001473031 -> 1473031)
+            // Extract MID (Full & 7-digit snippet e.g. 885004567803 -> 4567803)
             let fullMid = '';
             let midCode = '';
 
@@ -583,10 +609,14 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                 }
             }
 
-            // Extract Gross Amount from TGH:
+            // Extract Gross Amount from QR: or TGH:
             let grossAmount = 0;
+            const qrMatch = desc.match(/QR\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
             const tghMatch = desc.match(/TGH\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
-            if (tghMatch) {
+
+            if (qrMatch) {
+                grossAmount = parseFloat(qrMatch[1]) || 0;
+            } else if (tghMatch) {
                 grossAmount = parseFloat(tghMatch[1]) || 0;
             }
 

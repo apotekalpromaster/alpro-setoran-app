@@ -120,7 +120,7 @@ export default function RekonsiliasiBankPage() {
                 const parsedRecords = parseBcaMutationExcelForSupabase(buf, masterMidMap, fileBca.name);
 
                 if (!parsedRecords || parsedRecords.length === 0) {
-                    throw new Error('File Excel Mutasi BCA tidak memiliki data transaksi KARTU KREDIT / KR OTOMATIS MID valid.');
+                    throw new Error('File Excel Mutasi BCA tidak memiliki data transaksi KARTU KREDIT / KR OTOMATIS valid.');
                 }
 
                 const rowsToUpsert = deduplicateMutations(parsedRecords);
@@ -144,7 +144,7 @@ export default function RekonsiliasiBankPage() {
                 }
 
                 totalSaved += rowsToUpsert.length;
-                messages.push(`${rowsToUpsert.length} data Mutasi BCA (KARTU KREDIT & KR OTOMATIS MID)`);
+                messages.push(`${rowsToUpsert.length} data Mutasi BCA (KR OTOMATIS TANGGAL, KR OTOMATIS MID & KARTU KREDIT)`);
                 setFileBca(null);
             }
 
