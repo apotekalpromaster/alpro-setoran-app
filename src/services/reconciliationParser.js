@@ -642,8 +642,15 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                 jumlah = 0;
                 adminFeeMdr = 0;
 
+                // Clean single spaces between digits in desc (e.g. "2 045" -> "2045", "03/07/2 026" -> "03/07/2026", "09072 026" -> "09072026")
+                const cleanedDesc = desc
+                    .replace(/(\b\d{1,3})\s+(\d{1,3}\b)/g, '$1$2')
+                    .replace(/(\b\d{1,6})\s+(\d{1,3}\b)/g, '$1$2');
+                const descUpper = cleanedDesc.toUpperCase();
+                const descNoSpace = descUpper.replace(/[^A-Z0-9]/g, '');
+
                 // Extract tanggal_sales if clean DD/MM/YYYY or DDMMYYYY pattern found
-                const cleanDateMatch = desc.match(/\b(0[1-9]|[12]\d|3[01])[\/\s\-]*?(0[1-9]|1[0-2])[\/\s\-]*?(20\d{2})\b/) || desc.match(/\b(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})\b/);
+                const cleanDateMatch = cleanedDesc.match(/\b(0[1-9]|[12]\d|3[01])[\/\s\-]*?(0[1-9]|1[0-2])[\/\s\-]*?(20\d{2})\b/) || cleanedDesc.match(/\b(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})\b/);
                 if (cleanDateMatch && cleanDateMatch[1] && cleanDateMatch[2] && cleanDateMatch[3]) {
                     const dd = cleanDateMatch[1].padStart(2, '0');
                     const mm = cleanDateMatch[2].padStart(2, '0');
@@ -651,17 +658,29 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                     tanggalSales = `${yyyy}-${mm}-${dd}`;
                 }
 
-                // 2-Way Outcode Matching Algorithm
-                // Priority 1: Direct Outcode Match (e.g. BTTSPR1, JKJSRD1, BTTSRF1, BTTSSU1, JBDPMR1, JKJSPC1, JKJSTT1, JKJSRR1, JKJTA21, JKJBSR1)
-                const descUpper = desc.toUpperCase();
+                // 2-Way Outcode Matching Algorithm with Space Normalization
+                // Priority 1: Direct Outcode Match (e.g. BTTSPR1, JKJSRD1, BTTSRF1, BTTSSU1, JBDPMR1, JKJSPC1, JKJSTT1, JKJSRR1, JKJTA21, JKJBSR1, JKBGV1, JKJBDK1)
                 let foundOutcode = '';
 
+                // A. Check against descNoSpace (resolves split outcodes like "J KBGV1" -> "JKBGV1")
                 for (const candidateOutcode of knownOutcodesSet) {
                     if (candidateOutcode && candidateOutcode.length >= 5) {
-                        const outRegex = new RegExp(`\\b${candidateOutcode}\\b`, 'i');
-                        if (outRegex.test(descUpper) || descUpper.includes(candidateOutcode)) {
+                        if (descNoSpace.includes(candidateOutcode)) {
                             foundOutcode = knownOutcodesMap[candidateOutcode] || candidateOutcode;
                             break;
+                        }
+                    }
+                }
+
+                // B. Check against cleanedDesc regex word boundary
+                if (!foundOutcode) {
+                    for (const candidateOutcode of knownOutcodesSet) {
+                        if (candidateOutcode && candidateOutcode.length >= 5) {
+                            const outRegex = new RegExp(`\\b${candidateOutcode}\\b`, 'i');
+                            if (outRegex.test(descUpper) || descUpper.includes(candidateOutcode)) {
+                                foundOutcode = knownOutcodesMap[candidateOutcode] || candidateOutcode;
+                                break;
+                            }
                         }
                     }
                 }
@@ -669,8 +688,8 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                 if (foundOutcode) {
                     outcode = foundOutcode;
                 } else {
-                    // Priority 2: Store Code Lookup (e.g. 2002, 2023, 0003, 0004, 0016, 0030, 0052, 3007)
-                    const storeCodeMatch = desc.match(/\b[D]?(\d{3,4})\b/i);
+                    // Priority 2: Store Code Lookup from cleanedDesc (e.g. 2045 from "2 045", 2006, 3009, 2018, 2027, 0065)
+                    const storeCodeMatch = cleanedDesc.match(/\b[D]?(\d{3,4})\b/i);
                     if (storeCodeMatch) {
                         const rawCode = storeCodeMatch[1];
                         const cleanCode = rawCode.replace(/^0+/, '');
