@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import nodemailer from 'npm:nodemailer';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -50,7 +51,52 @@ serve(async (req: Request) => {
     }
 
     const fromEmail = 'apotekalpro.master@gmail.com';
-    const recipientEmail = payload.to;
+    let recipientEmail = payload.to;
+
+    // Server-Side Smart Resolution: If recipientEmail is operation fallback or missing, resolve directly from DB
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if ((!recipientEmail || recipientEmail === 'operation@apotekalpro.id') && supabaseUrl && serviceRoleKey) {
+      try {
+        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+        let amName: string | null = null;
+
+        if (payload.pelaporEmail) {
+          const { data: outlet } = await supabaseAdmin
+            .from('profiles')
+            .select('area_manager')
+            .eq('email', payload.pelaporEmail)
+            .maybeSingle();
+          if (outlet?.area_manager) amName = outlet.area_manager;
+        }
+
+        if (!amName && payload.cabang) {
+          const { data: outlet } = await supabaseAdmin
+            .from('profiles')
+            .select('area_manager')
+            .eq('username', payload.cabang)
+            .maybeSingle();
+          if (outlet?.area_manager) amName = outlet.area_manager;
+        }
+
+        if (amName) {
+          const { data: amUser } = await supabaseAdmin
+            .from('profiles')
+            .select('email')
+            .ilike('username', amName.trim())
+            .maybeSingle();
+
+          if (amUser?.email) {
+            recipientEmail = amUser.email;
+            console.log(`[send-koreksi-notification] Smart resolved AM email for "${amName}": ${recipientEmail}`);
+          }
+        }
+      } catch (dbErr) {
+        console.warn('[send-koreksi-notification] Smart resolution DB lookup warning:', dbErr);
+      }
+    }
+
     const ccEmails = payload.cc ? payload.cc : undefined;
     const emailSubject = payload.subject || `[PERMOHONAN KOREKSI LAPORAN] ${payload.cabang || 'Cabang'} - ${payload.tanggalSales || ''}`;
 
