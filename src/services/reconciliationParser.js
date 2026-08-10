@@ -602,11 +602,11 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                 adminFeeMdr = 0;
 
                 // Extract tanggal_sales if clean DD/MM/YYYY or DDMMYYYY pattern found
-                const tunaiDateMatch = desc.match(/(?:0[1-9]|[12]\d|3[01])[\/\s\-]*?(0[1-9]|1[0-2])[\/\s\-]*?(20\d{2})/) || desc.match(/\b(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})\b/);
-                if (tunaiDateMatch) {
-                    const dd = tunaiDateMatch[1].padStart(2, '0');
-                    const mm = tunaiDateMatch[2].padStart(2, '0');
-                    const yyyy = tunaiDateMatch[3];
+                const cleanDateMatch = desc.match(/\b(0[1-9]|[12]\d|3[01])[\/\s\-]*?(0[1-9]|1[0-2])[\/\s\-]*?(20\d{2})\b/) || desc.match(/\b(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})\b/);
+                if (cleanDateMatch && cleanDateMatch[1] && cleanDateMatch[2] && cleanDateMatch[3]) {
+                    const dd = cleanDateMatch[1].padStart(2, '0');
+                    const mm = cleanDateMatch[2].padStart(2, '0');
+                    const yyyy = cleanDateMatch[3];
                     tanggalSales = `${yyyy}-${mm}-${dd}`;
                 }
 
@@ -695,6 +695,11 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
                 } else {
                     outcode = resolveOutcodeFromMid(midCode || fullMid, desc, masterMidMap) || 'UNMAPPED';
                 }
+            }
+
+            // Final safety guard for tanggalSales format YYYY-MM-DD
+            if (tanggalSales && (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalSales) || tanggalSales.includes('undefined'))) {
+                tanggalSales = null;
             }
 
             records.push({
