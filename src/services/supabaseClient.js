@@ -44,3 +44,41 @@ export async function safeSupabaseQuery(queryPromise, timeoutMs = 30000) {
         throw err;
     }
 }
+
+/**
+ * Resolves a fresh, non-expired Supabase JWT access token.
+ * Automatically triggers session refresh if current token is expired or expiring soon (< 60s).
+ */
+export async function getFreshAccessToken() {
+    try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.access_token) {
+            const expiresAt = sessionData.session.expires_at;
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (!expiresAt || expiresAt - nowSec > 60) {
+                return sessionData.session.access_token;
+            }
+        }
+
+        const { data: refreshData } = await supabase.auth.refreshSession();
+        if (refreshData?.session?.access_token) {
+            return refreshData.session.access_token;
+        }
+    } catch (err) {
+        console.warn('getFreshAccessToken warning:', err);
+    }
+
+    if (typeof localStorage !== 'undefined') {
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('-auth-token')) {
+                    const parsed = JSON.parse(localStorage.getItem(key));
+                    if (parsed?.access_token) return parsed.access_token;
+                }
+            }
+        } catch (e) {}
+    }
+
+    return null;
+}

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFormWizard } from '../context/FormWizardContext';
 import { parseRupiah, formatRupiah, NON_FINANCIAL_TYPES, compressImage } from '../lib/validators';
-import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
+import { supabase, safeSupabaseQuery, getFreshAccessToken } from '../services/supabaseClient';
 import { uploadToDrive } from '../services/driveService';
 import UserLayout from '../components/UserLayout';
 
@@ -113,27 +113,14 @@ export default function RingkasanPage() {
                 throw new Error(`Lampiran foto bukti setoran wajib diunggah (minimal ${minExpected} foto). Silakan kembali ke Langkah 2 untuk memilih foto bukti.`);
             }
 
-            // Step 1/3: Real-time Synchronous Auth Verification (0ms)
+            // Step 1/3: Real-time Synchronous Auth Verification & Auto-Refresh
             setUploadStatus('1/3 Memverifikasi otentikasi sesi...');
 
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-            let token = accessToken || null;
-            if (!token && typeof localStorage !== 'undefined') {
-                try {
-                    for (let i = 0; i < localStorage.length; i++) {
-                        const key = localStorage.key(i);
-                        if (key && key.includes('-auth-token')) {
-                            const parsed = JSON.parse(localStorage.getItem(key));
-                            if (parsed?.access_token) {
-                                token = parsed.access_token;
-                                break;
-                            }
-                        }
-                    }
-                } catch (e) {}
-            }
+            let token = await getFreshAccessToken();
+            if (!token) token = accessToken || null;
 
             const userId = user?.id || profile?.id;
 
@@ -179,11 +166,11 @@ export default function RingkasanPage() {
             // Step 3/3: Real-time Direct Server Transmission with 12s Hard Safety Timeout
             setUploadStatus('3/3 Mengirim data ke server database...');
 
-            const fetchPromise = fetch(`${supabaseUrl}/rest/v1/laporan`, {
+            const doFetch = (authToken) => fetch(`${supabaseUrl}/rest/v1/laporan`, {
                 method: 'POST',
                 headers: {
                     'apikey': supabaseAnonKey,
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${authToken}`,
                     'Content-Type': 'application/json',
                     'Prefer': 'return=representation'
                 },
@@ -194,9 +181,23 @@ export default function RingkasanPage() {
                 setTimeout(() => reject(new Error('Koneksi pengiriman laporan melebihi batas waktu (12 detik). Silakan klik "Kirim Lapor Sales" untuk mencoba kembali.')), 12000)
             );
 
-            const restRes = await Promise.race([fetchPromise, timeoutPromise]);
+            let restRes = await Promise.race([doFetch(token), timeoutPromise]);
+            let resData = await restRes.json().catch(() => null);
 
-            const resData = await restRes.json().catch(() => null);
+            // Transparent Auto-Retry Handler for Expired JWT Token
+            if (!restRes.ok && (restRes.status === 401 || (resData?.message && resData.message.includes('JWT')))) {
+                console.warn('JWT token expired during submission. Attempting automatic transparent session refresh...');
+                try {
+                    const { data: refreshed } = await supabase.auth.refreshSession();
+                    if (refreshed?.session?.access_token) {
+                        token = refreshed.session.access_token;
+                        restRes = await Promise.race([doFetch(token), timeoutPromise]);
+                        resData = await restRes.json().catch(() => null);
+                    }
+                } catch (retryErr) {
+                    console.warn('Transparent JWT retry warning:', retryErr);
+                }
+            }
 
             if (!restRes.ok) {
                 console.error('Direct REST error:', resData);
