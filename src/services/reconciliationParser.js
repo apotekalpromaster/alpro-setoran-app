@@ -67,7 +67,7 @@ function parseNumber(val) {
  * Format date value from Excel into YYYY-MM-DD
  */
 function parseExcelDate(rawVal) {
-    if (!rawVal) return '';
+    if (!rawVal && rawVal !== 0) return '';
     const strVal = rawVal.toString().trim();
 
     if (/^\d+(\.\d+)?$/.test(strVal)) {
@@ -81,12 +81,25 @@ function parseExcelDate(rawVal) {
     const isoMatch = strVal.match(/^(\d{4}-\d{2}-\d{2})/);
     if (isoMatch) return isoMatch[1];
 
+    const yyyymmddMatch = strVal.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (yyyymmddMatch) {
+        const year = yyyymmddMatch[1];
+        const month = yyyymmddMatch[2].padStart(2, '0');
+        const day = yyyymmddMatch[3].padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
     const ddmmyyyyMatch = strVal.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
     if (ddmmyyyyMatch) {
-        const day = ddmmyyyyMatch[1].padStart(2, '0');
-        const month = ddmmyyyyMatch[2].padStart(2, '0');
-        const year = ddmmyyyyMatch[3];
-        return `${year}-${month}-${day}`;
+        const dayNum = parseInt(ddmmyyyyMatch[1], 10);
+        const monthNum = parseInt(ddmmyyyyMatch[2], 10);
+        const yearNum = parseInt(ddmmyyyyMatch[3], 10);
+
+        if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12 && yearNum >= 2000) {
+            const day = ddmmyyyyMatch[1].padStart(2, '0');
+            const month = ddmmyyyyMatch[2].padStart(2, '0');
+            return `${yearNum}-${month}-${day}`;
+        }
     }
 
     const d = new Date(strVal);
@@ -616,11 +629,13 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
         const isKrMid = desc.includes('KR OTOMATIS MID');
         const isKrTanggal = desc.includes('KR OTOMATIS TANGGAL');
         const isSetoranTunai = desc.includes('SETORAN TUNAI');
+        const isSetoranViaCdm = desc.includes('SETORAN VIA CDM');
 
-        if (isKartuKredit || isKrMid || isKrTanggal || isSetoranTunai) {
+        if (isKartuKredit || isKrMid || isKrTanggal || isSetoranTunai || isSetoranViaCdm) {
             const keterangan = desc;
             let kategori = 'KARTU KREDIT MID';
-            if (isSetoranTunai) kategori = 'SETORAN TUNAI';
+            if (isSetoranViaCdm) kategori = 'SETORAN VIA CDM';
+            else if (isSetoranTunai) kategori = 'SETORAN TUNAI';
             else if (isKrTanggal) kategori = 'KR OTOMATIS TANGGAL';
             else if (isKrMid) kategori = 'KR OTOMATIS MID';
 
@@ -637,7 +652,44 @@ export function parseBcaMutationExcelForSupabase(arrayBuffer, masterMidMap = {},
             let adminFeeMdr = null;
             let jumlah = null;
 
-            if (isSetoranTunai) {
+            if (isSetoranViaCdm) {
+                grossAmount = parsedAmount;
+                jumlah = 0;
+                adminFeeMdr = 0;
+
+                // Extract tanggal_sales from DD/MM token after SETORAN VIA CDM (e.g. SETORAN VIA CDM 02/07 WSID:...)
+                const cdmDateMatch = desc.match(/SETORAN VIA CDM\s*(\d{1,2})\/(\d{1,2})/i);
+                if (cdmDateMatch) {
+                    const tagDay = cdmDateMatch[1].padStart(2, '0');
+                    const tagMonth = cdmDateMatch[2].padStart(2, '0');
+                    const mutYear = tanggalMutasi ? tanggalMutasi.split('-')[0] : new Date().getFullYear().toString();
+
+                    let salesYear = parseInt(mutYear, 10);
+                    if (tanggalMutasi) {
+                        const mutMonth = parseInt(tanggalMutasi.split('-')[1], 10);
+                        const sMonth = parseInt(tagMonth, 10);
+                        if (sMonth === 12 && mutMonth === 1) {
+                            salesYear -= 1;
+                        }
+                    }
+                    tanggalSales = `${salesYear}-${tagMonth}-${tagDay}`;
+                }
+
+                // Extract 16-digit deposit card number (e.g. 0147000101080293)
+                const depositCardMatch = desc.match(/\b(0147\d{12})\b/) || desc.match(/\b(\d{16})\b/);
+                if (depositCardMatch) {
+                    midCode = depositCardMatch[1];
+                    const cleanCard = midCode.replace(/^0+/, '');
+
+                    if (masterMidMap[midCode]) {
+                        outcode = masterMidMap[midCode];
+                    } else if (masterMidMap[cleanCard]) {
+                        outcode = masterMidMap[cleanCard];
+                    } else {
+                        outcode = resolveOutcodeFromMid(midCode, desc, masterMidMap) || 'UNMAPPED';
+                    }
+                }
+            } else if (isSetoranTunai) {
                 grossAmount = parsedAmount;
                 jumlah = 0;
                 adminFeeMdr = 0;
