@@ -49,23 +49,47 @@ export async function safeSupabaseQuery(queryPromise, timeoutMs = 30000) {
  * Resolves a fresh, non-expired Supabase JWT access token.
  * Automatically triggers session refresh if current token is expired or expiring soon (< 60s).
  */
-export async function getFreshAccessToken() {
-    try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (sessionData?.session?.access_token) {
-            const expiresAt = sessionData.session.expires_at;
-            const nowSec = Math.floor(Date.now() / 1000);
-            if (!expiresAt || expiresAt - nowSec > 60) {
-                return sessionData.session.access_token;
-            }
-        }
+/**
+ * Resolves a fresh, non-expired Supabase JWT access token.
+ * Automatically triggers session refresh if current token is expired or expiring soon (< 60s).
+ * Enforces a strict 3.5s safety timeout to prevent UI from hanging if auth server fetch stalls.
+ */
+export async function getFreshAccessToken(timeoutMs = 3500) {
+    let timer;
+    const timeoutPromise = new Promise((resolve) => {
+        timer = setTimeout(() => {
+            console.warn(`getFreshAccessToken timeout (${timeoutMs}ms) reached. Falling back to cached session...`);
+            resolve(null);
+        }, timeoutMs);
+    });
 
-        const { data: refreshData } = await supabase.auth.refreshSession();
-        if (refreshData?.session?.access_token) {
-            return refreshData.session.access_token;
+    const fetchTokenPromise = (async () => {
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            if (sessionData?.session?.access_token) {
+                const expiresAt = sessionData.session.expires_at;
+                const nowSec = Math.floor(Date.now() / 1000);
+                if (!expiresAt || expiresAt - nowSec > 60) {
+                    return sessionData.session.access_token;
+                }
+            }
+
+            const { data: refreshData } = await supabase.auth.refreshSession();
+            if (refreshData?.session?.access_token) {
+                return refreshData.session.access_token;
+            }
+        } catch (err) {
+            console.warn('getFreshAccessToken error:', err);
         }
-    } catch (err) {
-        console.warn('getFreshAccessToken warning:', err);
+        return null;
+    })();
+
+    try {
+        const token = await Promise.race([fetchTokenPromise, timeoutPromise]);
+        clearTimeout(timer);
+        if (token) return token;
+    } catch (e) {
+        clearTimeout(timer);
     }
 
     if (typeof localStorage !== 'undefined') {
