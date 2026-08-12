@@ -119,7 +119,7 @@ export default function RingkasanPage() {
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-            let token = await getFreshAccessToken();
+            let token = await getFreshAccessToken(3500);
             if (!token) token = accessToken || null;
 
             const userId = user?.id || profile?.id;
