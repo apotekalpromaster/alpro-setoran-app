@@ -464,15 +464,7 @@ export default function KoreksiLaporanPage() {
                                     }
                                 }
 
-                                // TIER 4: Corporate email construction
-                                if (!targetAmEmail) {
-                                    const words = amName.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
-                                    if (words.length >= 2) {
-                                        targetAmEmail = `${words[0]}.${words[words.length - 1]}@apotekalpro.id`;
-                                    } else if (words.length === 1) {
-                                        targetAmEmail = `${words[0]}@apotekalpro.id`;
-                                    }
-                                }
+                                // Note: Skip synthetic TIER 4 construction on client side to allow Edge Function Service Role Key to resolve the exact registered email in profiles table!
                             }
                         }
 
