@@ -4,6 +4,16 @@ import { useAuth } from '../context/AuthContext';
 import { supabase, safeSupabaseQuery } from '../services/supabaseClient';
 import AutocompleteInput from '../components/AutocompleteInput';
 
+// Helper to mask email address for privacy and clear user guidance (e.g. bttggl1.apotekalpro@gmail.com -> bttg***@gmail.com)
+function maskEmail(email) {
+    if (!email || typeof email !== 'string' || !email.includes('@')) return email || '';
+    const [local, domain] = email.split('@');
+    if (local.length <= 4) {
+        return `${local.substring(0, 1)}***@${domain}`;
+    }
+    return `${local.substring(0, 4)}***@${domain}`;
+}
+
 export default function LoginPage() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -113,18 +123,28 @@ export default function LoginPage() {
             return;
         }
 
-        if (!window.confirm(`Kirim instruksi reset password ke email terdaftar untuk "${username}"?`)) {
+        const maskedEmailStr = maskEmail(resolvedEmail);
+
+        if (!window.confirm(`Kirim instruksi reset password ke email terdaftar (${maskedEmailStr}) untuk "${username}"?`)) {
             setStatus({ message: '', type: '' });
             return;
         }
 
         setStatus({ message: 'Memproses permintaan...', type: 'loading' });
-        const { error } = await supabase.auth.resetPasswordForEmail(resolvedEmail);
+
+        const redirectUrl = `${window.location.origin}/reset-password`;
+
+        const { error } = await supabase.auth.resetPasswordForEmail(resolvedEmail, {
+            redirectTo: redirectUrl
+        });
 
         if (error) {
-            setStatus({ message: 'Gagal: ' + error.message, type: 'error' });
+            setStatus({ message: 'Gagal mengirim email pemulihan: ' + error.message, type: 'error' });
         } else {
-            setStatus({ message: 'Instruksi pemulihan telah dikirim ke email terdaftar.', type: 'success' });
+            setStatus({ 
+                message: `Instruksi pemulihan telah dikirim ke ${maskedEmailStr}. Silakan periksa Inbox & Spam email toko Anda.`, 
+                type: 'success' 
+            });
         }
     };
 

@@ -310,7 +310,7 @@ export default function RekonsiliasiBankPage() {
     };
 
     return (
-        <AdminLayout title="Rekonsiliasi Transaksi (Xilnex vs Mutasi Bank)">
+        <AdminLayout title="Rekonsiliasi Transaksi (Sales Xilnex vs Mutasi Bank BCA)">
             <div className="space-y-6">
                 <div className="flex border-b border-gray-200 bg-white px-4 rounded-xl shadow-sm">
                     <button
@@ -362,13 +362,13 @@ export default function RekonsiliasiBankPage() {
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Cashless Xilnex</span>
+                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Nominal Sales Xilnex</span>
                                 <div className="text-2xl font-bold text-gray-900 mt-1">{formatRupiah(stats.totalCashless)}</div>
                                 <div className="text-xs text-gray-500 mt-1">Ref 1 (Kolom F: Card Amount)</div>
                             </div>
 
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Bank Gross (MDR Gross)</span>
+                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Mutasi Bank (BCA)</span>
                                 <div className="text-2xl font-bold text-emerald-600 mt-1">{formatRupiah(stats.totalBankGross)}</div>
                                 <div className="text-xs text-emerald-700 mt-1 flex justify-between">
                                     <span>BCA: {formatRupiah(stats.totalBcaGross)}</span>
@@ -377,7 +377,7 @@ export default function RekonsiliasiBankPage() {
                             </div>
 
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Potongan MDR Bank</span>
+                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Biaya Admin / MDR</span>
                                 <div className="text-2xl font-bold text-amber-600 mt-1">{formatRupiah(stats.totalBankMdr)}</div>
                                 <div className="text-xs text-amber-700 mt-1 flex justify-between">
                                     <span>BCA: {formatRupiah(stats.totalBcaMdr)}</span>
@@ -386,7 +386,7 @@ export default function RekonsiliasiBankPage() {
                             </div>
 
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Selisih Net (Gross vs Gross)</span>
+                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Selisih Nominal (Xilnex vs Mutasi Bank)</span>
                                 <div className="text-2xl font-bold mt-1 text-emerald-600">
                                     {formatRupiah(stats.totalNetVariance)}
                                 </div>
@@ -459,26 +459,27 @@ export default function RekonsiliasiBankPage() {
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse text-xs">
                                     <thead>
-                                        <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 uppercase font-semibold">
-                                            <th className="p-3">Outcode</th>
-                                            <th className="p-3">Cabang PKU</th>
-                                            <th className="p-3 text-center bg-blue-50 text-blue-900 border-l border-blue-200">BCA Debit</th>
-                                            <th className="p-3 text-center bg-blue-50 text-blue-900">BCA QRIS</th>
-                                            <th className="p-3 text-center bg-blue-50 text-blue-900">BCA Credit</th>
-                                            <th className="p-3 text-center bg-emerald-50 text-emerald-900 border-l border-emerald-200">BRI OffUs</th>
-                                            <th className="p-3 text-center bg-emerald-50 text-emerald-900">BRI OnUs</th>
-                                            <th className="p-3 text-center bg-emerald-50 text-emerald-900">BRI QRIS</th>
-                                            <th className="p-3 text-right border-l border-gray-200">Cashless Xilnex</th>
-                                            <th className="p-3 text-right">Total Bank Gross</th>
-                                            <th className="p-3 text-right font-bold">Selisih Net</th>
-                                            <th className="p-3 text-center">Status</th>
-                                            <th className="p-3 text-center">Aksi</th>
+                                        <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 uppercase font-bold text-[11px] tracking-wider">
+                                            <th className="p-3.5">Tanggal Sales</th>
+                                            <th className="p-3.5">Outcode</th>
+                                            <th className="p-3.5">Nama Outlet</th>
+                                            <th className="p-3.5">Deskripsi</th>
+                                            <th className="p-3.5 text-right">Data Xilnex</th>
+                                            <th className="p-3.5 text-right">Data Mutasi Bank</th>
+                                            <th className="p-3.5 text-center">Status</th>
+                                            <th className="p-3.5 text-center">Tanggal Mutasi</th>
+                                            <th className="p-3.5">Keterangan Mutasi</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 text-gray-700">
+                                        {/* 
+                                          ANNOTATION / TEMPLATE MAPPING DATA:
+                                          Pembaruan pemetaan data pos_sales_data dengan recon_bank_mutations_bca akan dikerjakan 1 per 1.
+                                          Untuk saat ini tabel di-render kosong sebagai persiapan struktur 9 kolom presisi.
+                                        */}
                                         {filteredGrid.length === 0 ? (
                                             <tr>
-                                                <td colSpan={13} className="p-8 text-center text-gray-400">
+                                                <td colSpan={9} className="p-8 text-center text-gray-400">
                                                     Belum ada data rekonsiliasi. Silakan unggah file Excel di tab <b>"Unggah Data Harian"</b>.
                                                 </td>
                                             </tr>

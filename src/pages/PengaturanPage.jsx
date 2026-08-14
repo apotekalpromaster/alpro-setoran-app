@@ -55,6 +55,15 @@ export default function PengaturanPage() {
     const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
     const [pwLoading, setPwLoading] = useState(false);
     const [pwToast, setPwToast] = useState(null);
+    const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+
+    useEffect(() => {
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        if (hash.includes('type=recovery') || hash.includes('access_token=') || search.includes('reset=true')) {
+            setIsRecoveryMode(true);
+        }
+    }, []);
 
     // ─── Profil section ───────────────────────────────────────────────────────
     const [profForm, setProfForm] = useState({ kcp_terdekat: '', nomor_deposit_card: '' });
@@ -84,12 +93,17 @@ export default function PengaturanPage() {
         setPwLoading(true);
         setPwToast(null);
         try {
-            // Re-authenticate by signing in with current password first
-            const { error: signInErr } = await supabase.auth.signInWithPassword({
-                email: user?.email,
-                password: pwForm.current,
-            });
-            if (signInErr) throw new Error('Kata sandi saat ini salah. Periksa kembali.');
+            // Only require current password if NOT in recovery mode
+            if (!isRecoveryMode) {
+                if (!pwForm.current) {
+                    throw new Error('Masukkan Kata Sandi Saat Ini.');
+                }
+                const { error: signInErr } = await supabase.auth.signInWithPassword({
+                    email: user?.email,
+                    password: pwForm.current,
+                });
+                if (signInErr) throw new Error('Kata sandi saat ini salah. Periksa kembali.');
+            }
 
             // Now update password
             const { error: updateErr } = await supabase.auth.updateUser({ password: pwForm.next });
@@ -142,16 +156,23 @@ export default function PengaturanPage() {
                         <Toast message={pwToast.msg} type={pwToast.type} onClose={() => setPwToast(null)} />
                     )}
                     <form onSubmit={handleChangePw} className="space-y-4">
-                        <Field label="Kata Sandi Saat Ini">
-                            <input
-                                type="password"
-                                value={pwForm.current}
-                                onChange={(e) => setPwForm(p => ({ ...p, current: e.target.value }))}
-                                required
-                                placeholder="••••••••"
-                                className="form-input"
-                            />
-                        </Field>
+                        {isRecoveryMode ? (
+                            <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                                <span className="material-symbols-outlined text-amber-600 text-base">lock_reset</span>
+                                <span>Mode Pemulihan Kata Sandi: Anda dapat langsung memasukkan Kata Sandi Baru tanpa perlu Kata Sandi Saat Ini.</span>
+                            </div>
+                        ) : (
+                            <Field label="Kata Sandi Saat Ini">
+                                <input
+                                    type="password"
+                                    value={pwForm.current}
+                                    onChange={(e) => setPwForm(p => ({ ...p, current: e.target.value }))}
+                                    required={!isRecoveryMode}
+                                    placeholder="••••••••"
+                                    className="form-input"
+                                />
+                            </Field>
+                        )}
                         <Field label="Kata Sandi Baru">
                             <input
                                 type="password"
