@@ -58,11 +58,45 @@ export default function PengaturanPage() {
     const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
     useEffect(() => {
-        const hash = window.location.hash || '';
-        const search = window.location.search || '';
-        if (hash.includes('type=recovery') || hash.includes('access_token=') || search.includes('reset=true')) {
-            setIsRecoveryMode(true);
-        }
+        const checkRecovery = async () => {
+            const hash = window.location.hash || '';
+            const search = window.location.search || '';
+            const href = window.location.href || '';
+            
+            if (
+                hash.includes('type=recovery') || 
+                hash.includes('access_token=') || 
+                search.includes('reset=true') ||
+                href.includes('error_code=otp_expired') ||
+                sessionStorage.getItem('alpro_recovery_session') === 'true'
+            ) {
+                setIsRecoveryMode(true);
+            }
+
+            // Check Supabase Auth State / Session
+            const { data } = await supabase.auth.getSession();
+            if (data?.session) {
+                const amr = data.session.amr || [];
+                const isRecovery = amr.some(a => a.method === 'recovery' || a === 'recovery');
+                if (isRecovery) {
+                    setIsRecoveryMode(true);
+                    sessionStorage.setItem('alpro_recovery_session', 'true');
+                }
+            }
+        };
+
+        checkRecovery();
+
+        const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                setIsRecoveryMode(true);
+                sessionStorage.setItem('alpro_recovery_session', 'true');
+            }
+        });
+
+        return () => {
+            authListener?.subscription?.unsubscribe();
+        };
     }, []);
 
     // ─── Profil section ───────────────────────────────────────────────────────
@@ -171,6 +205,15 @@ export default function PengaturanPage() {
                                     placeholder="••••••••"
                                     className="form-input"
                                 />
+                                <div className="mt-1 text-right">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsRecoveryMode(true)}
+                                        className="text-[11px] text-primary-600 hover:text-primary-700 font-semibold cursor-pointer underline"
+                                    >
+                                        Lupa kata sandi saat ini? Aktifkan Mode Pemulihan (Reset)
+                                    </button>
+                                </div>
                             </Field>
                         )}
                         <Field label="Kata Sandi Baru">
