@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import LoginPage from './pages/LoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import BerandaPage from './pages/BerandaPage';
 import AdminBerandaPage from './pages/AdminBerandaPage';
 import AreaManagerDashboardPage from './pages/AreaManagerDashboardPage';
@@ -78,6 +79,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           {/* ===== USER / CABANG ROUTES ===== */}
           <Route

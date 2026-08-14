@@ -132,7 +132,7 @@ export default function LoginPage() {
 
         setStatus({ message: 'Memproses permintaan...', type: 'loading' });
 
-        const redirectUrl = `${window.location.origin}/login`;
+        const redirectUrl = `${window.location.origin}/reset-password`;
 
         const { error } = await supabase.auth.resetPasswordForEmail(resolvedEmail, {
             redirectTo: redirectUrl
