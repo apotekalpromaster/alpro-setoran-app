@@ -50,7 +50,26 @@ export default function LoginPage() {
 
             // Step 2: Login dengan email yang sudah di-resolve
             setLoginStepText('Memverifikasi kredensial...');
-            const { data, error } = await signIn(resolvedEmail, password);
+            let { data, error } = await signIn(resolvedEmail, password);
+
+            // Smart Fallback for Domain Discrepancies (apotekalpro.id, apotekalpro@gmail.com, apotek@gmail.com)
+            if (error && (error.message?.includes('Invalid login credentials') || error.status === 400)) {
+                let altEmail = '';
+                if (resolvedEmail.includes('apotekalpro@gmail.com')) {
+                    altEmail = resolvedEmail.replace('apotekalpro@gmail.com', 'apotek@gmail.com');
+                } else if (resolvedEmail.includes('apotek@gmail.com')) {
+                    altEmail = resolvedEmail.replace('apotek@gmail.com', 'apotekalpro@gmail.com');
+                }
+
+                if (altEmail) {
+                    console.warn(`[LoginPage] Primary email (${resolvedEmail}) failed, retrying with fallback (${altEmail})...`);
+                    const fallbackRes = await signIn(altEmail, password);
+                    if (!fallbackRes.error) {
+                        data = fallbackRes.data;
+                        error = null;
+                    }
+                }
+            }
 
             if (error) throw error;
 
