@@ -59,6 +59,62 @@ export default function AdminBerandaPage() {
         return new Date().toLocaleDateString('sv-SE');
     });
 
+    // Reset Store Password Modal State (Option 2)
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetStoreUsername, setResetStoreUsername] = useState('');
+    const [resetCustomPassword, setResetCustomPassword] = useState('Alpro123!');
+    const [resetLoading, setResetLoading] = useState(false);
+    const [resetFeedback, setResetFeedback] = useState({ message: '', type: '' });
+    const [allStoreUsernames, setAllStoreUsernames] = useState([]);
+
+    useEffect(() => {
+        const fetchUsernames = async () => {
+            const { data } = await safeSupabaseQuery(
+                supabase.from('profiles').select('username').order('username', { ascending: true }),
+                6000
+            );
+            if (data) {
+                setAllStoreUsernames(data.map(p => p.username).filter(Boolean));
+            }
+        };
+        fetchUsernames();
+    }, []);
+
+    const handleResetStorePassword = async (e) => {
+        e.preventDefault();
+        if (!resetStoreUsername.trim()) {
+            setResetFeedback({ type: 'error', message: 'Pilih atau ketik Username toko.' });
+            return;
+        }
+
+        setResetLoading(true);
+        setResetFeedback({ type: 'info', message: 'Memproses reset password via Supabase Admin...' });
+
+        try {
+            const { data, error } = await supabase.functions.invoke('send-koreksi-notification', {
+                body: {
+                    action: 'reset_store_password',
+                    targetUsername: resetStoreUsername.trim(),
+                    customPassword: resetCustomPassword.trim() || 'Alpro123!'
+                }
+            });
+
+            if (error || !data?.success) {
+                throw new Error(error?.message || data?.error || 'Gagal mereset password.');
+            }
+
+            setResetFeedback({
+                type: 'success',
+                message: data.message || `✓ Password untuk "${resetStoreUsername}" telah berhasil di-reset ke: ${resetCustomPassword || 'Alpro123!'}`
+            });
+        } catch (err) {
+            console.error('[handleResetStorePassword] Error:', err);
+            setResetFeedback({ type: 'error', message: err.message || 'Gagal mereset password toko.' });
+        } finally {
+            setResetLoading(false);
+        }
+    };
+
     useEffect(() => {
         fetchDashboardData();
     }, [filterPeriod]);
@@ -605,6 +661,94 @@ export default function AdminBerandaPage() {
                     )}
                 </div>
             </div>
+        
+            {/* Modal Reset Password Toko ke Default (Alpro123!) */}
+            {showResetModal && (
+                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-amber-100 space-y-5 animate-scale-up">
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                            <div className="flex items-center gap-2 text-amber-600">
+                                <span className="material-symbols-outlined text-2xl">lock_reset</span>
+                                <h3 className="text-base font-bold text-slate-800">Reset Password Toko ke Default</h3>
+                            </div>
+                            <button
+                                onClick={() => setShowResetModal(false)}
+                                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                            >
+                                <span className="material-symbols-outlined text-xl">close</span>
+                            </button>
+                        </div>
+
+                        {resetFeedback.message && (
+                            <div className={`p-3.5 rounded-xl border flex items-center gap-2.5 text-xs font-semibold ${
+                                resetFeedback.type === 'error'
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : resetFeedback.type === 'success'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}>
+                                <span className="material-symbols-outlined text-base shrink-0">
+                                    {resetFeedback.type === 'error' ? 'error' : resetFeedback.type === 'success' ? 'check_circle' : 'info'}
+                                </span>
+                                <span>{resetFeedback.message}</span>
+                            </div>
+                        )}
+
+                        <form onSubmit={handleResetStorePassword} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-600 mb-1">Pilih / Masukkan Username Toko</label>
+                                <input
+                                    type="text"
+                                    list="store-usernames-list"
+                                    value={resetStoreUsername}
+                                    onChange={(e) => setResetStoreUsername(e.target.value.toUpperCase())}
+                                    placeholder="cth: APOTEK ALPRO GREEN LAKE"
+                                    required
+                                    className="w-full text-xs p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 uppercase font-semibold"
+                                />
+                                <datalist id="store-usernames-list">
+                                    {allStoreUsernames.map((uname, idx) => (
+                                        <option key={idx} value={uname} />
+                                    ))}
+                                </datalist>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-600 mb-1">Password Baru (Default)</label>
+                                <input
+                                    type="text"
+                                    value={resetCustomPassword}
+                                    onChange={(e) => setResetCustomPassword(e.target.value)}
+                                    required
+                                    className="w-full text-xs p-3 border border-gray-300 rounded-xl font-mono font-bold bg-gray-50"
+                                />
+                                <p className="text-[11px] text-gray-400 mt-1">Default: <code className="text-amber-600 font-bold">Alpro123!</code></p>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowResetModal(false)}
+                                    className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs cursor-pointer"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={resetLoading}
+                                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl text-xs shadow-md transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                                >
+                                    {resetLoading ? (
+                                        <><span className="material-symbols-outlined animate-spin text-sm">sync</span> Memproses...</>
+                                    ) : (
+                                        <><span className="material-symbols-outlined text-sm">bolt</span> Reset Sekarang</>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </AdminLayout>
     );
 }

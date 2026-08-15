@@ -126,7 +126,59 @@ serve(async (req: Request) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: CORS });
 
   try {
-    const payload = (await req.json()) as KoreksiNotificationPayload;
+    const payload: any = await req.json();
+
+    // Handler Reset Password Toko ke Default via Admin Service Role Key
+    if (payload.action === 'reset_store_password') {
+      const targetUsername = (payload.targetUsername || payload.cabang || '').trim();
+      const newPassword = (payload.customPassword || 'Alpro123!').trim();
+
+      if (!targetUsername) {
+        return new Response(JSON.stringify({ error: 'Username toko wajib diisi.' }), {
+          status: 400,
+          headers: { ...CORS, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+      const { data: profile, error: profileErr } = await supabaseAdmin
+        .from('profiles')
+        .select('id, username, email')
+        .ilike('username', targetUsername)
+        .maybeSingle();
+
+      if (profileErr || !profile) {
+        return new Response(
+          JSON.stringify({ error: `Profil toko "${targetUsername}" tidak ditemukan.` }),
+          { status: 404, headers: { ...CORS, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(profile.id, {
+        password: newPassword,
+      });
+
+      if (updateErr) {
+        return new Response(
+          JSON.stringify({ error: `Gagal mereset password: ${updateErr.message}` }),
+          { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `✓ Password untuk "${profile.username}" telah berhasil di-reset ke default: "${newPassword}"`,
+          username: profile.username,
+          email: profile.email,
+          newPassword: newPassword,
+        }),
+        { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }
+      );
+    }
 
     if (!payload?.to && !payload?.pelaporEmail && !payload?.cabang) {
       return new Response(JSON.stringify({ error: 'Parameter "to" / pelapor / cabang wajib diisi.' }), {
