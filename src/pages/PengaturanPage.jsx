@@ -315,3 +315,99 @@ export default function PengaturanPage() {
         </UserLayout>
     );
 }
+
+
+/* ─── Admin Reset Store Password Section ────────────────────────────────── */
+function AdminResetStorePasswordSection() {
+    const [targetStore, setTargetStore] = useState('');
+    const [newPw, setNewPw] = useState('Alpro123!');
+    const [loading, setLoading] = useState(false);
+    const [feedback, setFeedback] = useState(null);
+    const [allStores, setAllStores] = useState([]);
+
+    useEffect(() => {
+        const fetchAllStores = async () => {
+            const { data } = await supabase.from('profiles').select('username, email').order('username');
+            if (data) setAllStores(data);
+        };
+        fetchAllStores();
+    }, []);
+
+    const handleAdminReset = async (e) => {
+        e.preventDefault();
+        if (!targetStore.trim()) {
+            setFeedback({ type: 'error', message: 'Silakan pilih username toko.' });
+            return;
+        }
+
+        setLoading(true);
+        setFeedback({ type: 'info', message: 'Memproses reset password via Supabase Admin...' });
+
+        try {
+            const { data, error } = await supabase.functions.invoke('send-koreksi-notification', {
+                body: {
+                    action: 'reset_store_password',
+                    targetUsername: targetStore.trim(),
+                    customPassword: newPw.trim() || 'Alpro123!'
+                }
+            });
+
+            if (error || !data?.success) {
+                throw new Error(error?.message || data?.error || 'Gagal mereset password toko.');
+            }
+
+            setFeedback({
+                type: 'success',
+                message: data.message || `✓ Password untuk "${targetStore}" telah di-reset ke: ${newPw}`
+            });
+        } catch (err) {
+            setFeedback({ type: 'error', message: err.message || 'Gagal mereset password toko.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Section title="Reset Password Toko (Khusus Admin & Finance)" icon="lock_reset" color="text-amber-500">
+            {feedback && <Toast message={feedback.message} type={feedback.type} onClose={() => setFeedback(null)} />}
+            <form onSubmit={handleAdminReset} className="space-y-4 max-w-lg">
+                <p className="text-xs text-gray-500">
+                    Fitur ini memungkinkan Admin/Finance mereset password toko mana pun secara instan ke default <code className="font-bold text-amber-600">Alpro123!</code> tanpa perlu konfirmasi email cabang.
+                </p>
+                <Field label="Pilih Username Toko">
+                    <input
+                        type="text"
+                        list="admin-stores-list"
+                        value={targetStore}
+                        onChange={(e) => setTargetStore(e.target.value.toUpperCase())}
+                        placeholder="cth: APOTEK ALPRO GREEN LAKE"
+                        required
+                        className="w-full text-xs p-3 border border-gray-300 rounded-xl uppercase font-bold focus:ring-2 focus:ring-amber-500"
+                    />
+                    <datalist id="admin-stores-list">
+                        {allStores.map((s, idx) => (
+                            <option key={idx} value={s.username} />
+                        ))}
+                    </datalist>
+                </Field>
+                <Field label="Password Baru (Default)">
+                    <input
+                        type="text"
+                        value={newPw}
+                        onChange={(e) => setNewPw(e.target.value)}
+                        required
+                        className="w-full text-xs p-3 border border-gray-300 rounded-xl font-mono font-bold bg-gray-50"
+                    />
+                </Field>
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                >
+                    <span className="material-symbols-outlined text-base">bolt</span>
+                    <span>{loading ? 'Memproses...' : 'Reset Password Toko Ini'}</span>
+                </button>
+            </form>
+        </Section>
+    );
+}
