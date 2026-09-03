@@ -100,7 +100,7 @@ export default function PengaturanPage() {
     }, []);
 
     // ─── Profil section ───────────────────────────────────────────────────────
-    const [profForm, setProfForm] = useState({ kcp_terdekat: '', nomor_deposit_card: '' });
+    const [profForm, setProfForm] = useState({ kcp_terdekat: '', deposit_card: '' });
     const [profLoading, setProfLoading] = useState(false);
     const [profToast, setProfToast] = useState(null);
 
@@ -108,7 +108,7 @@ export default function PengaturanPage() {
         if (profile) {
             setProfForm({
                 kcp_terdekat: profile.kcp_terdekat || '',
-                nomor_deposit_card: profile.nomor_deposit_card || '',
+                deposit_card: profile.deposit_card || profile.nomor_deposit_card || '',
             });
         }
     }, [profile]);
@@ -162,7 +162,7 @@ export default function PengaturanPage() {
                 .from('profiles')
                 .update({
                     kcp_terdekat: profForm.kcp_terdekat || null,
-                    nomor_deposit_card: profForm.nomor_deposit_card || null,
+                    deposit_card: profForm.deposit_card || null,
                 })
                 .eq('id', profile.id);
             if (error) throw error;
@@ -286,8 +286,8 @@ export default function PengaturanPage() {
                         <Field label="Nomor Deposit Card Toko">
                             <input
                                 type="text"
-                                value={profForm.nomor_deposit_card}
-                                onChange={(e) => setProfForm(p => ({ ...p, nomor_deposit_card: e.target.value.toUpperCase() }))}
+                                value={profForm.deposit_card}
+                                onChange={(e) => setProfForm(p => ({ ...p, deposit_card: e.target.value.toUpperCase() }))}
                                 placeholder="cth: 4XXX-XXXX-XXXX-7890"
                                 className="form-input font-mono uppercase text-xs"
                             />
