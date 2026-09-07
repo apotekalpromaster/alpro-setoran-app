@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { safeSupabaseQuery } from '../services/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { formatRupiah } from '../lib/validators';
@@ -17,6 +18,7 @@ const BADGE_CONFIG = {
     'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'bg-amber-100 text-amber-800 border border-amber-200' },
     'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'bg-red-100 text-red-800 border border-red-200' },
     'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'bg-red-100 text-red-800 border border-red-200' },
+    'Deposit Card Hilang': { label: 'Card Hilang', cls: 'bg-red-100 text-red-800 border border-red-200' },
     'Belum Dilaporkan': { label: 'Belum Lapor', cls: 'bg-amber-100 text-amber-800 border border-amber-200' }
 };
 
@@ -41,7 +43,12 @@ export default function ManajemenLaporanPage() {
     const [isAnomalyCollapsed, setIsAnomalyCollapsed] = useState(false);
 
     // Data
-    const [rows, setRows] = useState([]);
+    const [rows, setRows] = useState(() => {
+        try {
+            const cached = localStorage.getItem('alpro_cached_manajemen_laporan');
+            return cached ? JSON.parse(cached) : [];
+        } catch (e) { return []; }
+    });
     const [loading, setLoading] = useState(false);
     const [loadingMsg, setLoadingMsg] = useState('Memuat data laporan...');
     const [error, setError] = useState('');
@@ -99,9 +106,10 @@ export default function ManajemenLaporanPage() {
                     query = query.ilike('kcp_terdekat', `%${kcpFilter}%`);
                 }
 
-                const { data, error: err } = await query
-                    .order('tanggal_jual', { ascending: false })
-                    .range(from, to);
+                const { data, error: err } = await safeSupabaseQuery(
+                    (signal) => query.order('tanggal_jual', { ascending: false }).range(from, to).abortSignal(signal),
+                    10000
+                );
 
                 if (err) throw err;
 
@@ -289,6 +297,7 @@ export default function ManajemenLaporanPage() {
             });
 
             setRows(combinedRows);
+            try { localStorage.setItem('alpro_cached_manajemen_laporan', JSON.stringify(combinedRows.slice(0, 500))); } catch (e) {}
         } catch (e) {
             setError(e.message || 'Gagal memuat data.');
         } finally {
@@ -544,6 +553,7 @@ export default function ManajemenLaporanPage() {
                                 <option value="Pengembalian Petty Cash">Pengembalian Petty Cash</option>
                                 <option value="Deposit Card Terblokir (Salah Input PIN 3x)">Deposit Card Terblokir</option>
                                 <option value="Deposit Card Tertelan Mesin ATM">Deposit Card Tertelan ATM</option>
+                                    <option value="Deposit Card Hilang">Deposit Card Hilang</option>
                             </select>
                         </div>
 

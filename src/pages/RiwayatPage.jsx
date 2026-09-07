@@ -15,6 +15,7 @@ const BADGE_CONFIG = {
     'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'badge-purple' },
     'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'badge-danger' },
     'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'badge-danger' },
+    'Deposit Card Hilang': { label: 'Card Hilang', cls: 'badge-danger' },
     'Belum Dilaporkan': { label: 'Belum Lapor', cls: 'bg-amber-100 text-amber-800 border border-amber-200' },
 };
 
@@ -25,7 +26,8 @@ const JELAS_TYPES = [
     { id: 'Setoran Uang Pecahan Kecil', label: 'Setoran Uang Pecahan Kecil' },
     { id: 'Pengembalian Petty Cash', label: 'Pengembalian Petty Cash' },
     { id: 'Deposit Card Terblokir (Salah Input PIN 3x)', label: 'Deposit Card Terblokir' },
-    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Deposit Card Tertelan' }
+    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Deposit Card Tertelan' },
+    { id: 'Deposit Card Hilang', label: 'Deposit Card Hilang' }
 ];
 
 function getBadge(jenis) {

@@ -17,6 +17,10 @@ const LOCAL_SOP_GUIDE = [
         answer: `📌 **SOP Deposit Card Tertelan Mesin ATM**:\n\n1. Buka menu **Buat Laporan**.\n2. Pilih Jenis Pelaporan: **Deposit Card Tertelan Mesin ATM**.\n3. Masukkan ID/Nomor Mesin ATM, Lokasi KCP, dan Nomor Pengaduan Bank.\n4. Sistem akan **otomatis mengirimkan Email Notifikasi Darurat** ke Tim Finance.`
     },
     {
+        keywords: ['hilang', 'deposit card hilang', 'kartu hilang'],
+        answer: `📌 **SOP Deposit Card Hilang**:\n\n1. Buka menu **Buat Laporan**.\n2. Pilih Jenis Pelaporan: **Deposit Card Hilang**.\n3. Masukkan Nomor Kartu Deposit dan Lokasi KCP Bank terdekat.\n4. Sistem akan **otomatis mengirimkan Email Notifikasi Darurat** ke Tim Finance untuk pemblokiran & penggantian kartu baru.`
+    },
+    {
         keywords: ['troubleshooting', 'dispute', 'kendala bank', 'selisih bank', 'audit bank'],
         answer: `📌 **SOP Troubleshooting Bank**:\n\n1. Jika ada isu dispute/selisih bank dari Finance, indikator lonceng & badge menu **Troubleshooting Bank** akan menyala.\n2. Buka menu **Troubleshooting Bank**, klik **Tanggapi Isu**.\n3. Tuliskan tanggapan/penjelasan toko dan unggah foto bukti pendukung, lalu klik **Kirim Respon**.`
     },

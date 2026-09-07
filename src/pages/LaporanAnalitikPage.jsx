@@ -37,6 +37,7 @@ const JENIS_LABEL_MAP = {
     'Pengembalian Petty Cash': 'Petty Cash',
     'Deposit Card Terblokir (Salah Input PIN 3x)': 'Card Terblokir',
     'Deposit Card Tertelan Mesin ATM': 'Card Tertelan',
+    'Deposit Card Hilang': 'Card Hilang',
 };
 
 function getDateRange(period) {
@@ -166,7 +167,7 @@ export default function LaporanAnalitikPage() {
 
         let totalManualJual = 0, totalPotongan = 0, totalSetoran = 0;
         let kasusAnomali = 0;
-        const NON_FINANCIAL = ['Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'];
+        const NON_FINANCIAL = ['Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM', 'Deposit Card Hilang'];
 
         reports.forEach((r) => {
             totalManualJual += r.nominal_jual || 0;

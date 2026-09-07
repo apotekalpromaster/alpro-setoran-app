@@ -41,9 +41,9 @@ export default function DetailSetoranPage() {
 
     const jenis = formData.jenisPelaporan;
     const metode = formData.metodeSetoran;
-    const isNonFinancial = NON_FINANCIAL_TYPES.includes(jenis);
-    const isPotongan = jenis?.includes('Dengan Potongan Penjualan');
     const isDepositCard = jenis?.includes('Deposit Card');
+    const isNonFinancial = isDepositCard || NON_FINANCIAL_TYPES.includes(jenis);
+    const isPotongan = jenis?.includes('Dengan Potongan Penjualan');
 
     // Build list of sales dates whose nominal needs to be entered
     const allSalesDates = [formData.tanggalPenjualan, ...(formData.tanggalPenjualanTambahan || [])].filter(Boolean);
@@ -194,7 +194,7 @@ export default function DetailSetoranPage() {
         setIsSubmitting(true);
 
         try {
-            const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
+            const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM', 'Deposit Card Hilang'].includes(jenis);
 
             if (isSingleProofType) {
                 if (!stagedFiles[0]) {
@@ -678,7 +678,7 @@ function TextareaField({ label, value, onChange, placeholder }) {
 }
 
 function UploadSection({ stagedFiles, onSlotChange, onSlotRemove, jenis, onPreviewClick, onOpenSampleModal }) {
-    const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(jenis);
+    const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM', 'Deposit Card Hilang'].includes(jenis);
 
     const slots = isSingleProofType
         ? [

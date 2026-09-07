@@ -31,6 +31,7 @@ export const JENIS_PELAPORAN_LIST = [
     'Pengembalian Petty Cash',
     'Deposit Card Terblokir (Salah Input PIN 3x)',
     'Deposit Card Tertelan Mesin ATM',
+    'Deposit Card Hilang',
 ];
 
 export const NON_FINANCIAL_TYPES = [

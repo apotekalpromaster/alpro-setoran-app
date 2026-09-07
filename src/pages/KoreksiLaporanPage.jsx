@@ -875,6 +875,7 @@ export default function KoreksiLaporanPage() {
                                                                 <option value="Pengembalian Petty Cash">Pengembalian Petty Cash</option>
                                                                 <option value="Deposit Card Terblokir (Salah Input PIN 3x)">Deposit Card Terblokir</option>
                                                                 <option value="Deposit Card Tertelan Mesin ATM">Deposit Card Tertelan</option>
+                                                    <option value="Deposit Card Hilang">Deposit Card Hilang</option>
                                                             </select>
                                                         </div>
                                                     </div>

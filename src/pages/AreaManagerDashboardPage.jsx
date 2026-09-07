@@ -24,7 +24,8 @@ const JELAS_TYPES = [
     { id: 'Setoran Uang Pecahan Kecil', label: 'Setoran Uang Pecahan Kecil' },
     { id: 'Pengembalian Petty Cash', label: 'Pengembalian Petty Cash' },
     { id: 'Deposit Card Terblokir (Salah Input PIN 3x)', label: 'Deposit Card Terblokir' },
-    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Deposit Card Tertelan' }
+    { id: 'Deposit Card Tertelan Mesin ATM', label: 'Deposit Card Tertelan' },
+    { id: 'Deposit Card Hilang', label: 'Deposit Card Hilang' }
 ];
 
 const BADGE_CONFIG = {
@@ -35,6 +36,7 @@ const BADGE_CONFIG = {
     'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'bg-amber-100 text-amber-800 border border-amber-200' },
     'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'bg-red-100 text-red-800 border border-red-200' },
     'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'bg-red-100 text-red-800 border border-red-200' },
+    'Deposit Card Hilang': { label: 'Card Hilang', cls: 'bg-red-100 text-red-800 border border-red-200' },
     'Belum Dilaporkan': { label: 'Belum Lapor', cls: 'bg-amber-100 text-amber-800 border border-amber-200' }
 };
 

@@ -43,7 +43,7 @@ export default function RingkasanPage() {
     const [driveWarning, setDriveWarning] = useState('');
     const [lightboxImg, setLightboxImg] = useState(null);
 
-    const isNonFinancial = NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan);
+    const isNonFinancial = NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan) || formData.jenisPelaporan?.includes('Deposit Card');
 
     const nominals = Array.isArray(formData.nominalPenjualan)
         ? formData.nominalPenjualan
@@ -73,7 +73,7 @@ export default function RingkasanPage() {
     const grandTotalSales = totalPenjualan + totalNonTunai + totalOnline;
 
     // Mapping label tag slot bukti yang spesifik & mudah dipahami
-    const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(formData.jenisPelaporan);
+    const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM', 'Deposit Card Hilang'].includes(formData.jenisPelaporan);
     const slotLabels = isSingleProofType
         ? [
             "Bukti 1: Dokumentasi Utama",
@@ -106,7 +106,7 @@ export default function RingkasanPage() {
 
             // MANDATORY VALIDATION GUARD: Stop submission if photos are required but completely missing
             const isNonFin = NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan);
-            const isSingleProof = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(formData.jenisPelaporan);
+            const isSingleProof = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM', 'Deposit Card Hilang'].includes(formData.jenisPelaporan);
             const minExpected = isSingleProof ? 1 : 3;
 
             if (!isNonFin && validStagedFiles.length === 0 && initialBuktiUrls.length === 0) {
@@ -243,7 +243,8 @@ export default function RingkasanPage() {
             // 3. Trigger critical alert email if needed (Asynchronous / Background)
             const isCriticalIssue =
                 formData.jenisPelaporan === 'Deposit Card Tertelan Mesin ATM' ||
-                formData.jenisPelaporan === 'Deposit Card Terblokir (Salah Input PIN 3x)';
+                formData.jenisPelaporan === 'Deposit Card Terblokir (Salah Input PIN 3x)' ||
+                formData.jenisPelaporan === 'Deposit Card Hilang';
 
             if (isCriticalIssue) {
                 supabase.functions.invoke('send-critical-alert', {
