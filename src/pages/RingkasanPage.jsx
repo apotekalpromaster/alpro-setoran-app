@@ -43,7 +43,7 @@ export default function RingkasanPage() {
     const [driveWarning, setDriveWarning] = useState('');
     const [lightboxImg, setLightboxImg] = useState(null);
 
-    const isNonFinancial = NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan);
+    const isNonFinancial = NON_FINANCIAL_TYPES.includes(formData.jenisPelaporan) || formData.jenisPelaporan?.includes('Deposit Card');
 
     const nominals = Array.isArray(formData.nominalPenjualan)
         ? formData.nominalPenjualan

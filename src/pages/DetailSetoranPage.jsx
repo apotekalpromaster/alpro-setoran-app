@@ -41,9 +41,9 @@ export default function DetailSetoranPage() {
 
     const jenis = formData.jenisPelaporan;
     const metode = formData.metodeSetoran;
-    const isNonFinancial = NON_FINANCIAL_TYPES.includes(jenis);
-    const isPotongan = jenis?.includes('Dengan Potongan Penjualan');
     const isDepositCard = jenis?.includes('Deposit Card');
+    const isNonFinancial = isDepositCard || NON_FINANCIAL_TYPES.includes(jenis);
+    const isPotongan = jenis?.includes('Dengan Potongan Penjualan');
 
     // Build list of sales dates whose nominal needs to be entered
     const allSalesDates = [formData.tanggalPenjualan, ...(formData.tanggalPenjualanTambahan || [])].filter(Boolean);
