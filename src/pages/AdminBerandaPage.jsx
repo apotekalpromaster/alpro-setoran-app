@@ -168,12 +168,13 @@ export default function AdminBerandaPage() {
                 let done = false;
                 while (!done) {
                     const { data: batch, error: err } = await safeSupabaseQuery(
-                        supabase
+                        (signal) => supabase
                             .from('laporan')
                             .select('id, user_id, tanggal_jual, tanggal_setor, nominal_jual, nominal_setoran, potongan, jenis_pelaporan, status')
                             .gte('tanggal_jual', startStr)
                             .lte('tanggal_jual', endStr)
-                            .range(from, from + PAGE_SIZE - 1),
+                            .range(from, from + PAGE_SIZE - 1)
+                            .abortSignal(signal),
                         8000
                     );
                     if (err) throw err;
@@ -191,12 +192,13 @@ export default function AdminBerandaPage() {
                 let done = false;
                 while (!done) {
                     const { data: batch, error: err } = await safeSupabaseQuery(
-                        supabase
+                        (signal) => supabase
                             .from('pos_sales_data')
                             .select('sales_pos, tanggal_jual, kode_cabang')
                             .gte('tanggal_jual', startStr)
                             .lte('tanggal_jual', endStr)
-                            .range(from, from + PAGE_SIZE - 1),
+                            .range(from, from + PAGE_SIZE - 1)
+                            .abortSignal(signal),
                         8000
                     );
                     if (err) throw err;

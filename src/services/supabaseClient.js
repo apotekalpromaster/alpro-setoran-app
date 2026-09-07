@@ -26,21 +26,36 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
  * @param {number} timeoutMs - Max wait time in milliseconds (default: 6000ms)
  * @returns {Promise} Resolves with Supabase query response or throws timeout error
  */
-export async function safeSupabaseQuery(queryPromise, timeoutMs = 30000) {
+export async function safeSupabaseQuery(queryPromiseOrFn, timeoutMs = 8000) {
     let timer;
+    const controller = new AbortController();
+
     const timeoutPromise = new Promise((_, reject) => {
         timer = setTimeout(() => {
-            reject(new Error('Waktu permintaan data habis (Timeout). Silakan refresh/reload halaman.'));
+            try { controller.abort(); } catch (e) {}
+            reject(new Error('Waktu permintaan data habis (Timeout). Sinyal diputus otomatis.'));
         }, timeoutMs);
     });
 
     try {
-        const actualPromise = Promise.resolve(queryPromise);
+        let actualPromise;
+        if (typeof queryPromiseOrFn === 'function') {
+            actualPromise = queryPromiseOrFn(controller.signal);
+        } else if (queryPromiseOrFn && typeof queryPromiseOrFn.abortSignal === 'function') {
+            actualPromise = queryPromiseOrFn.abortSignal(controller.signal);
+        } else {
+            actualPromise = Promise.resolve(queryPromiseOrFn);
+        }
+
         const result = await Promise.race([actualPromise, timeoutPromise]);
         clearTimeout(timer);
         return result;
     } catch (err) {
         clearTimeout(timer);
+        try { controller.abort(); } catch (e) {}
+        if (err.name === 'AbortError' || controller.signal?.aborted) {
+            throw new Error('Koneksi terputus/timeout. Silakan coba kembali.');
+        }
         throw err;
     }
 }
