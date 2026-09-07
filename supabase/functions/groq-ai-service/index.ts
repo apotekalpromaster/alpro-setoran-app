@@ -105,6 +105,7 @@ Dokumen ini adalah acuan resmi operasional Aplikasi Pelaporan Setoran Harian Apo
 4. **Setoran Uang Lebih**: Terdapat selisih surplus fisik kasir.
 5. **Deposit Card Terblokir (Salah PIN 3x)**: Input nomor kartu & KCP. **Otomatis mengirimkan Email Darurat ke Finance**.
 6. **Deposit Card Tertelan Mesin ATM**: Input nomor mesin ATM & KCP. **Otomatis mengirimkan Email Darurat ke Finance**.
+7. **Deposit Card Hilang**: Input nomor deposit card & KCP. **Otomatis mengirimkan Email Darurat ke Finance untuk pemblokiran & penerbitan kartu baru**.
 7. **Mesin ATM Rusak / Out of Service**: Pelaporan kendala ATM rusak/mati listrik di KCP.
 8. **Setoran Gabungan (2 Hari / Libur)**: Pelaporan akumulasi penjualan libur menggunakan fitur Multi-Tanggal.
 9. **Pencairan QRIS / EDC Belum Masuk Rekening**: Transaksi non-tunai yang belum masuk mutasi bank.

@@ -17,6 +17,7 @@ const BADGE_CONFIG = {
     'Pengembalian Petty Cash': { label: 'Petty Cash', cls: 'bg-amber-100 text-amber-800 border border-amber-200' },
     'Deposit Card Terblokir (Salah Input PIN 3x)': { label: 'Card Terblokir', cls: 'bg-red-100 text-red-800 border border-red-200' },
     'Deposit Card Tertelan Mesin ATM': { label: 'Card Tertelan', cls: 'bg-red-100 text-red-800 border border-red-200' },
+    'Deposit Card Hilang': { label: 'Card Hilang', cls: 'bg-red-100 text-red-800 border border-red-200' },
     'Belum Dilaporkan': { label: 'Belum Lapor', cls: 'bg-amber-100 text-amber-800 border border-amber-200' }
 };
 
@@ -544,6 +545,7 @@ export default function ManajemenLaporanPage() {
                                 <option value="Pengembalian Petty Cash">Pengembalian Petty Cash</option>
                                 <option value="Deposit Card Terblokir (Salah Input PIN 3x)">Deposit Card Terblokir</option>
                                 <option value="Deposit Card Tertelan Mesin ATM">Deposit Card Tertelan ATM</option>
+                                    <option value="Deposit Card Hilang">Deposit Card Hilang</option>
                             </select>
                         </div>
 

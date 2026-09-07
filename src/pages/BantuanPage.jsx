@@ -43,6 +43,12 @@ const PANDUAN_JENIS_PELAPORAN = [
         instruksi: 'Isi nomor mesin ATM, lokasi KCP, dan nomor pengaduan bank. Notifikasi darurat akan langsung terkirim ke Finance.',
     },
     {
+        nama: 'Deposit Card Hilang',
+        badge: 'bg-rose-100 text-rose-800 border-rose-200',
+        deskripsi: 'Kartu Deposit ATM hilang atau tidak ditemukan oleh staf cabang.',
+        instruksi: 'Isi nomor kartu deposit dan lokasi KCP terdekat. Notifikasi darurat akan langsung terkirim ke Tim Finance untuk pemblokiran & penggantian kartu.',
+    },
+    {
         nama: 'Mesin ATM Rusak / Out of Service',
         badge: 'bg-orange-100 text-orange-800 border-orange-200',
         deskripsi: 'Mesin ATM di lokasi/KCP terdekat mengalami kerusakan atau mati listrik sehingga setoran tertunda.',

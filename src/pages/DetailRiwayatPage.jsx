@@ -159,7 +159,7 @@ export default function DetailRiwayatPage() {
             : { text: 'Pas / Tidak Ada Selisih (Rp 0)', cls: 'text-green-700 font-bold bg-green-50 border-green-200' };
 
     // Slot labels
-    const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM'].includes(data.jenis_pelaporan);
+    const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM', 'Deposit Card Hilang'].includes(data.jenis_pelaporan);
     const slotLabels = isSingleProofType
         ? [
             "Bukti 1: Dokumentasi Utama",
