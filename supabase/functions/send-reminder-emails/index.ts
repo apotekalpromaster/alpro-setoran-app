@@ -192,11 +192,26 @@ serve(async (req: Request) => {
       }
 
       // Filter active primary reports (ignoring Archived / DIHAPUS)
-      const primaryTypes = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'];
+      const primaryTypes = [
+        'Setoran Harian',
+        'Setoran 3x Seminggu',
+        'Setoran Sales Dengan Potongan Penjualan',
+        'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)',
+        'Setoran Sales Dgn Potongan (Top Up Petty Cash)'
+      ];
+      const isPrimaryReportType = (jenis: string) => {
+        if (!jenis) return false;
+        return (
+          primaryTypes.includes(jenis) ||
+          jenis.includes('Dengan Potongan Penjualan') ||
+          jenis.includes('Potongan Penjualan') ||
+          jenis.includes('Top Up Petty Cash')
+        );
+      };
       const activePrimaryReports = laporanRaw.filter((r: any) =>
         r.status !== 'Archived' &&
         r.jenis_pelaporan !== 'DIHAPUS / DIBATALKAN' &&
-        primaryTypes.includes(r.jenis_pelaporan)
+        isPrimaryReportType(r.jenis_pelaporan)
       );
 
       // Compute duplicated dates
