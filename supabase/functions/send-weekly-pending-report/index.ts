@@ -57,9 +57,24 @@ serve(async (req: Request) => {
 
     // 3. Compute duplicated dates
     const countMap: { [key: string]: number } = {};
-    const primaryTypes = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan'];
+    const primaryTypes = [
+      'Setoran Harian',
+      'Setoran 3x Seminggu',
+      'Setoran Sales Dengan Potongan Penjualan',
+      'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)',
+      'Setoran Sales Dgn Potongan (Top Up Petty Cash)'
+    ];
+    const isPrimaryReport = (jenis: string) => {
+      if (!jenis) return false;
+      return (
+        primaryTypes.includes(jenis) ||
+        jenis.includes('Dengan Potongan Penjualan') ||
+        jenis.includes('Potongan Penjualan') ||
+        jenis.includes('Top Up Petty Cash')
+      );
+    };
     laporanRaw.forEach((r: any) => {
-      if (r.tanggal_jual && primaryTypes.includes(r.jenis_pelaporan)) {
+      if (r.tanggal_jual && isPrimaryReport(r.jenis_pelaporan)) {
         const key = `${r.user_id}_${r.tanggal_jual}`;
         countMap[key] = (countMap[key] || 0) + 1;
       }

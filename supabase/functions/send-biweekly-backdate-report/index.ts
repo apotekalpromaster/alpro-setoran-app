@@ -11,7 +11,9 @@ const CORS = {
 const PRIMARY_REPORT_TYPES = [
   'Setoran Harian',
   'Setoran 3x Seminggu',
-  'Setoran Sales Dengan Potongan Penjualan'
+  'Setoran Sales Dengan Potongan Penjualan',
+  'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)',
+  'Setoran Sales Dgn Potongan (Top Up Petty Cash)'
 ];
 
 serve(async (req: Request) => {
