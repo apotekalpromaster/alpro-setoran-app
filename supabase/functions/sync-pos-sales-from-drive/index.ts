@@ -250,10 +250,28 @@ serve(async (req: Request) => {
       // Auto-detect template: Xilnex Cash & Card Automation (header has "Date" + "Store")
       let isNewTemplate = false;
       let startRowIndex = 0;
-      for (let r = 0; r < Math.min(parsedRows.length, 25); r++) {
-        const rowStr = Object.values(parsedRows[r]).join(' ').toLowerCase();
+      let colDate = 'A', colStore = 'B', colCardType = 'C', colBank = 'D', colCash = 'E', colCard = 'F', colOnline = 'G';
+
+      for (let r = 0; r < Math.min(parsedRows.length, 50); r++) {
+        const rowObj = parsedRows[r];
+        const rowStr = Object.values(rowObj).join(' ').toLowerCase();
         if (rowStr.includes('date') && rowStr.includes('store') && (rowStr.includes('cash amount') || rowStr.includes('card amount'))) {
-          isNewTemplate = true; startRowIndex = r + 1; break;
+          isNewTemplate = true; 
+          startRowIndex = r + 1;
+
+          // Dynamic column mapping based on detected header row
+          for (const [colKey, val] of Object.entries(rowObj)) {
+            const h = (val || '').toLowerCase().trim();
+            if (h === 'date' || h.includes('tanggal')) colDate = colKey;
+            else if (h === 'store' || h.includes('cabang') || h.includes('outlet')) colStore = colKey;
+            else if (h.includes('card type') || h.includes('jenis kartu')) colCardType = colKey;
+            else if (h.includes('merchant id') || h.includes('merchant') || h.includes('bank')) colBank = colKey;
+            else if (h.includes('cash amount') || h.includes('tunai')) colCash = colKey;
+            else if (h.includes('card amount') || h.includes('edc')) colCard = colKey;
+            else if (h.includes('other amount') || h.includes('online')) colOnline = colKey;
+          }
+          console.log(`[sync-pos-sales-from-drive] Header detected at row ${r + 1}: Date=${colDate}, Store=${colStore}, CardType=${colCardType}, Bank=${colBank}, Cash=${colCash}, Card=${colCard}, Online=${colOnline}`);
+          break;
         }
       }
 
@@ -262,10 +280,10 @@ serve(async (req: Request) => {
 
       for (let i = startRowIndex; i < parsedRows.length; i++) {
         const row = parsedRows[i];
-        const rawDate  = (row['A'] || '').toString().trim();
-        const rawStore = (row['B'] || '').toString().trim();
-        const rawColC  = (row['C'] || '').toString().trim(); // Card Type
-        const rawColD  = (row['D'] || '').toString().trim(); // Merchant ID / Bank
+        const rawDate  = (row[colDate] || '').toString().trim();
+        const rawStore = (row[colStore] || '').toString().trim();
+        const rawColC  = (row[colCardType] || '').toString().trim(); // Card Type
+        const rawColD  = (row[colBank] || '').toString().trim(); // Merchant ID / Bank
         if (!rawDate || !rawStore) continue;
 
         const lC = rawColC.toLowerCase();
@@ -278,10 +296,10 @@ serve(async (req: Request) => {
         const key = `${username}_${date}`;
 
         if (isNewTemplate) {
-          // Col A[0]=Date, Col B[1]=Store, Col C[2]=CardType, Col D[3]=Bank, Col E[4]=Cash, Col F[5]=Card/EDC, Col G[6]=Online
-          const colE = parseNumberVal(row['E']);
-          const colF = parseNumberVal(row['F']);
-          const colG = parseNumberVal(row['G']);
+          // Dynamic columns: Date, Store, CardType, Bank, Cash, Card/EDC, Online
+          const colE = parseNumberVal(row[colCash]);
+          const colF = parseNumberVal(row[colCard]);
+          const colG = parseNumberVal(row[colOnline]);
           if (colE <= 0 && colF <= 0 && colG <= 0) continue;
           if (!salesAgg[key]) salesAgg[key] = createEmptyAggRow(username, date);
 
