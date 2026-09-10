@@ -321,7 +321,16 @@ serve(async (req: Request) => {
         }
       }
 
-      const rows = Object.values(salesAgg);
+      // Round all numeric values to nearest integer Rupiah to prevent Postgres bigint error 22P02 on decimals
+      const rows = Object.values(salesAgg).map(row => {
+        const roundedRow: any = { ...row };
+        for (const [k, v] of Object.entries(roundedRow)) {
+          if (typeof v === 'number') {
+            roundedRow[k] = Math.round(v);
+          }
+        }
+        return roundedRow;
+      });
       if (rows.length > 0) {
         for (let j = 0; j < rows.length; j += 500) {
           const { error: upsertErr } = await supabase.from('pos_sales_data').upsert(rows.slice(j, j+500), { onConflict: 'kode_cabang, tanggal_jual' });
