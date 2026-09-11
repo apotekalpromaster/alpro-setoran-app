@@ -100,7 +100,12 @@ export default function DetailSetoranPage() {
         parseRupiah(formData.onlineTiktok) +
         parseRupiah(formData.onlineTokopedia);
 
-    const grandTotalSales = totalPenjualan + totalNonTunai + totalOnline;
+    // --- Live Lain-lain Sales Calculator ---
+    const totalLainLain =
+        parseRupiah(formData.voucherAmount) +
+        parseRupiah(formData.pointsAmount);
+
+    const grandTotalSales = totalPenjualan + totalNonTunai + totalOnline + totalLainLain;
 
     // --- File upload staging (5 structured slots) ---
     const [stagedFiles, setStagedFiles] = useState(() => {
@@ -461,10 +466,45 @@ export default function DetailSetoranPage() {
                                 </div>
                             </section>
 
-                            {/* BAGIAN 4: UPLOAD BUKTI FOTO */}
+                            {/* BAGIAN 4: RINCIAN PENJUALAN LAIN-LAIN (VOUCHER & POINTS) */}
+                            <section className="bg-emerald-50/40 p-5 rounded-xl border border-emerald-200/80 space-y-4">
+                                <div className="flex items-center justify-between border-b border-emerald-200/60 pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-bold">4</span>
+                                        <h3 className="font-bold text-gray-800 text-base">Lain-lain (Voucher Belanja &amp; Poin Member)</h3>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-gray-600 mt-1 ml-8">
+                                    Masukkan nilai transaksi kasir yang dibayar menggunakan Voucher Belanja fisik/digital dan penukaran Poin Loyalitas Member. Jika tidak ada transaksi, biarkan Rp 0.
+                                </p>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-emerald-200/60 shadow-sm">
+                                    <div className="flex flex-col justify-between">
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1 min-h-[2.25rem] flex items-center leading-tight">
+                                            Voucher Belanja (Voucher Amount)
+                                        </label>
+                                        <CurrencyField label="" value={formData.voucherAmount} onChange={(v) => updateField({ voucherAmount: v })} />
+                                        <span className="text-[11px] text-gray-400 mt-1">Voucher promo, voucher mitra, atau voucher belanja.</span>
+                                    </div>
+                                    <div className="flex flex-col justify-between">
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1 min-h-[2.25rem] flex items-center leading-tight">
+                                            Poin Member (Points Amount)
+                                        </label>
+                                        <CurrencyField label="" value={formData.pointsAmount} onChange={(v) => updateField({ pointsAmount: v })} />
+                                        <span className="text-[11px] text-gray-400 mt-1">Potongan dari penukaran poin loyalty member Alpro.</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between bg-emerald-100/60 px-4 py-2.5 rounded-lg border border-emerald-200 text-xs text-emerald-950 font-bold">
+                                    <span>Subtotal Lain-lain (Voucher + Poin):</span>
+                                    <span className="font-mono text-sm text-emerald-900">{formatRupiah(totalLainLain)}</span>
+                                </div>
+                            </section>
+
+                            {/* BAGIAN 5: UPLOAD BUKTI FOTO */}
                             <section className="bg-white p-5 rounded-xl border border-gray-200 space-y-4">
                                 <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white text-xs font-bold">4</span>
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white text-xs font-bold">5</span>
                                     <h3 className="font-bold text-gray-800 text-base">Upload Bukti Foto (Maksimal 5 Foto)</h3>
                                 </div>
                                 <UploadSection
@@ -481,12 +521,12 @@ export default function DetailSetoranPage() {
                             <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100/70 border-2 border-orange-300/80 rounded-2xl p-6 shadow-md space-y-4">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-orange-200/80 pb-3 gap-2">
                                     <h4 className="text-xs font-extrabold text-orange-900 uppercase tracking-wider flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-xl text-orange-600">analytics</span> TOTAL SALES HARIAN (Tunai + Non-Tunai + Sales Online)
+                                        <span className="material-symbols-outlined text-xl text-orange-600">analytics</span> TOTAL SALES HARIAN (Tunai + Non-Tunai + Online + Lain-lain)
                                     </h4>
                                     <span className="self-start sm:self-auto text-[10px] font-bold bg-orange-200/80 text-orange-900 px-2.5 py-1 rounded-full uppercase tracking-wider">Konsolidasi Omset</span>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-gray-700">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-gray-700">
                                     <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs flex flex-col justify-between h-full space-y-2">
                                         <span className="text-gray-500 block text-[11px] min-h-[2.25rem] flex items-center leading-snug">Total Sales Tunai Kasir:</span>
                                         <span className="font-bold text-base text-gray-900 font-mono">{formatRupiah(totalPenjualan)}</span>
@@ -498,6 +538,10 @@ export default function DetailSetoranPage() {
                                     <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs flex flex-col justify-between h-full space-y-2">
                                         <span className="text-gray-500 block text-[11px] min-h-[2.25rem] flex items-center leading-snug">Total Sales Online (Marketplace):</span>
                                         <span className="font-bold text-base text-purple-700 font-mono">{formatRupiah(totalOnline)}</span>
+                                    </div>
+                                    <div className="bg-white/80 p-3 rounded-xl border border-orange-200/60 shadow-xs flex flex-col justify-between h-full space-y-2">
+                                        <span className="text-gray-500 block text-[11px] min-h-[2.25rem] flex items-center leading-snug">Total Lain-lain (Voucher &amp; Poin):</span>
+                                        <span className="font-bold text-base text-emerald-700 font-mono">{formatRupiah(totalLainLain)}</span>
                                     </div>
                                 </div>
 

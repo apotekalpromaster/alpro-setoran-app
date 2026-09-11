@@ -150,7 +150,12 @@ export default function DetailRiwayatPage() {
     const onlineTokopedia = Number(data.online_tokopedia || 0);
     const totalOnline = Number(data.total_online || (onlineHalodoc + onlineTiktok + onlineTokopedia));
 
-    const grandTotalSales = totalSalesTunai + totalNonTunai + totalOnline;
+    // Lain-lain Sales Calculations
+    const voucherAmount = Number(data.voucher_amount || 0);
+    const pointsAmount = Number(data.points_amount || 0);
+    const totalLainLain = Number(data.total_lain_lain || (voucherAmount + pointsAmount));
+
+    const grandTotalSales = totalSalesTunai + totalNonTunai + totalOnline + totalLainLain;
 
     const selisihLabel = selisihTunai > 0
         ? { text: `Setoran Kurang ${formatRupiah(selisihTunai)}`, cls: 'text-red-600 font-bold bg-red-50 border-red-200' }
@@ -348,17 +353,37 @@ export default function DetailRiwayatPage() {
                     </SectionCard>
                 )}
 
-                {/* 4. KONSOLIDASI HARIAN (GRAND TOTAL SALES) */}
+                {/* 4. RINCIAN PENJUALAN LAIN-LAIN (VOUCHER & POIN) */}
+                {!isNonFinancial && totalLainLain > 0 && (
+                    <SectionCard icon="confirmation_number" title="Rincian Penjualan Lain-lain (Voucher Belanja & Poin Member)" color="text-emerald-600">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-emerald-50/40 p-3.5 rounded-xl border border-emerald-100 space-y-1">
+                                <span className="text-gray-500 block text-[11px]">Voucher Belanja (Voucher Amount)</span>
+                                <span className="font-mono font-bold text-sm text-gray-900">{formatRupiah(voucherAmount)}</span>
+                            </div>
+                            <div className="bg-emerald-50/40 p-3.5 rounded-xl border border-emerald-100 space-y-1">
+                                <span className="text-gray-500 block text-[11px]">Poin Member (Points Amount)</span>
+                                <span className="font-mono font-bold text-sm text-gray-900">{formatRupiah(pointsAmount)}</span>
+                            </div>
+                        </div>
+                        <div className="mt-3 text-right bg-emerald-100/50 p-3 rounded-xl border border-emerald-200">
+                            <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-wider block">TOTAL LAIN-LAIN</span>
+                            <span className="font-mono font-black text-base text-emerald-800">{formatRupiah(totalLainLain)}</span>
+                        </div>
+                    </SectionCard>
+                )}
+
+                {/* 5. KONSOLIDASI HARIAN (GRAND TOTAL SALES) */}
                 {!isNonFinancial && (
                     <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100/80 border-2 border-orange-300 rounded-2xl p-6 shadow-md space-y-4">
                         <div className="flex items-center justify-between border-b border-orange-200 pb-3">
                             <h4 className="text-xs font-extrabold text-orange-950 uppercase tracking-wider flex items-center gap-2">
-                                <span className="material-symbols-outlined text-xl text-orange-600">analytics</span> TOTAL SALES HARIAN (Tunai + Non-Tunai + Sales Online)
+                                <span className="material-symbols-outlined text-xl text-orange-600">analytics</span> TOTAL SALES HARIAN (Tunai + Non-Tunai + Online + Lain-lain)
                             </h4>
                             <span className="text-[10px] font-bold bg-orange-200 text-orange-900 px-3 py-1 rounded-full uppercase tracking-wider">Konsolidasi Omset</span>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-gray-700">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-gray-700">
                             <div className="bg-white/90 p-3.5 rounded-xl border border-orange-200 shadow-xs">
                                 <span className="text-gray-500 block text-[11px]">Total Sales Tunai Kasir:</span>
                                 <span className="font-bold text-base text-gray-900 font-mono">{formatRupiah(totalSalesTunai)}</span>
@@ -370,6 +395,10 @@ export default function DetailRiwayatPage() {
                             <div className="bg-white/90 p-3.5 rounded-xl border border-orange-200 shadow-xs">
                                 <span className="text-gray-500 block text-[11px]">Total Sales Online (Marketplace):</span>
                                 <span className="font-bold text-base text-purple-700 font-mono">{formatRupiah(totalOnline)}</span>
+                            </div>
+                            <div className="bg-white/90 p-3.5 rounded-xl border border-orange-200 shadow-xs">
+                                <span className="text-gray-500 block text-[11px]">Total Lain-lain (Voucher &amp; Poin):</span>
+                                <span className="font-bold text-base text-emerald-700 font-mono">{formatRupiah(totalLainLain)}</span>
                             </div>
                         </div>
 

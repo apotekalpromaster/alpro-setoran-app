@@ -70,7 +70,11 @@ export default function RingkasanPage() {
         parseRupiah(formData.onlineTiktok) +
         parseRupiah(formData.onlineTokopedia);
 
-    const grandTotalSales = totalPenjualan + totalNonTunai + totalOnline;
+    const totalLainLain =
+        parseRupiah(formData.voucherAmount) +
+        parseRupiah(formData.pointsAmount);
+
+    const grandTotalSales = totalPenjualan + totalNonTunai + totalOnline + totalLainLain;
 
     // Mapping label tag slot bukti yang spesifik & mudah dipahami
     const isSingleProofType = ['Pengembalian Petty Cash', 'Deposit Card Terblokir (Salah Input PIN 3x)', 'Deposit Card Tertelan Mesin ATM', 'Deposit Card Hilang'].includes(formData.jenisPelaporan);
@@ -161,6 +165,10 @@ export default function RingkasanPage() {
                 online_tiktok: i === 0 ? (parseRupiah(formData.onlineTiktok) || 0) : 0,
                 online_tokopedia: i === 0 ? (parseRupiah(formData.onlineTokopedia) || 0) : 0,
                 total_online: i === 0 ? (totalOnline || 0) : 0,
+                // Kolom Lain-lain (Voucher & Poin)
+                voucher_amount: i === 0 ? (parseRupiah(formData.voucherAmount) || 0) : 0,
+                points_amount: i === 0 ? (parseRupiah(formData.pointsAmount) || 0) : 0,
+                total_lain_lain: i === 0 ? (totalLainLain || 0) : 0,
             }));
 
             // Step 3/3: Real-time Direct Server Transmission with 12s Hard Safety Timeout
@@ -273,6 +281,9 @@ export default function RingkasanPage() {
                     nominalSetoran: nominalSetoran,
                     totalNonTunai: totalNonTunai,
                     totalOnline: totalOnline,
+                    totalLainLain: totalLainLain,
+                    voucherAmount: parseRupiah(formData.voucherAmount),
+                    pointsAmount: parseRupiah(formData.pointsAmount),
                     grandTotalSales: grandTotalSales,
                     selisih: selisih,
                     buktiCount: formData.buktiFiles?.filter(Boolean).length || 0,
@@ -485,9 +496,32 @@ export default function RingkasanPage() {
                                             </>
                                         )}
 
+                                        {/* Lain-lain Sales Breakdown */}
+                                        {totalLainLain > 0 && (
+                                            <>
+                                                <tr className="border-t-2 border-gray-100">
+                                                    <td colSpan={2} className="pt-3 pb-1 text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                                                        Lain-lain (Voucher Belanja &amp; Poin Member)
+                                                    </td>
+                                                </tr>
+                                                {parseRupiah(formData.voucherAmount) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• Voucher Belanja (Voucher Amount)</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.voucherAmount))}</td>
+                                                    </tr>
+                                                )}
+                                                {parseRupiah(formData.pointsAmount) > 0 && (
+                                                    <tr>
+                                                        <td className="py-2 text-sm text-gray-600 pl-3">• Poin Member (Points Amount)</td>
+                                                        <td className="py-2 text-sm text-right font-medium text-gray-800">{formatRupiah(parseRupiah(formData.pointsAmount))}</td>
+                                                    </tr>
+                                                )}
+                                            </>
+                                        )}
+
                                         {/* Grand Total */}
                                         <tr className="border-t-2 border-orange-200 bg-orange-50/50">
-                                            <td className="py-3 text-sm font-extrabold text-orange-950">TOTAL SALES HARIAN (Tunai + Non-Tunai + Sales Online)</td>
+                                            <td className="py-3 text-sm font-extrabold text-orange-950">TOTAL SALES HARIAN (Tunai + Non-Tunai + Online + Lain-lain)</td>
                                             <td className="py-3 text-lg text-right font-black text-orange-600">{formatRupiah(grandTotalSales)}</td>
                                         </tr>
                                     </tbody>

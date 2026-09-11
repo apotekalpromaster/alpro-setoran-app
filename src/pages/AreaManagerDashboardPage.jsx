@@ -199,6 +199,9 @@ export default function AreaManagerDashboardPage() {
                 const onlineTiktok = Number(row.online_tiktok || 0);
                 const onlineTokopedia = Number(row.online_tokopedia || 0);
                 const totalOnline = Number(row.total_online || (onlineHalodoc + onlineTiktok + onlineTokopedia));
+                const voucherAmount = Number(row.voucher_amount || 0);
+                const pointsAmount = Number(row.points_amount || 0);
+                const totalLainLain = Number(row.total_lain_lain || (voucherAmount + pointsAmount));
                 const isArchived = row.isArchived || row.status === 'Archived' || row.jenis_pelaporan === 'HAPUS_DATA';
 
                 return {
@@ -208,6 +211,9 @@ export default function AreaManagerDashboardPage() {
                     online_tiktok: onlineTiktok,
                     online_tokopedia: onlineTokopedia,
                     total_online: totalOnline,
+                    voucher_amount: voucherAmount,
+                    points_amount: pointsAmount,
+                    total_lain_lain: totalLainLain,
                     isArchived,
                     selisih: (row.nominal_jual || 0) - (row.potongan || 0) - (row.nominal_setoran || 0),
                     username: o.username || '-',
@@ -556,6 +562,9 @@ export default function AreaManagerDashboardPage() {
         let totalOnlineTiktok = 0;
         let totalOnlineTokopedia = 0;
         let totalOnline = 0;
+        let totalVoucher = 0;
+        let totalPoints = 0;
+        let totalLainLain = 0;
         let totalPosSales = 0;
         let totalPosNonTunai = 0;
         const seenOutletDates = new Set();
@@ -576,6 +585,10 @@ export default function AreaManagerDashboardPage() {
                 totalOnlineTiktok += Number(r.online_tiktok || 0);
                 totalOnlineTokopedia += Number(r.online_tokopedia || 0);
                 totalOnline += Number(r.total_online || 0);
+
+                totalVoucher += Number(r.voucher_amount || 0);
+                totalPoints += Number(r.points_amount || 0);
+                totalLainLain += Number(r.total_lain_lain || 0);
             }
 
             const codeKey = r.kode_toko + '_' + r.tanggal_jual;
@@ -606,6 +619,9 @@ export default function AreaManagerDashboardPage() {
             totalOnlineTiktok,
             totalOnlineTokopedia,
             totalOnline,
+            totalVoucher,
+            totalPoints,
+            totalLainLain,
             totalPosSales, 
             totalPosNonTunai, 
             totalSelisih1, 
@@ -1002,7 +1018,7 @@ export default function AreaManagerDashboardPage() {
                                     </div>
                                 ) : (
                                     <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
-                                        <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[2000px] border-collapse">
+                                        <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[2350px] border-collapse">
                                             <colgroup>
                                                 <col style={{ width: '160px' }} />
                                                 <col style={{ width: '90px' }} />
@@ -1017,6 +1033,9 @@ export default function AreaManagerDashboardPage() {
                                                 <col style={{ width: '125px' }} />
                                                 <col style={{ width: '125px' }} />
                                                 <col style={{ width: '115px' }} />
+                                                <col style={{ width: '115px' }} />
+                                                <col style={{ width: '115px' }} />
+                                                <col style={{ width: '125px' }} />
                                                 <col style={{ width: '115px' }} />
                                                 <col style={{ width: '115px' }} />
                                                 <col style={{ width: '125px' }} />
@@ -1040,6 +1059,9 @@ export default function AreaManagerDashboardPage() {
                                                     <th className="px-3 py-3 text-right bg-purple-50/60 text-purple-900 font-bold sticky top-0 z-20 border-b border-gray-200">Online TikTok</th>
                                                     <th className="px-3 py-3 text-right bg-purple-50/60 text-purple-900 font-bold sticky top-0 z-20 border-b border-gray-200">Online Tokopedia</th>
                                                     <th className="px-3 py-3 text-right bg-purple-100/70 text-purple-950 font-bold sticky top-0 z-20 border-b border-gray-200">Total Online Toko</th>
+                                                    <th className="px-3 py-3 text-right bg-emerald-50/60 text-emerald-900 font-bold sticky top-0 z-20 border-b border-gray-200">Voucher Belanja</th>
+                                                    <th className="px-3 py-3 text-right bg-emerald-50/60 text-emerald-900 font-bold sticky top-0 z-20 border-b border-gray-200">Poin Member</th>
+                                                    <th className="px-3 py-3 text-right bg-emerald-100/70 text-emerald-950 font-bold sticky top-0 z-20 border-b border-gray-200">Total Lain-lain Toko</th>
                                                     <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
                                                 </tr>
                                             </thead>
@@ -1128,6 +1150,15 @@ export default function AreaManagerDashboardPage() {
                                                             <td className="px-3 py-3 text-right font-bold font-mono text-xs text-purple-900 bg-purple-50/20">
                                                                 {row.isUnreported || !row.total_online ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.total_online)}</span> : formatRupiah(row.total_online)}
                                                             </td>
+                                                            <td className="px-3 py-3 text-right font-mono text-xs text-gray-700">
+                                                                {row.isUnreported || !row.voucher_amount ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.voucher_amount)}</span> : formatRupiah(row.voucher_amount)}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right font-mono text-xs text-gray-700">
+                                                                {row.isUnreported || !row.points_amount ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.points_amount)}</span> : formatRupiah(row.points_amount)}
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right font-bold font-mono text-xs text-emerald-900 bg-emerald-50/20">
+                                                                {row.isUnreported || !row.total_lain_lain ? <span className="text-gray-300">-</span> : isArchived ? <span className="line-through text-gray-400 font-normal">{formatRupiah(row.total_lain_lain)}</span> : formatRupiah(row.total_lain_lain)}
+                                                            </td>
                                                             <td className="px-3 py-3 text-center">
                                                                 {row.isUnreported ? (
                                                                     <span className="text-gray-300">-</span>
@@ -1188,6 +1219,15 @@ export default function AreaManagerDashboardPage() {
                                                     </td>
                                                     <td className="px-3 py-3 text-right font-extrabold text-purple-950 font-mono bg-purple-200/50">
                                                         {formatRupiah(tableTotals.totalOnline)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-extrabold text-emerald-900 font-mono">
+                                                         {formatRupiah(tableTotals.totalVoucher)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-extrabold text-emerald-900 font-mono">
+                                                         {formatRupiah(tableTotals.totalPoints)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-extrabold text-emerald-950 font-mono bg-emerald-200/50">
+                                                         {formatRupiah(tableTotals.totalLainLain)}
                                                     </td>
                                                     <td className="px-3 py-3 bg-orange-100"></td>
                                                 </tr>

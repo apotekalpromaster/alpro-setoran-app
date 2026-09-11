@@ -164,7 +164,11 @@ export default function RiwayatPage() {
             const onlineTokopedia = Number(r.online_tokopedia || 0);
             const totalOnline = Number(r.total_online || (onlineHalodoc + onlineTiktok + onlineTokopedia));
 
-            const grandTotalSales = Number(r.nominal_jual || 0) + totalNonTunai + totalOnline;
+            const voucherAmount = Number(r.voucher_amount || 0);
+            const pointsAmount = Number(r.points_amount || 0);
+            const totalLainLain = Number(r.total_lain_lain || (voucherAmount + pointsAmount));
+
+            const grandTotalSales = Number(r.nominal_jual || 0) + totalNonTunai + totalOnline + totalLainLain;
 
             return {
                 ...r,
@@ -180,6 +184,9 @@ export default function RiwayatPage() {
                 online_tiktok: onlineTiktok,
                 online_tokopedia: onlineTokopedia,
                 total_online: totalOnline,
+                voucher_amount: voucherAmount,
+                points_amount: pointsAmount,
+                total_lain_lain: totalLainLain,
                 grand_total_sales: grandTotalSales
             };
         }).filter((item) => {
@@ -266,7 +273,10 @@ export default function RiwayatPage() {
                                     nominal_setoran: 0,
                                     bca_debit: 0, bca_kredit: 0, bca_qris: 0,
                                     bri_debit: 0, bri_kredit: 0, bri_qris: 0,
-                                    bank_transfer: 0, total_non_tunai: 0, grand_total_sales: 0
+                                    bank_transfer: 0, total_non_tunai: 0,
+                                    online_halodoc: 0, online_tiktok: 0, online_tokopedia: 0, total_online: 0,
+                                    voucher_amount: 0, points_amount: 0, total_lain_lain: 0,
+                                    grand_total_sales: 0
                                 });
                             }
                         }
@@ -304,6 +314,9 @@ export default function RiwayatPage() {
         let totalOnlineTiktok = 0;
         let totalOnlineTokopedia = 0;
         let totalOnline = 0;
+        let totalVoucher = 0;
+        let totalPoints = 0;
+        let totalLainLain = 0;
         let totalGrandSales = 0;
 
         filteredReports.forEach((r) => {
@@ -326,7 +339,11 @@ export default function RiwayatPage() {
                 const onlineTokopedia = Number(r.online_tokopedia || 0);
                 const totalOnlineRow = Number(r.total_online || (onlineHalodoc + onlineTiktok + onlineTokopedia));
 
-                const grandSales = tunai + nonTunai + totalOnlineRow;
+                const voucher = Number(r.voucher_amount || 0);
+                const points = Number(r.points_amount || 0);
+                const totalLainLainRow = Number(r.total_lain_lain || (voucher + points));
+
+                const grandSales = tunai + nonTunai + totalOnlineRow + totalLainLainRow;
 
                 const isPrimary = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan);
                 if (isPrimary) {
@@ -350,6 +367,9 @@ export default function RiwayatPage() {
                 totalOnlineTiktok += onlineTiktok;
                 totalOnlineTokopedia += onlineTokopedia;
                 totalOnline += totalOnlineRow;
+                totalVoucher += voucher;
+                totalPoints += points;
+                totalLainLain += totalLainLainRow;
                 totalGrandSales += grandSales;
             }
         });
@@ -370,6 +390,9 @@ export default function RiwayatPage() {
             totalOnlineTiktok,
             totalOnlineTokopedia,
             totalOnline,
+            totalVoucher,
+            totalPoints,
+            totalLainLain,
             totalGrandSales
         };
     }, [filteredReports]);
@@ -549,7 +572,7 @@ export default function RiwayatPage() {
 
                             {/* TABEL DATA SCROLLABLE DENGAN STICKY HEADER & FOOTER */}
                             <div className="overflow-x-auto max-h-[650px] border border-gray-200 rounded-xl shadow-inner bg-white">
-                                <table className="w-full text-xs text-left text-gray-600 min-w-[2200px] border-collapse">
+                                <table className="w-full text-xs text-left text-gray-600 min-w-[2500px] border-collapse">
                                     <thead className="text-[11px] font-extrabold text-gray-700 uppercase tracking-wider sticky top-0 z-20 bg-gray-100 shadow-xs border-b border-gray-200">
                                         <tr>
                                             <th className="px-3 py-3 bg-gray-100 sticky top-0 z-20 whitespace-nowrap">Tanggal Sales</th>
@@ -575,8 +598,13 @@ export default function RiwayatPage() {
                                             <th className="px-3 py-3 text-right bg-purple-50/40 text-purple-900 sticky top-0 z-20">Online Tokopedia</th>
                                             <th className="px-3 py-3 text-right bg-purple-100/60 text-purple-950 font-black sticky top-0 z-20">Total Online</th>
 
+                                            {/* Lain-lain Sales Columns */}
+                                            <th className="px-3 py-3 text-right bg-emerald-50/40 text-emerald-900 sticky top-0 z-20">Voucher Belanja</th>
+                                            <th className="px-3 py-3 text-right bg-emerald-50/40 text-emerald-900 sticky top-0 z-20">Poin Member</th>
+                                            <th className="px-3 py-3 text-right bg-emerald-100/60 text-emerald-950 font-black sticky top-0 z-20">Total Lain-lain</th>
+
                                             {/* Grand Total Column */}
-                                            <th className="px-3 py-3 text-right bg-orange-100/80 text-orange-950 font-black sticky top-0 z-20">TOTAL SALES HARIAN (Tunai + Non-Tunai + Sales Online)</th>
+                                            <th className="px-3 py-3 text-right bg-orange-100/80 text-orange-950 font-black sticky top-0 z-20">TOTAL SALES HARIAN (Tunai + Non-Tunai + Online + Lain-lain)</th>
                                             <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20">Aksi</th>
                                         </tr>
                                     </thead>
@@ -654,6 +682,17 @@ export default function RiwayatPage() {
                                                     </td>
                                                     <td className="px-3 py-3 text-right font-mono font-bold text-purple-900 bg-purple-50/30">
                                                         {item.total_online > 0 ? formatRupiah(item.total_online) : <span className="text-gray-300">-</span>}
+                                                    </td>
+
+                                                    {/* Lain-lain Cells */}
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.voucher_amount > 0 ? formatRupiah(item.voucher_amount) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-gray-600">
+                                                        {item.points_amount > 0 ? formatRupiah(item.points_amount) : <span className="text-gray-300">-</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono font-bold text-emerald-900 bg-emerald-50/30">
+                                                        {item.total_lain_lain > 0 ? formatRupiah(item.total_lain_lain) : <span className="text-gray-300">-</span>}
                                                     </td>
 
                                                     {/* Grand Total Cell */}
@@ -734,6 +773,15 @@ export default function RiwayatPage() {
                                             </td>
                                             <td className="px-3 py-3 text-right font-mono font-black text-purple-950">
                                                 {formatRupiah(tableTotals.totalOnline)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalVoucher)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono">
+                                                {formatRupiah(tableTotals.totalPoints)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-mono font-black text-emerald-950">
+                                                {formatRupiah(tableTotals.totalLainLain)}
                                             </td>
                                             <td className="px-3 py-3 text-right font-mono font-black text-orange-600 bg-orange-200/80 text-sm">
                                                 {formatRupiah(tableTotals.totalGrandSales)}

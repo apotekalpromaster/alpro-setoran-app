@@ -51,12 +51,16 @@ export default function KoreksiLaporanPage() {
     const [toggleTunai, setToggleTunai] = useState(false);
     const [toggleNonTunai, setToggleNonTunai] = useState(false);
     const [toggleOnline, setToggleOnline] = useState(false);
+    const [toggleLainLain, setToggleLainLain] = useState(false);
     const [toggleMeta, setToggleMeta] = useState(false);
     const [toggleBukti, setToggleBukti] = useState(false);
 
     const [newOnlineHalodoc, setNewOnlineHalodoc] = useState('');
     const [newOnlineTiktok, setNewOnlineTiktok] = useState('');
     const [newOnlineTokopedia, setNewOnlineTokopedia] = useState('');
+
+    const [newVoucherAmount, setNewVoucherAmount] = useState('');
+    const [newPointsAmount, setNewPointsAmount] = useState('');
 
     // Editable form states
     const [newJual, setNewJual] = useState('');
@@ -116,6 +120,9 @@ export default function KoreksiLaporanPage() {
                 setNewOnlineTiktok(formatRupiah(report.online_tiktok || 0));
                 setNewOnlineTokopedia(formatRupiah(report.online_tokopedia || 0));
 
+                setNewVoucherAmount(formatRupiah(report.voucher_amount || 0));
+                setNewPointsAmount(formatRupiah(report.points_amount || 0));
+
                 setNewTanggalJual(report.tanggal_jual || '');
                 setNewTanggalSetor(report.tanggal_setor || '');
                 setNewJenisPelaporan(report.jenis_pelaporan || '');
@@ -124,6 +131,7 @@ export default function KoreksiLaporanPage() {
                 setToggleTunai(false);
                 setToggleNonTunai(false);
                 setToggleOnline(false);
+                setToggleLainLain(false);
                 setToggleMeta(false);
                 setToggleBukti(false);
                 setStagedFiles([null, null, null, null, null]);
@@ -139,8 +147,9 @@ export default function KoreksiLaporanPage() {
         setNewBcaDebit(''); setNewBcaKredit(''); setNewBcaQris('');
         setNewBriDebit(''); setNewBriKredit(''); setNewBriQris(''); setNewBankTransfer('');
         setNewOnlineHalodoc(''); setNewOnlineTiktok(''); setNewOnlineTokopedia('');
+        setNewVoucherAmount(''); setNewPointsAmount('');
         setNewTanggalJual(''); setNewTanggalSetor(''); setNewJenisPelaporan('');
-        setToggleTunai(false); setToggleNonTunai(false); setToggleOnline(false); setToggleMeta(false); setToggleBukti(false);
+        setToggleTunai(false); setToggleNonTunai(false); setToggleOnline(false); setToggleLainLain(false); setToggleMeta(false); setToggleBukti(false);
         setStagedFiles([null, null, null, null, null]);
     };
 
@@ -208,6 +217,13 @@ export default function KoreksiLaporanPage() {
                     bri_kredit_baru,
                     bri_qris_baru,
                     bank_transfer_baru,
+                    online_halodoc_baru,
+                    online_tiktok_baru,
+                    online_tokopedia_baru,
+                    total_online_baru,
+                    voucher_amount_baru,
+                    points_amount_baru,
+                    total_lain_lain_baru,
                     penjelasan_koreksi,
                     status,
                     created_at,
@@ -234,7 +250,14 @@ export default function KoreksiLaporanPage() {
                         bri_kredit,
                         bri_qris,
                         bank_transfer,
-                        total_non_tunai
+                        total_non_tunai,
+                        online_halodoc,
+                        online_tiktok,
+                        online_tokopedia,
+                        total_online,
+                        voucher_amount,
+                        points_amount,
+                        total_lain_lain
                     )
                 `)
                 .order('created_at', { ascending: false });
@@ -286,8 +309,8 @@ export default function KoreksiLaporanPage() {
         }
 
         if (requestType === 'edit') {
-            if (!toggleTunai && !toggleNonTunai && !toggleOnline && !toggleMeta && !toggleBukti) {
-                setError('Harap centang minimal 1 bagian data yang ingin dikoreksi (Penjualan Tunai, Non-Tunai, Penjualan Online, Tanggal/Jenis, atau Foto Bukti).');
+            if (!toggleTunai && !toggleNonTunai && !toggleOnline && !toggleLainLain && !toggleMeta && !toggleBukti) {
+                setError('Harap centang minimal 1 bagian data yang ingin dikoreksi (Penjualan Tunai, Non-Tunai, Penjualan Online, Lain-lain, Tanggal/Jenis, atau Foto Bukti).');
                 return;
             }
         }
@@ -312,6 +335,10 @@ export default function KoreksiLaporanPage() {
             let finalOnlineTiktok = selectedReport.online_tiktok || 0;
             let finalOnlineTokopedia = selectedReport.online_tokopedia || 0;
             let finalTotalOnline = selectedReport.total_online || 0;
+
+            let finalVoucher = selectedReport.voucher_amount || 0;
+            let finalPoints = selectedReport.points_amount || 0;
+            let finalTotalLainLain = selectedReport.total_lain_lain || 0;
 
             let finalTglJual = selectedReport.tanggal_jual;
             let finalTglSetor = selectedReport.tanggal_setor;
@@ -341,6 +368,12 @@ export default function KoreksiLaporanPage() {
                     finalOnlineTiktok = parseRupiah(newOnlineTiktok);
                     finalOnlineTokopedia = parseRupiah(newOnlineTokopedia);
                     finalTotalOnline = finalOnlineHalodoc + finalOnlineTiktok + finalOnlineTokopedia;
+                }
+
+                if (toggleLainLain) {
+                    finalVoucher = parseRupiah(newVoucherAmount);
+                    finalPoints = parseRupiah(newPointsAmount);
+                    finalTotalLainLain = finalVoucher + finalPoints;
                 }
 
                 if (toggleMeta) {
@@ -393,6 +426,9 @@ export default function KoreksiLaporanPage() {
                     online_tiktok_baru: requestType === 'delete' ? 0 : (toggleOnline ? finalOnlineTiktok : null),
                     online_tokopedia_baru: requestType === 'delete' ? 0 : (toggleOnline ? finalOnlineTokopedia : null),
                     total_online_baru: requestType === 'delete' ? 0 : (toggleOnline ? finalTotalOnline : null),
+                    voucher_amount_baru: requestType === 'delete' ? 0 : (toggleLainLain ? finalVoucher : null),
+                    points_amount_baru: requestType === 'delete' ? 0 : (toggleLainLain ? finalPoints : null),
+                    total_lain_lain_baru: requestType === 'delete' ? 0 : (toggleLainLain ? finalTotalLainLain : null),
                     tanggal_jual_baru: requestType === 'edit' ? finalTglJual : null,
                     tanggal_setor_baru: requestType === 'edit' ? finalTglSetor : null,
                     jenis_pelaporan_baru: requestType === 'edit' ? finalJenis : 'HAPUS_DATA',
@@ -492,6 +528,10 @@ export default function KoreksiLaporanPage() {
                             if (toggleOnline) {
                                 changesSummary.push(`• Total Online Sales: ${formatRupiah(selectedReport.total_online || 0)} ➔ ${formatRupiah(finalTotalOnline)}`);
                                 changesSummary.push(`  (Halodoc: ${formatRupiah(finalOnlineHalodoc)}, TikTok: ${formatRupiah(finalOnlineTiktok)}, Tokopedia: ${formatRupiah(finalOnlineTokopedia)})`);
+                            }
+                            if (toggleLainLain) {
+                                changesSummary.push(`• Total Penjualan Lain-lain: ${formatRupiah(selectedReport.total_lain_lain || 0)} ➔ ${formatRupiah(finalTotalLainLain)}`);
+                                changesSummary.push(`  (Voucher: ${formatRupiah(finalVoucher)}, Poin: ${formatRupiah(finalPoints)})`);
                             }
                             if (toggleMeta) {
                                 changesSummary.push(`• Tanggal Sales: ${selectedReport.tanggal_jual} ➔ ${finalTglJual}`);
@@ -835,7 +875,58 @@ export default function KoreksiLaporanPage() {
                                                 )}
                                             </div>
 
-                                            {/* SECTION 4: TANGGAL & JENIS PELAPORAN */}
+                                            {/* SECTION 4: PENJUALAN LAIN-LAIN (VOUCHER & POIN) */}
+                                            <div className={`p-4 rounded-xl border transition-all ${toggleLainLain ? 'bg-white border-emerald-300 shadow-sm ring-1 ring-emerald-100' : 'bg-gray-50/70 border-gray-200 opacity-80'}`}>
+                                                <label className="flex items-center gap-2.5 cursor-pointer pb-3 border-b border-gray-200">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={toggleLainLain}
+                                                        onChange={(e) => setToggleLainLain(e.target.checked)}
+                                                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                                    />
+                                                    <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide flex items-center gap-1.5">
+                                                        <span className="material-symbols-outlined text-emerald-600 text-base">confirmation_number</span>
+                                                        4. Koreksi Penjualan Lain-lain (Voucher Belanja & Poin Member)
+                                                    </span>
+                                                    {!toggleLainLain && (
+                                                        <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
+                                                            Data lama tetap dipertahankan
+                                                        </span>
+                                                    )}
+                                                </label>
+
+                                                {toggleLainLain ? (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 animate-fade-in">
+                                                        <div>
+                                                            <label className="block text-[11px] font-bold text-gray-600 mb-1">Voucher Belanja Baru</label>
+                                                            <input
+                                                                type="text"
+                                                                value={newVoucherAmount}
+                                                                onChange={(e) => setNewVoucherAmount(formatRupiah(parseRupiah(e.target.value)))}
+                                                                className="form-input w-full py-2 px-3 text-xs font-bold font-mono"
+                                                                placeholder="Rp 0"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[11px] font-bold text-gray-600 mb-1">Poin Member Baru</label>
+                                                            <input
+                                                                type="text"
+                                                                value={newPointsAmount}
+                                                                onChange={(e) => setNewPointsAmount(formatRupiah(parseRupiah(e.target.value)))}
+                                                                className="form-input w-full py-2 px-3 text-xs font-bold font-mono"
+                                                                placeholder="Rp 0"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="pt-3 text-xs text-gray-500 font-mono flex items-center justify-between">
+                                                        <span>Total Lain-lain Saat Ini:</span>
+                                                        <span className="font-bold text-emerald-800">{formatRupiah(selectedReport?.total_lain_lain || 0)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* SECTION 5: TANGGAL & JENIS PELAPORAN */}
                                             <div className={`p-4 rounded-xl border transition-all ${toggleMeta ? 'bg-white border-purple-300 shadow-sm ring-1 ring-purple-100' : 'bg-gray-50/70 border-gray-200 opacity-80'}`}>
                                                 <label className="flex items-center gap-2.5 cursor-pointer pb-3 border-b border-gray-200">
                                                     <input
@@ -846,7 +937,7 @@ export default function KoreksiLaporanPage() {
                                                     />
                                                     <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide flex items-center gap-1.5">
                                                         <span className="material-symbols-outlined text-purple-600 text-base">calendar_month</span>
-                                                        4. Koreksi Tanggal & Jenis Pelaporan
+                                                        5. Koreksi Tanggal & Jenis Pelaporan
                                                     </span>
                                                     {!toggleMeta && (
                                                         <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
@@ -887,7 +978,7 @@ export default function KoreksiLaporanPage() {
                                                 )}
                                             </div>
 
-                                            {/* SECTION 5: GANTI FOTO BUKTI */}
+                                            {/* SECTION 6: GANTI FOTO BUKTI */}
                                             <div className={`p-4 rounded-xl border transition-all ${toggleBukti ? 'bg-white border-orange-300 shadow-sm ring-1 ring-orange-100' : 'bg-gray-50/70 border-gray-200 opacity-80'}`}>
                                                 <label className="flex items-center gap-2.5 cursor-pointer pb-3 border-b border-gray-200">
                                                     <input
@@ -898,7 +989,7 @@ export default function KoreksiLaporanPage() {
                                                     />
                                                     <span className="text-xs font-extrabold text-gray-800 uppercase tracking-wide flex items-center gap-1.5">
                                                         <span className="material-symbols-outlined text-orange-600 text-base">photo_camera</span>
-                                                        5. Ubah / Ganti Foto Bukti Setoran
+                                                        6. Ubah / Ganti Foto Bukti Setoran
                                                     </span>
                                                     {!toggleBukti && (
                                                         <span className="ml-auto text-[10px] font-bold text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
@@ -1093,6 +1184,12 @@ export default function KoreksiLaporanPage() {
                                                     if (Number(item.bri_qris_baru || 0) > 0) nonTunaiDetailsBaru.push(`BRI QRIS: ${formatRupiah(item.bri_qris_baru)}`);
                                                     if (Number(item.bank_transfer_baru || 0) > 0) nonTunaiDetailsBaru.push(`Transfer: ${formatRupiah(item.bank_transfer_baru)}`);
 
+                                                    const totalOnlineAsli = Number(lap.total_online || ((Number(lap.online_halodoc || 0) + Number(lap.online_tiktok || 0) + Number(lap.online_tokopedia || 0))));
+                                                    const totalOnlineBaru = item.total_online_baru !== null && item.total_online_baru !== undefined ? Number(item.total_online_baru) : (Number(item.online_halodoc_baru || 0) + Number(item.online_tiktok_baru || 0) + Number(item.online_tokopedia_baru || 0));
+
+                                                    const totalLainLainAsli = Number(lap.total_lain_lain || ((Number(lap.voucher_amount || 0) + Number(lap.points_amount || 0))));
+                                                    const totalLainLainBaru = item.total_lain_lain_baru !== null && item.total_lain_lain_baru !== undefined ? Number(item.total_lain_lain_baru) : (Number(item.voucher_amount_baru || 0) + Number(item.points_amount_baru || 0));
+
                                                     return (
                                                         <>
                                                             <td className="py-3.5 px-4 text-right text-[11px] font-mono">
@@ -1101,6 +1198,12 @@ export default function KoreksiLaporanPage() {
                                                                 <div>Potong: {formatRupiah(lap.potongan)}</div>
                                                                 {totalNonTunaiAsli > 0 && (
                                                                     <div className="text-gray-500 font-semibold mt-0.5">Non-Tunai: {formatRupiah(totalNonTunaiAsli)}</div>
+                                                                )}
+                                                                {totalOnlineAsli > 0 && (
+                                                                    <div className="text-purple-700 font-semibold mt-0.5">Online: {formatRupiah(totalOnlineAsli)}</div>
+                                                                )}
+                                                                {totalLainLainAsli > 0 && (
+                                                                    <div className="text-emerald-700 font-semibold mt-0.5">Lain-lain: {formatRupiah(totalLainLainAsli)}</div>
                                                                 )}
                                                             </td>
                                                             <td className="py-3.5 px-4 text-right text-[11px] font-mono font-semibold text-primary-700">
@@ -1119,6 +1222,16 @@ export default function KoreksiLaporanPage() {
                                                                                 {nonTunaiDetailsBaru.map((det, dIdx) => (
                                                                                     <div key={dIdx} className="text-[10px] text-blue-600 font-normal">{det}</div>
                                                                                 ))}
+                                                                            </div>
+                                                                        )}
+                                                                        {totalOnlineBaru > 0 && (
+                                                                            <div className="mt-1 pt-1 border-t border-gray-100 text-purple-800 font-bold">
+                                                                                <div>Online: {formatRupiah(totalOnlineBaru)}</div>
+                                                                            </div>
+                                                                        )}
+                                                                        {totalLainLainBaru > 0 && (
+                                                                            <div className="mt-1 pt-1 border-t border-gray-100 text-emerald-800 font-bold">
+                                                                                <div>Lain-lain: {formatRupiah(totalLainLainBaru)}</div>
                                                                             </div>
                                                                         )}
                                                                     </div>

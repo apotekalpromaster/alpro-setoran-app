@@ -31,6 +31,9 @@ const defaultState = {
     onlineHalodoc: '',
     onlineTiktok: '',
     onlineTokopedia: '',
+    // Lain-lain fields (Voucher & Points)
+    voucherAmount: '',
+    pointsAmount: '',
     nominalSetoran: '',
     penjelasan: '',
     nomorDepositCard: '',

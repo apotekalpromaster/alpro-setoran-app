@@ -81,6 +81,9 @@ export default function KonfirmasiPage() {
                                         {(state?.totalOnline || 0) > 0 && (
                                             <DetailRow label="Total Sales Online (Marketplace)" value={formatRupiah(state.totalOnline)} info />
                                         )}
+                                        {(state?.totalLainLain || 0) > 0 && (
+                                            <DetailRow label="Total Lain-lain (Voucher & Poin)" value={formatRupiah(state.totalLainLain)} info />
+                                        )}
                                         
                                         {/* Grand Total */}
                                         <div className="pt-2 border-t border-gray-200 bg-orange-50/70 p-3 rounded-lg flex items-center justify-between mt-2">

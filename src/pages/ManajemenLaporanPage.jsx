@@ -85,6 +85,7 @@ export default function ManajemenLaporanPage() {
                         potongan,
                         total_non_tunai,
                         total_online, online_halodoc, online_tiktok, online_tokopedia,
+                        voucher_amount, points_amount, total_lain_lain,
                         bca_debit, bca_kredit, bca_qris,
                         bri_debit, bri_kredit, bri_qris,
                         bank_transfer,
@@ -226,10 +227,17 @@ export default function ManajemenLaporanPage() {
                 const totalOnline = Number(row.total_online || 0) || 
                                     (Number(row.online_halodoc || 0) + Number(row.online_tiktok || 0) + Number(row.online_tokopedia || 0));
 
+                const voucherAmount = Number(row.voucher_amount || 0);
+                const pointsAmount = Number(row.points_amount || 0);
+                const totalLainLain = Number(row.total_lain_lain || 0) || (voucherAmount + pointsAmount);
+
                 return {
                     ...row,
                     total_non_tunai: totalNonTunai,
                     total_online: totalOnline,
+                    voucher_amount: voucherAmount,
+                    points_amount: pointsAmount,
+                    total_lain_lain: totalLainLain,
                     username: uName,
                     kode_toko: kToko,
                     email: row.profiles?.email || '',
@@ -276,6 +284,9 @@ export default function ManajemenLaporanPage() {
                                 nominal_setoran: 0,
                                 total_non_tunai: 0,
                                 total_online: 0,
+                                voucher_amount: 0,
+                                points_amount: 0,
+                                total_lain_lain: 0,
                                 username: p.username,
                                 kode_toko: p.kode_toko,
                                 email: '',
@@ -355,6 +366,9 @@ export default function ManajemenLaporanPage() {
         let totalSetor = 0;
         let totalNonTunai = 0;
         let totalOnline = 0;
+        let totalVoucher = 0;
+        let totalPoints = 0;
+        let totalLainLain = 0;
         let totalPosSales = 0;
         let totalPosNonTunai = 0;
         let totalPosOnline = 0;
@@ -369,6 +383,9 @@ export default function ManajemenLaporanPage() {
             totalSetor += Number(r.nominal_setoran || 0);
             totalNonTunai += Number(r.total_non_tunai || 0);
             totalOnline += Number(r.total_online || 0);
+            totalVoucher += Number(r.voucher_amount || 0);
+            totalPoints += Number(r.points_amount || 0);
+            totalLainLain += Number(r.total_lain_lain || 0);
 
             const posValAll = r.posVal;
             const posVal = isValidTypeForPOS ? posValAll : undefined;
@@ -398,6 +415,9 @@ export default function ManajemenLaporanPage() {
             totalSetor, 
             totalNonTunai, 
             totalOnline,
+            totalVoucher,
+            totalPoints,
+            totalLainLain,
             totalPosSales, 
             totalPosNonTunai, 
             totalPosOnline,
@@ -412,7 +432,7 @@ export default function ManajemenLaporanPage() {
     // CSV export
     const downloadCSV = () => {
         if (!filtered.length) return;
-        const header = 'Nama Apotek,Tgl Setor,Tgl Jual,Waktu Kirim,Jenis,Metode,Deposit Card,KCP,Data Sales (Xilnex),Nominal Sales,Potongan,Nominal Setor,Selisih 1 (VS Nominal),Selisih 2 (VS Setor),Sales Non-Tunai (Xilnex),Total Non-Tunai Toko,Selisih Non-Tunai,Sales Online (Xilnex),Total Online Toko,Selisih Online\n';
+        const header = 'Nama Apotek,Tgl Setor,Tgl Jual,Waktu Kirim,Jenis,Metode,Deposit Card,KCP,Data Sales (Xilnex),Nominal Sales,Potongan,Nominal Setor,Selisih 1 (VS Nominal),Selisih 2 (VS Setor),Sales Non-Tunai (Xilnex),Total Non-Tunai Toko,Selisih Non-Tunai,Sales Online (Xilnex),Total Online Toko,Selisih Online,Voucher Belanja Toko,Poin Member Toko,Total Lain-lain Toko\n';
         const body = filtered.map((r) => {
             const posValAll = r.posVal;
             const isValidTypeForPOS = ['Setoran Harian', 'Setoran 3x Seminggu', 'Setoran Sales Dengan Potongan Penjualan', 'Setoran Sales Dengan Potongan Penjualan (Top Up Petty Cash Toko)', 'Setoran Sales Dgn Potongan (Top Up Petty Cash)'].includes(r.jenis_pelaporan);
@@ -449,7 +469,10 @@ export default function ManajemenLaporanPage() {
                 sNonTunai,
                 posOnlineVal !== undefined ? posOnlineVal : '',
                 r.total_online || 0,
-                sOnline
+                sOnline,
+                r.voucher_amount || 0,
+                r.points_amount || 0,
+                r.total_lain_lain || 0
             ].join(',');
         }).join('\n');
         
@@ -730,7 +753,7 @@ export default function ManajemenLaporanPage() {
                         ) : (
                             <>
                                 <div className="overflow-auto max-h-[600px] border border-gray-100 rounded-lg shadow-inner bg-white">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[2050px] border-collapse">
+                                <table className="w-full text-sm text-left text-gray-500 table-fixed min-w-[2400px] border-collapse">
                                     <colgroup>
                                         <col style={{ width: '160px' }} />
                                         <col style={{ width: '90px' }} />
@@ -747,6 +770,9 @@ export default function ManajemenLaporanPage() {
                                         <col style={{ width: '125px' }} />
                                         <col style={{ width: '135px' }} />
                                         <col style={{ width: '125px' }} />
+                                        <col style={{ width: '125px' }} />
+                                        <col style={{ width: '115px' }} />
+                                        <col style={{ width: '115px' }} />
                                         <col style={{ width: '125px' }} />
                                         <col style={{ width: '60px' }} />
                                     </colgroup>
@@ -768,6 +794,9 @@ export default function ManajemenLaporanPage() {
                                             <th className="px-3 py-3 text-right bg-emerald-50 text-emerald-900 font-bold sticky top-0 z-20 border-b border-gray-200">Sales Online (Xilnex)</th>
                                             <th className="px-3 py-3 text-right bg-teal-50 text-teal-900 font-bold sticky top-0 z-20 border-b border-gray-200">Total Online Toko</th>
                                             <th className="px-3 py-3 text-center bg-emerald-50/50 text-emerald-950 font-bold sticky top-0 z-20 border-b border-gray-200">Selisih Online</th>
+                                            <th className="px-3 py-3 text-right bg-emerald-50 text-emerald-900 font-bold sticky top-0 z-20 border-b border-gray-200">Voucher Belanja Toko</th>
+                                            <th className="px-3 py-3 text-right bg-emerald-50 text-emerald-900 font-bold sticky top-0 z-20 border-b border-gray-200">Poin Member Toko</th>
+                                            <th className="px-3 py-3 text-right bg-emerald-100/70 text-emerald-950 font-bold sticky top-0 z-20 border-b border-gray-200">Total Lain-lain Toko</th>
                                             <th className="px-3 py-3 text-center bg-gray-100 sticky top-0 z-20 border-b border-gray-200">Aksi</th>
                                         </tr>
                                     </thead>
@@ -844,6 +873,15 @@ export default function ManajemenLaporanPage() {
                                                     <td className="px-3 py-3 text-center font-mono text-xs bg-emerald-50/20">
                                                         {selisihChipNew(sOnline)}
                                                     </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-xs text-gray-700">
+                                                        {row.isUnreported || !row.voucher_amount ? <span className="text-gray-300">-</span> : formatRupiah(row.voucher_amount)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-mono text-xs text-gray-700">
+                                                        {row.isUnreported || !row.points_amount ? <span className="text-gray-300">-</span> : formatRupiah(row.points_amount)}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-right font-bold text-emerald-800 font-mono text-xs bg-emerald-50/20">
+                                                        {row.isUnreported || !row.total_lain_lain ? <span className="text-gray-300">-</span> : formatRupiah(row.total_lain_lain)}
+                                                    </td>
                                                     <td className="px-3 py-3 text-center">
                                                         {row.isUnreported ? (
                                                             <span className="text-gray-300">-</span>
@@ -901,6 +939,15 @@ export default function ManajemenLaporanPage() {
                                             </td>
                                             <td className="px-3 py-3 text-center font-extrabold font-mono bg-emerald-200/50">
                                                 {totals.hasAnyPosForTotals ? selisihChipNew(totals.totalSelisihOnline) : <span className="text-gray-300">-</span>}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-emerald-900 font-mono">
+                                                {formatRupiah(totals.totalVoucher)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-emerald-900 font-mono">
+                                                {formatRupiah(totals.totalPoints)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right font-extrabold text-emerald-950 font-mono bg-emerald-200/40">
+                                                {formatRupiah(totals.totalLainLain)}
                                             </td>
                                             <td className="px-3 py-3 bg-orange-100"></td>
                                         </tr>

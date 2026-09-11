@@ -78,6 +78,9 @@ export default function AreaManagerKoreksiApprovalPage() {
                     online_tiktok_baru,
                     online_tokopedia_baru,
                     total_online_baru,
+                    voucher_amount_baru,
+                    points_amount_baru,
+                    total_lain_lain_baru,
                     penjelasan_koreksi,
                     status,
                     created_at,
@@ -114,6 +117,9 @@ export default function AreaManagerKoreksiApprovalPage() {
                         online_tiktok,
                         online_tokopedia,
                         total_online,
+                        voucher_amount,
+                        points_amount,
+                        total_lain_lain,
                         profiles:user_id (
                             username,
                             kode_toko
@@ -334,6 +340,14 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                     if (item.online_tiktok_baru !== null && item.online_tiktok_baru !== undefined && Number(item.online_tiktok_baru) > 0) onlineDetailsBaru.push(`TikTok: ${formatRupiah(item.online_tiktok_baru)}`);
                                                     if (item.online_tokopedia_baru !== null && item.online_tokopedia_baru !== undefined && Number(item.online_tokopedia_baru) > 0) onlineDetailsBaru.push(`Tokopedia: ${formatRupiah(item.online_tokopedia_baru)}`);
 
+                                                    const totalLainLainAsli = Number(lap.total_lain_lain || ((Number(lap.voucher_amount || 0) + Number(lap.points_amount || 0))));
+                                                    const totalLainLainBaru = item.total_lain_lain_baru !== null && item.total_lain_lain_baru !== undefined ? Number(item.total_lain_lain_baru) : (Number(item.voucher_amount_baru || 0) + Number(item.points_amount_baru || 0));
+                                                    const deltaLainLain = totalLainLainBaru - totalLainLainAsli;
+
+                                                    const lainLainDetailsBaru = [];
+                                                    if (item.voucher_amount_baru !== null && item.voucher_amount_baru !== undefined && Number(item.voucher_amount_baru) > 0) lainLainDetailsBaru.push(`Voucher: ${formatRupiah(item.voucher_amount_baru)}`);
+                                                    if (item.points_amount_baru !== null && item.points_amount_baru !== undefined && Number(item.points_amount_baru) > 0) lainLainDetailsBaru.push(`Poin: ${formatRupiah(item.points_amount_baru)}`);
+
                                                     return (
                                                         <>
                                                             <td className="py-4 px-6 text-right text-xs font-mono text-gray-500">
@@ -342,6 +356,12 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                                 <div>Potong: {formatRupiah(lap.potongan)}</div>
                                                                 {totalNonTunaiAsli > 0 && (
                                                                     <div className="text-gray-500 font-semibold mt-0.5">Non-Tunai: {formatRupiah(totalNonTunaiAsli)}</div>
+                                                                )}
+                                                                {totalOnlineAsli > 0 && (
+                                                                    <div className="text-purple-700 font-semibold mt-0.5">Online: {formatRupiah(totalOnlineAsli)}</div>
+                                                                )}
+                                                                {totalLainLainAsli > 0 && (
+                                                                    <div className="text-emerald-700 font-semibold mt-0.5">Lain-lain: {formatRupiah(totalLainLainAsli)}</div>
                                                                 )}
                                                             </td>
                                                             <td className="py-4 px-6 text-right text-xs font-mono text-primary-700">
@@ -400,6 +420,19 @@ export default function AreaManagerKoreksiApprovalPage() {
                                                                                 )}
                                                                                 {onlineDetailsBaru.map((det, dIdx) => (
                                                                                     <div key={dIdx} className="text-[10px] text-purple-600 font-normal">{det}</div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                        {(totalLainLainBaru > 0 || totalLainLainAsli > 0) && (
+                                                                            <div className="mt-1.5 pt-1.5 border-t border-gray-200/60 font-bold text-emerald-900">
+                                                                                Lain-lain: <strong>{formatRupiah(totalLainLainBaru)}</strong>
+                                                                                {deltaLainLain !== 0 && (
+                                                                                    <span className={`text-[10px] ml-1 ${deltaLainLain > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                                        ({deltaLainLain > 0 ? '+' : ''}{formatRupiah(deltaLainLain)})
+                                                                                    </span>
+                                                                                )}
+                                                                                {lainLainDetailsBaru.map((det, dIdx) => (
+                                                                                    <div key={dIdx} className="text-[10px] text-emerald-600 font-normal">{det}</div>
                                                                                 ))}
                                                                             </div>
                                                                         )}
