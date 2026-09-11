@@ -1,25 +1,10 @@
 -- =============================================================================
--- MIGRATION: add_voucher_and_points_to_laporan.sql
+-- MIGRATION: fix_approve_koreksi_jsonb_type_match.sql
+-- Description: Fixes PostgreSQL error "CASE types jsonb and text[] cannot be matched"
+--              by wrapping v_bukti_urls with to_jsonb(v_bukti_urls)
 -- Run this in: Supabase Dashboard > SQL Editor
 -- =============================================================================
 
--- 1. Tambah kolom ke tabel public.laporan
-ALTER TABLE public.laporan
-  ADD COLUMN IF NOT EXISTS voucher_amount bigint DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS points_amount bigint DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS total_lain_lain bigint DEFAULT 0;
-
-COMMENT ON COLUMN public.laporan.voucher_amount IS 'Nominal pembayaran penjualan menggunakan Voucher Belanja';
-COMMENT ON COLUMN public.laporan.points_amount IS 'Nominal pembayaran penjualan menggunakan Penukaran Poin Member';
-COMMENT ON COLUMN public.laporan.total_lain_lain IS 'Total akumulasi nilai Lain-lain (Voucher + Poin)';
-
--- 2. Tambah kolom pendukung koreksi ke tabel public.koreksi_requests
-ALTER TABLE public.koreksi_requests
-  ADD COLUMN IF NOT EXISTS voucher_amount_baru bigint,
-  ADD COLUMN IF NOT EXISTS points_amount_baru bigint,
-  ADD COLUMN IF NOT EXISTS total_lain_lain_baru bigint;
-
--- 3. Perbarui Stored Procedure public.approve_koreksi_request
 CREATE OR REPLACE FUNCTION public.approve_koreksi_request(p_request_id uuid, p_admin_id uuid)
 RETURNS boolean 
 LANGUAGE plpgsql 
