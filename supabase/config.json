@@ -13,6 +13,9 @@
         },
         "groq-ai-service": {
             "verify_jwt": true
+        },
+        "export-unreported-sales-report": {
+            "verify_jwt": false
         }
     }
 }
