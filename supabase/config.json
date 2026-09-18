@@ -16,6 +16,9 @@
         },
         "export-unreported-sales-report": {
             "verify_jwt": false
+        },
+        "export-duplicate-sales-report": {
+            "verify_jwt": false
         }
     }
 }
